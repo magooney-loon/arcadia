@@ -410,6 +410,20 @@ func tracesHandler(c *core.RequestEvent) error {
 	})
 }
 
+// API_DESC Historical block stats for time-series charts (sorted newest first)
+// API_TAGS Stats
+func blockStatsHandler(c *core.RequestEvent) error {
+	limit, offset := limitOffset(c)
+	records, err := c.App.FindRecordsByFilter("block_stats", "", "-block_number", limit, offset)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error()})
+	}
+	return c.JSON(http.StatusOK, map[string]any{
+		"stats": recordsToMaps(records),
+		"count": len(records),
+	})
+}
+
 // API_DESC Wallet graph edges for 3D visualization — filterable by wallet address
 // API_TAGS Graph
 func edgesHandler(c *core.RequestEvent) error {

@@ -1,7 +1,12 @@
 export interface Agent {
 	id: string;
 	agent_address: string;
+	metadata_uri?: string;
 	registered_at_block: number;
+	tx_hash?: string;
+	tx_count?: number;
+	usdc_spent_fees?: string;
+	usdc_transferred?: string;
 	[key: string]: unknown;
 }
 
@@ -12,10 +17,15 @@ export interface AgentsResponse {
 
 export interface AgentJob {
 	id: string;
-	employer_address: string;
-	worker_address: string;
-	status: string;
+	job_id: string;
+	employer_address?: string;
+	worker_address?: string;
+	payment_usdc?: string;
+	status: 'created' | 'accepted' | 'delivered' | 'settled' | 'disputed';
 	created_at_block: number;
+	settled_at_block?: number;
+	create_tx_hash?: string;
+	settle_tx_hash?: string;
 	[key: string]: unknown;
 }
 

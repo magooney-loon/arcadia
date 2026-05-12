@@ -2,6 +2,7 @@ import PocketBase from 'pocketbase';
 import { getPocketBaseInstance } from '../stores/config.svelte.js';
 import { AuthCrudClient } from './auth/crud.js';
 import { StatsCrudClient } from './stats/crud.js';
+import { BlockStatsCrudClient } from './block_stats/crud.js';
 import { ChainCrudClient } from './chain/crud.js';
 import { TransfersCrudClient } from './transfers/crud.js';
 import { WalletCrudClient } from './wallet/crud.js';
@@ -14,6 +15,7 @@ export class ApiClient {
 	private pb: PocketBase;
 	private _auth: AuthCrudClient;
 	private _stats: StatsCrudClient;
+	private _blockStats: BlockStatsCrudClient;
 	private _chain: ChainCrudClient;
 	private _transfers: TransfersCrudClient;
 	private _wallet: WalletCrudClient;
@@ -26,6 +28,7 @@ export class ApiClient {
 		this.pb = getPocketBaseInstance();
 		this._auth = new AuthCrudClient(this.pb);
 		this._stats = new StatsCrudClient();
+		this._blockStats = new BlockStatsCrudClient();
 		this._chain = new ChainCrudClient();
 		this._transfers = new TransfersCrudClient();
 		this._wallet = new WalletCrudClient();
@@ -39,6 +42,7 @@ export class ApiClient {
 
 	get auth() { return this._auth; }
 	get stats() { return this._stats; }
+	get blockStats() { return this._blockStats; }
 	get chain() { return this._chain; }
 	get transfers() { return this._transfers; }
 	get wallet() { return this._wallet; }

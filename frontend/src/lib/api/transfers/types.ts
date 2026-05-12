@@ -1,11 +1,14 @@
 export interface Transfer {
 	id: string;
 	block_number: number;
+	log_index?: number;
 	tx_hash: string;
-	from_addr: string;
-	to_addr: string;
-	token_symbol: string;
-	amount?: string;
+	token_address: string;
+	token_symbol: 'USDC' | 'EURC' | 'USYC' | 'OTHER';
+	from_addr?: string;
+	to_addr?: string;
+	amount_raw?: string;
+	amount_human?: string;
 	[key: string]: unknown;
 }
 
@@ -17,7 +20,7 @@ export interface TransfersResponse {
 export interface TransferFilter {
 	limit?: number;
 	offset?: number;
-	token?: string;
+	token?: 'USDC' | 'EURC' | 'USYC' | 'OTHER';
 	from?: string;
 	to?: string;
 }

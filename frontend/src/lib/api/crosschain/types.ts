@@ -1,14 +1,16 @@
 export interface CrosschainEvent {
 	id: string;
 	block_number: number;
+	log_index?: number;
 	tx_hash: string;
-	protocol: string;
-	event_type: string;
-	sender?: string;
-	recipient?: string;
+	protocol: 'cctp' | 'gateway';
+	event_type: 'burn' | 'mint' | 'deposit' | 'withdraw';
 	source_domain?: number;
 	destination_domain?: number;
-	amount?: string;
+	sender?: string;
+	recipient?: string;
+	amount_usdc?: string;
+	nonce_val?: string;
 	[key: string]: unknown;
 }
 
@@ -20,8 +22,8 @@ export interface CrosschainResponse {
 export interface CrosschainFilter {
 	limit?: number;
 	offset?: number;
-	protocol?: string;
-	event_type?: string;
+	protocol?: 'cctp' | 'gateway';
+	event_type?: 'burn' | 'mint' | 'deposit' | 'withdraw';
 	sender?: string;
 	recipient?: string;
 	direction?: 'inbound' | 'outbound';

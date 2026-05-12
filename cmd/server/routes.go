@@ -51,6 +51,8 @@ func registerV1Routes(router *api.VersionedAPIRouter) {
 
 	// live dashboard stats (latest block_stats row)
 	v1.GET("/stats", statsHandler)
+	// historical block stats for time-series charts
+	v1.GET("/block_stats", blockStatsHandler)
 
 	// chain data
 	v1.GET("/blocks", blocksHandler)

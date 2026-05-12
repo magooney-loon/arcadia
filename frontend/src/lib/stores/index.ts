@@ -1,56 +1,30 @@
-// ==================== AUTH ====================
-export {
-	auth,
-	initializeAuth,
-	loginUser,
-	logoutUser,
-	type User,
-	type AuthState
-} from './auth.svelte';
-
-// ==================== CONFIG ====================
+// AUTH
+export { auth, initializeAuth, loginUser, logoutUser, type User, type AuthState } from './auth.svelte';
+// CONFIG
 export { APP_NAME, getApiUrl, setApiUrl, getPocketBaseInstance, pb } from './config.svelte';
-
-// ==================== STATS ====================
+// STATS
 export { stats, fetchStats, type StatsState } from './stats.svelte';
-
-// ==================== CHAIN ====================
+// BLOCK STATS (history)
+export { blockStats, fetchBlockStats, type BlockStatsState } from './blockStats.svelte';
+// CHAIN
 export {
-	blocks,
-	transactions,
-	traces,
-	fetchBlocks,
-	fetchTransactions,
-	fetchTraces,
-	type BlocksState,
-	type TransactionsState,
-	type TracesState
+	blocks, transactions, traces,
+	fetchBlocks, fetchTransactions, fetchTraces,
+	type BlocksState, type TransactionsState, type TracesState
 } from './chain.svelte';
-
-// ==================== TRANSFERS ====================
+// TRANSFERS
 export { transfers, fetchTransfers, type TransfersState } from './transfers.svelte';
-
-// ==================== WALLET ====================
+// WALLET
 export { wallet, fetchWallet, type WalletState } from './wallet.svelte';
-
-// ==================== CROSSCHAIN ====================
+// CROSSCHAIN
 export { crosschain, fetchCrosschain, type CrosschainState } from './crosschain.svelte';
-
-// ==================== FX ====================
+// FX
 export { fx, fetchFx, type FxState } from './fx.svelte';
-
-// ==================== AGENTS ====================
+// AGENTS
 export {
-	agents,
-	agent,
-	agentJobs,
-	fetchAgents,
-	fetchAgent,
-	fetchAgentJobs,
-	type AgentsState,
-	type AgentState,
-	type AgentJobsState
+	agents, agent, agentJobs,
+	fetchAgents, fetchAgent, fetchAgentJobs,
+	type AgentsState, type AgentState, type AgentJobsState
 } from './agents.svelte';
-
-// ==================== GRAPH ====================
+// GRAPH
 export { graph, fetchEdges, type GraphState } from './graph.svelte';
