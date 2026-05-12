@@ -42,7 +42,7 @@ A real-time streaming blockchain indexer and 3D visualizer for the Arc L1 chain.
 | `gas_price` | TransactionField.GAS_PRICE | Fee rate |
 | `gas_used` | TransactionField.GAS_USED | Actual gas consumed |
 | `effective_gas_price` | TransactionField.EFFECTIVE_GAS_PRICE | Post-EIP-1559 actual fee rate |
-| `fee_usdc` | derived: `gas_used × effective_gas_price / 1e6` | **Real USD cost of this tx — Arc's killer differentiator** |
+| `fee_usdc` | derived: `gas_used × effective_gas_price / 1e18` | **Real USD cost of this tx — Arc's killer differentiator** |
 | `nonce` | TransactionField.NONCE | Sender sequence / burst detection |
 | `input` | TransactionField.INPUT | Raw calldata |
 | `sighash` | derived: first 4 bytes of `input` | Method signature for tx categorization |
@@ -55,7 +55,7 @@ A real-time streaming blockchain indexer and 3D visualizer for the Arc L1 chain.
 #### Layer 3 — Token Transfers (ERC-20)
 **`transfers` collection**
 
-Covers: USDC, EURC, and all other ERC-20 tokens on Arc.
+Covers: USDC, EURC, USYC, and all other ERC-20 tokens on Arc.
 
 Event topic: `Transfer(address indexed from, address indexed to, uint256 value)`
 `0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef`
@@ -66,15 +66,21 @@ Event topic: `Transfer(address indexed from, address indexed to, uint256 value)`
 | `block_number` | LogField.BLOCK_NUMBER | Time axis |
 | `log_index` | LogField.LOG_INDEX | Dedup key |
 | `token_address` | LogField.ADDRESS | Contract identity |
-| `token_symbol` | derived: match against known addresses | USDC / EURC / other |
+| `token_symbol` | derived: match against known addresses | USDC / EURC / USYC / other |
 | `from` | LogField.TOPIC1 (last 20 bytes) | Sender wallet node |
 | `to` | LogField.TOPIC2 (last 20 bytes) | Receiver wallet node |
 | `amount_raw` | LogField.DATA | Raw uint256 |
-| `amount_usdc` | derived: `amount_raw / 1e6` | Human-readable (USDC has 6 decimals) |
+| `amount_human` | derived: `amount_raw / 1e6` | Human-readable (all stablecoins use 6 decimals via ERC-20 interface) |
+
+> **Decimal note**: The native USDC gas token uses 18 decimals; the ERC-20 interface (what Transfer events use) uses 6 decimals. Always decode ERC-20 Transfer amounts with `/1e6`. Gas fee amounts (`fee_usdc`) use `/1e18`.
 
 Known token addresses (Arc Testnet):
-- USDC: from `docs.arc.network/arc/references/contract-addresses.md`
-- EURC: from `docs.arc.network/arc/references/contract-addresses.md`
+
+| Symbol | Address | Decimals (ERC-20) |
+|---|---|---|
+| **USDC** | `0x3600000000000000000000000000000000000000` | 6 |
+| **EURC** | `0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a` | 6 |
+| **USYC** | `0xe9185F0c5F296Ed1797AaE4238D26CCaBEadb86C` | 6 |
 
 ---
 
@@ -128,27 +134,65 @@ Arc has native onchain AI agent identity (ERC-8004) and a job/escrow system (ERC
 
 ---
 
-#### Layer 6 — Cross-Chain Flows (CCTP)
-**`cctp_events` collection**
+#### Layer 6 — Cross-Chain Flows (CCTP + Gateway)
+**`crosschain_events` collection**
 
-CCTP events show capital entering/leaving Arc from other chains. Visualized as inbound/outbound arrows from the broader crypto ecosystem.
+Shows capital entering/leaving Arc from other chains via CCTP and Gateway. Visualized as inbound/outbound arrows from the broader crypto ecosystem. Arc is CCTP domain **26**.
 
-Events to index:
-- `DepositForBurn` — USDC leaving a chain toward Arc
-- `MintAndWithdraw` — USDC arriving on Arc from another chain
+**CCTP contracts (Arc Testnet):**
+
+| Contract | Address | Events |
+|---|---|---|
+| **TokenMessengerV2** | `0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA` | `DepositForBurn` (USDC exits a chain) |
+| **MessageTransmitterV2** | `0xE737e5cEBEEBa77EFE34D4aa090756590b1CE275` | `MessageReceived` (USDC arrives on Arc) |
+| **TokenMinterV2** | `0xb43db544E2c27092c107639Ad201b3dEfAbcF192` | mint/burn execution |
+
+**Gateway contracts (Arc Testnet):**
+
+| Contract | Address | Purpose |
+|---|---|---|
+| **GatewayWallet** | `0x0077777d7EBA4688BDeF3E311b846F25870A19B9` | User-facing unified balance |
+| **GatewayMinter** | `0x0022222ABE238Cc2C7Bb1f21003F0a260052475B` | Cross-chain mint/burn handler |
 
 | Field | Why |
 |---|---|
-| `event_type` | deposit / mint |
-| `source_chain` | Origin chain ID |
-| `destination_chain` | Destination chain ID |
+| `event_type` | `cctp_burn` / `cctp_received` / `gateway_deposit` / `gateway_withdraw` |
+| `protocol` | `cctp` / `gateway` |
+| `source_domain` | CCTP domain ID of origin chain |
+| `destination_domain` | CCTP domain ID of destination (Arc = 26) |
 | `amount_usdc` | Transfer size |
 | `sender` | Origin wallet |
 | `recipient` | Destination wallet |
 | `block_number` | Timeline |
-| `nonce` | Dedup / cross-chain correlation |
+| `nonce` | Dedup / cross-chain message correlation |
 
-CCTP contract address: from `docs.arc.network/arc/references/contract-addresses.md`
+---
+
+#### Layer 6b — FX Settlement (StableFX)
+**`fx_swaps` collection**
+
+StableFX is Circle's onchain FX engine on Arc. The `FxEscrow` contract settles USDC↔EURC swaps. Tracking this gives visibility into cross-currency flows — which is a unique signal on Arc that no other chain has.
+
+**StableFX contract:**
+
+| Contract | Address |
+|---|---|
+| **FxEscrow** | `0x867650F5eAe8df91445971f14d89fd84F0C9a9f8` |
+
+| Field | Why |
+|---|---|
+| `swap_id` | Identity |
+| `maker` | Liquidity provider |
+| `taker` | Swap initiator |
+| `sell_token` | Token sold (USDC or EURC address) |
+| `buy_token` | Token received |
+| `sell_amount` | Amount in |
+| `buy_amount` | Amount out |
+| `implied_rate` | `buy_amount / sell_amount` — live USDC/EURC rate |
+| `block_number` | Timeline |
+| `status` | `created` / `settled` / `cancelled` |
+
+> Event signatures for FxEscrow: verify against the ABI via `testnet.arcscan.app/address/0x867650F5eAe8df91445971f14d89fd84F0C9a9f8`
 
 ---
 
@@ -161,8 +205,10 @@ Stored at index time so the frontend never does heavy aggregations at query time
 |---|---|
 | `tps` | `tx_count / block_time_seconds` |
 | `avg_fee_usdc` | `sum(fee_usdc) / tx_count` |
-| `total_usdc_transferred` | `sum(amount_usdc) FROM transfers WHERE block = N` |
-| `total_eurc_transferred` | same, filtered to EURC address |
+| `total_usdc_transferred` | `sum(amount_human) FROM transfers WHERE block = N AND token_address = USDCAddress` |
+| `total_eurc_transferred` | same, filtered to `EURCAddress` |
+| `total_usyc_transferred` | same, filtered to `USYCAddress` — yield-bearing capital flows |
+| `fx_swap_volume_usdc` | `sum(sell_amount) FROM fx_swaps WHERE block = N` |
 | `unique_senders` | `COUNT(DISTINCT from) FROM transactions WHERE block = N` |
 | `unique_receivers` | `COUNT(DISTINCT to)` |
 | `new_contracts_deployed` | `COUNT WHERE contract_address IS NOT NULL` |
@@ -218,24 +264,35 @@ query := hypersync.Query{
         },
     },
     Logs: []hypersync.LogSelection{
-        // All ERC-20 transfers (USDC, EURC, any token)
+        // All ERC-20 transfers (USDC, EURC, USYC, any token)
         {Topics: [][]string{{TransferEventTopic}}},
-        // CCTP DepositForBurn
+        // CCTP DepositForBurn — emitted by TokenMessengerV2 when USDC exits a chain
         {
-            Address: []string{CCTPContractAddress},
+            Address: []string{"0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA"},
             Topics:  [][]string{{DepositForBurnTopic}},
         },
-        // CCTP MintAndWithdraw
+        // CCTP MessageReceived — emitted by MessageTransmitterV2 when USDC arrives on Arc
         {
-            Address: []string{CCTPContractAddress},
-            Topics:  [][]string{{MintAndWithdrawTopic}},
+            Address: []string{"0xE737e5cEBEEBa77EFE34D4aa090756590b1CE275"},
+            Topics:  [][]string{{MessageReceivedTopic}},
         },
-        // ERC-8004 agent registration
+        // Gateway — GatewayWallet and GatewayMinter events
+        {
+            Address: []string{
+                "0x0077777d7EBA4688BDeF3E311b846F25870A19B9", // GatewayWallet
+                "0x0022222ABE238Cc2C7Bb1f21003F0a260052475B", // GatewayMinter
+            },
+        },
+        // StableFX — FxEscrow swap lifecycle events
+        {
+            Address: []string{"0x867650F5eAe8df91445971f14d89fd84F0C9a9f8"},
+        },
+        // ERC-8004 agent registration (address TBD — check Arc docs for registry deployment)
         {
             Address: []string{AgentRegistryAddress},
             Topics:  [][]string{{AgentRegisteredTopic}},
         },
-        // ERC-8183 job lifecycle
+        // ERC-8183 job lifecycle (address TBD — check Arc docs for escrow deployment)
         {
             Address: []string{JobEscrowAddress},
             Topics:  [][]string{{JobCreatedTopic, JobSettledTopic, JobDeliveredTopic}},
@@ -246,6 +303,43 @@ query := hypersync.Query{
 
 ---
 
+## Contract Addresses (Arc Testnet)
+
+```go
+// Stablecoins
+const (
+    USDCAddress = "0x3600000000000000000000000000000000000000" // 6 decimals (ERC-20), 18 decimals (native gas)
+    EURCAddress = "0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a" // 6 decimals
+    USYCAddress = "0xe9185F0c5F296Ed1797AaE4238D26CCaBEadb86C" // 6 decimals
+)
+
+// CCTP (Arc domain = 26)
+const (
+    CCTPTokenMessengerV2     = "0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA"
+    CCTPMessageTransmitterV2 = "0xE737e5cEBEEBa77EFE34D4aa090756590b1CE275"
+    CCTPTokenMinterV2        = "0xb43db544E2c27092c107639Ad201b3dEfAbcF192"
+    CCTPMessageV2            = "0xbaC0179bB358A8936169a63408C8481D582390C4"
+)
+
+// Gateway
+const (
+    GatewayWallet = "0x0077777d7EBA4688BDeF3E311b846F25870A19B9"
+    GatewayMinter = "0x0022222ABE238Cc2C7Bb1f21003F0a260052475B"
+)
+
+// StableFX
+const (
+    FxEscrow = "0x867650F5eAe8df91445971f14d89fd84F0C9a9f8"
+)
+
+// Common
+const (
+    Permit2      = "0x000000000022D473030F116dDEE9F6B43aC78BA3"
+    Multicall3   = "0xcA11bde05977b3631167028862bE2a173976CA11"
+    Create2Factory = "0x4e59b44847b379578588920cA78FbF26c0B4956C"
+)
+```
+
 ## Event Signatures (Keccak256 Topics)
 
 ```go
@@ -253,17 +347,22 @@ var (
     // ERC-20
     TransferEventTopic = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
 
-    // CCTP
+    // CCTP v2
+    // keccak256("DepositForBurn(uint64,address,uint256,address,bytes32,uint32,bytes32,bytes32,uint256,uint32,bytes)")
     DepositForBurnTopic  = "0x2fa9ca894982930190727e75500a97d8dc500233a5065e0f3126c48fbe0343c0"
-    MintAndWithdrawTopic = "0x1b2a7ff080b8cb6ff436ce0372e399692bbfb6d4ae5766fd8d58a7b8cc6142e9"
+    // keccak256("MessageReceived(address,uint32,uint64,bytes32,bytes)")
+    MessageReceivedTopic = "0x58200b4c34ae05ee816d710053fff3ad1bcea173d0113462f6fd5162ab9adca5"
 
-    // ERC-8004 Agent Registry (verify address from Arc docs)
+    // ERC-8004 Agent Registry — address TBD, verify from Arc docs
     AgentRegisteredTopic = "..." // keccak256("AgentRegistered(address,string)")
 
-    // ERC-8183 Job Escrow (verify address from Arc docs)
+    // ERC-8183 Job Escrow — address TBD, verify from Arc docs
     JobCreatedTopic   = "..." // keccak256("JobCreated(uint256,address,address,uint256)")
     JobDeliveredTopic = "..." // keccak256("JobDelivered(uint256,address)")
     JobSettledTopic   = "..." // keccak256("JobSettled(uint256,uint256)")
+
+    // StableFX FxEscrow — verify signatures via testnet.arcscan.app ABI viewer
+    // SwapCreated, SwapSettled, SwapCancelled
 )
 ```
 
@@ -277,18 +376,22 @@ Everything above is queryable via PocketBase REST + real-time via PocketBase web
 1. **Chain spine** — blocks as nodes, time on the Z axis, utilization as heat color
 2. **Transaction particles** — particles flying between wallet nodes, sized by value
 3. **USDC blood flow** — animated edges between wallets, thickness = transfer amount
-4. **EURC layer** — separate color channel alongside USDC
-5. **Agent network** — agent wallets highlighted, agent-to-agent edges glowing
-6. **Cross-chain arrows** — CCTP inflows rendered as external capital entering the Arc sphere
-7. **Fee heatmap** — per-block USDC fee burn, proving Arc's $0.01 tx cost claim
-8. **Job economy** — ERC-8183 job arcs between employer and worker agent wallets
+4. **EURC layer** — separate color channel alongside USDC (FX flows)
+5. **USYC layer** — yield-bearing capital shown as a distinct particle type
+6. **Agent network** — agent wallets highlighted, agent-to-agent edges glowing
+7. **Cross-chain arrows** — CCTP and Gateway inflows rendered as external capital entering the Arc sphere
+8. **FX swap arcs** — StableFX USDC↔EURC swaps as bidirectional currency exchange events
+9. **Fee heatmap** — per-block USDC fee burn (in real dollars), proving Arc's $0.01 tx cost claim
+10. **Job economy** — ERC-8183 job arcs between employer and worker agent wallets
 
 **Time-series charts (from `block_stats`):**
 - TPS over time
-- Avg USDC fee per tx over time
-- Total USDC transferred per block
+- Avg USDC fee per tx over time (real USD, unique to Arc)
+- Total USDC / EURC / USYC transferred per block
+- StableFX swap volume and implied USDC/EURC rate over time
 - Active wallets per block
 - Block time distribution (sub-second finality histogram)
+- Cross-chain inflow volume (CCTP + Gateway)
 - New contract deployments over time
 - Agent job settlement rate
 
@@ -308,5 +411,16 @@ Everything above is queryable via PocketBase REST + real-time via PocketBase web
 - HyperSync endpoint: `https://arc-testnet.hypersync.xyz`
 - Block explorer: `https://testnet.arcscan.app`
 - Contract addresses: `https://docs.arc.network/arc/references/contract-addresses.md`
-- Faucet: `https://faucet.circle.com`
-- RPC: `https://docs.arc.network/arc/references/connect-to-arc.md`
+- Faucet (USDC + EURC): `https://faucet.circle.com`
+- RPC endpoints: `https://docs.arc.network/arc/references/connect-to-arc.md`
+- CCTP domain for Arc: **26**
+- ABI lookup: `https://testnet.arcscan.app/address/<contract>` → Contract tab → ABI
+
+## Outstanding TODOs
+
+- [ ] Confirm ERC-8004 Agent Registry contract address from Arc docs / Discord
+- [ ] Confirm ERC-8183 Job Escrow contract address from Arc docs / Discord
+- [ ] Verify `DepositForBurnTopic` and `MessageReceivedTopic` hashes against live CCTP v2 ABI
+- [ ] Pull StableFX FxEscrow event signatures from ABI via arcscan
+- [ ] Verify Gateway event signatures from ABI via arcscan
+- [ ] Implement `_meta` table for indexer cursor (last processed block) so restarts resume cleanly
