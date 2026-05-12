@@ -33,7 +33,7 @@ func indexerEventsCleanupJob(app core.App) error {
 	return jm.RegisterJob(
 		"indexerEventsCleanup",
 		"Indexer Events Cleanup",
-		"Deletes indexer_events records older than 2 hours, runs every hour",
+		"Deletes indexer_events records older than 2 hours",
 		"0 * * * *",
 		func(el *jobs.ExecutionLogger) {
 			el.Start("Indexer Events Cleanup")
@@ -73,8 +73,8 @@ func indexerHealthJob(app core.App) error {
 	return jm.RegisterJob(
 		"indexerHealth",
 		"Indexer Health Check",
-		"Logs the current indexer cursor and row counts for all arcadia collections every minute",
-		"* * * * *",
+		"Logs the current indexer cursor and row counts for all arcadia collections",
+		"0 * * * *",
 		func(el *jobs.ExecutionLogger) {
 			el.Start("Indexer Health Check")
 			el.Info("Checked at: %s", time.Now().Format(time.RFC3339))

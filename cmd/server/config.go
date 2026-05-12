@@ -103,13 +103,35 @@ var (
 	// ERC-20: Approval(address indexed owner, address indexed spender, uint256 value)
 	TopicApproval = common.HexToHash("0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925")
 
-	// CCTP v2 — TokenMessengerV2
-	// DepositForBurn(uint64,address,uint256,address,bytes32,uint32,bytes32,bytes32,uint256,uint32,bytes)
-	TopicDepositForBurn = common.HexToHash("0x2fa9ca894982930190727e75500a97d8dc500233a5065e0f3126c48fbe0343c0")
+	// CCTP v2 — TokenMessengerV2 (verified from impl 0xf07c0ad1)
+	// DepositForBurn(address indexed burnToken, uint256 amount, address indexed depositor,
+	//   bytes32 mintRecipient, uint32 destinationDomain, bytes32 destinationTokenMessenger,
+	//   bytes32 destinationCaller, uint256 maxFee, uint32 indexed minFinalityThreshold, bytes hookData)
+	TopicDepositForBurn = crypto.Keccak256Hash([]byte("DepositForBurn(address,uint256,address,bytes32,uint32,bytes32,bytes32,uint256,uint32,bytes)"))
 
-	// CCTP v2 — MessageTransmitterV2
-	// MessageReceived(address,uint32,uint64,bytes32,bytes)
-	TopicMessageReceived = common.HexToHash("0x58200b4c34ae05ee816d710053fff3ad1bcea173d0113462f6fd5162ab9adca5")
+	// CCTP v2 — TokenMessengerV2
+	// MintAndWithdraw(address indexed mintRecipient, uint256 amount, address indexed mintToken, uint256 feeCollected)
+	TopicMintAndWithdraw = crypto.Keccak256Hash([]byte("MintAndWithdraw(address,uint256,address,uint256)"))
+
+	// CCTP v2 — MessageTransmitterV2 (verified from impl 0xa849059b)
+	// MessageReceived(address indexed caller, uint32 sourceDomain, bytes32 indexed nonce,
+	//   bytes32 sender, uint32 indexed finalityThresholdExecuted, bytes messageBody)
+	TopicMessageReceived = crypto.Keccak256Hash([]byte("MessageReceived(address,uint32,bytes32,bytes32,uint32,bytes)"))
+
+	// GatewayWallet (verified from impl 0x44eeddc9)
+	// Deposited(address indexed token, address indexed depositor, address indexed sender, uint256 value)
+	TopicGatewayDeposited = crypto.Keccak256Hash([]byte("Deposited(address,address,address,uint256)"))
+
+	// GatewayWallet — outbound bridge (USDC leaving Arc)
+	// GatewayBurned(address indexed token, address indexed depositor, bytes32 indexed transferSpecHash,
+	//   uint32 destinationDomain, bytes32 destinationRecipient, address signer,
+	//   uint256 value, uint256 fee, uint256 fromAvailable, uint256 fromWithdrawing)
+	TopicGatewayBurned = crypto.Keccak256Hash([]byte("GatewayBurned(address,address,bytes32,uint32,bytes32,address,uint256,uint256,uint256,uint256)"))
+
+	// GatewayMinter (verified from impl 0x9ef4c7ad) — inbound bridge (USDC arriving on Arc)
+	// AttestationUsed(address indexed token, address indexed recipient, bytes32 indexed transferSpecHash,
+	//   uint32 sourceDomain, bytes32 sourceDepositor, bytes32 sourceSigner, uint256 value)
+	TopicAttestationUsed = crypto.Keccak256Hash([]byte("AttestationUsed(address,address,bytes32,uint32,bytes32,bytes32,uint256)"))
 
 	// ERC-8004 IdentityRegistry is ERC-721; agent registration mints a token.
 	TopicAgentRegistered = TopicTransfer

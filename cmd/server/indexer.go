@@ -156,15 +156,25 @@ func newIndexerQuery(fromBlock, toBlock uint64) *types.Query {
 		Transactions: []types.TransactionSelection{{}},
 		Logs: []types.LogSelection{
 			{Topics: [][]common.Hash{{TopicTransfer}}},
+			// CCTP: DepositForBurn (USDC exits Arc) + MintAndWithdraw (USDC arrives on Arc)
 			{
 				Address: []common.Address{AddrCCTPTokenMessenger},
-				Topics:  [][]common.Hash{{TopicDepositForBurn}},
+				Topics:  [][]common.Hash{{TopicDepositForBurn, TopicMintAndWithdraw}},
 			},
+			// CCTP: MessageReceived (low-level transport event, captures source domain + nonce)
 			{
 				Address: []common.Address{AddrCCTPMessageTransmitter},
 				Topics:  [][]common.Hash{{TopicMessageReceived}},
 			},
-			{Address: []common.Address{AddrGatewayWallet, AddrGatewayMinter}},
+			// Gateway: Deposited + GatewayBurned on GatewayWallet; AttestationUsed on GatewayMinter
+			{
+				Address: []common.Address{AddrGatewayWallet},
+				Topics:  [][]common.Hash{{TopicGatewayDeposited, TopicGatewayBurned}},
+			},
+			{
+				Address: []common.Address{AddrGatewayMinter},
+				Topics:  [][]common.Hash{{TopicAttestationUsed}},
+			},
 			{Address: []common.Address{AddrFxEscrow}},
 			{Address: []common.Address{AddrAgentRegistry}, Topics: [][]common.Hash{{TopicAgentRegistered}}},
 			{Address: []common.Address{AddrAgenticCommerce}, Topics: [][]common.Hash{{TopicJobCreated}}},
@@ -1025,10 +1035,22 @@ func routeLog(app core.App, log *types.Log) (*big.Int, error) {
 		return saveTransfer(app, log)
 
 	case TopicDepositForBurn:
-		return nil, saveCCTPEvent(app, log, "cctp", "burn")
+		return nil, saveCCTPDepositForBurn(app, log)
+
+	case TopicMintAndWithdraw:
+		return nil, saveCCTPMintAndWithdraw(app, log)
 
 	case TopicMessageReceived:
-		return nil, saveCCTPEvent(app, log, "cctp", "mint")
+		return nil, saveCCTPMessageReceived(app, log)
+
+	case TopicGatewayDeposited:
+		return nil, saveGatewayDeposited(app, log)
+
+	case TopicGatewayBurned:
+		return nil, saveGatewayBurned(app, log)
+
+	case TopicAttestationUsed:
+		return nil, saveAttestationUsed(app, log)
 
 	case TopicJobCreated:
 		return nil, saveAgentJobCreated(app, log)
@@ -1036,11 +1058,6 @@ func routeLog(app core.App, log *types.Log) (*big.Int, error) {
 	case TopicTradeRecorded, TopicMakerFunded, TopicTakerFunded, TopicTradeStatusChanged, TopicFeesProcessed:
 		if addr == AddrFxEscrow {
 			return nil, saveFxEvent(app, log)
-		}
-
-	default:
-		if addr == AddrGatewayWallet || addr == AddrGatewayMinter {
-			return nil, saveGatewayEvent(app, log)
 		}
 	}
 	return nil, nil
@@ -1104,7 +1121,8 @@ func saveTransfer(app core.App, log *types.Log) (*big.Int, error) {
 	return amountRaw, nil
 }
 
-func saveCCTPEvent(app core.App, log *types.Log, protocol, eventType string) error {
+// saveCrosschain is the shared upsert helper for crosschain_events.
+func saveCrosschain(app core.App, log *types.Log, fill func(*core.Record)) error {
 	if log.TransactionHash == nil || log.LogIndex == nil {
 		return nil
 	}
@@ -1112,60 +1130,175 @@ func saveCCTPEvent(app core.App, log *types.Log, protocol, eventType string) err
 		"tx_hash = {:h} && log_index = {:i}", "", 1, 0,
 		map[string]any{"h": log.TransactionHash.Hex(), "i": *log.LogIndex})
 	if err != nil {
-		return fmt.Errorf("find cctp event %s/%d: %w", log.TransactionHash.Hex(), *log.LogIndex, err)
+		return fmt.Errorf("find crosschain %s/%d: %w", log.TransactionHash.Hex(), *log.LogIndex, err)
 	}
 	if len(existing) > 0 {
 		return nil
 	}
-
 	r := core.NewRecord(mustCollection(app, "crosschain_events"))
 	r.Set("tx_hash", log.TransactionHash.Hex())
+	r.Set("log_index", *log.LogIndex)
 	if log.BlockNumber != nil {
 		r.Set("block_number", log.BlockNumber.Uint64())
 	}
-	r.Set("log_index", *log.LogIndex)
-	r.Set("protocol", protocol)
-	r.Set("event_type", eventType)
-	r.Set("destination_domain", 26) // Arc testnet domain
-
-	// DepositForBurn: topic1 = nonce, topic2 = burnToken, data contains amount+recipient
-	// Full ABI decode can be added once the exact ABI is confirmed.
-
+	fill(r)
 	if err := app.Save(r); err != nil {
-		return fmt.Errorf("save cctp event %s/%d: %w", log.TransactionHash.Hex(), *log.LogIndex, err)
+		return fmt.Errorf("save crosschain %s/%d: %w", log.TransactionHash.Hex(), *log.LogIndex, err)
 	}
-
 	return nil
 }
 
-func saveGatewayEvent(app core.App, log *types.Log) error {
-	if log.TransactionHash == nil || log.LogIndex == nil {
-		return nil
+// readUint32 reads a uint32 from 32 ABI-padded bytes at offset in data.
+func readUint32(data []byte, offset int) uint32 {
+	if len(data) < offset+32 {
+		return 0
 	}
-	existing, err := app.FindRecordsByFilter("crosschain_events",
-		"tx_hash = {:h} && log_index = {:i}", "", 1, 0,
-		map[string]any{"h": log.TransactionHash.Hex(), "i": *log.LogIndex})
-	if err != nil {
-		return fmt.Errorf("find gateway event %s/%d: %w", log.TransactionHash.Hex(), *log.LogIndex, err)
-	}
-	if len(existing) > 0 {
-		return nil
-	}
+	return uint32(new(big.Int).SetBytes(data[offset : offset+32]).Uint64())
+}
 
-	r := core.NewRecord(mustCollection(app, "crosschain_events"))
-	r.Set("tx_hash", log.TransactionHash.Hex())
-	if log.BlockNumber != nil {
-		r.Set("block_number", log.BlockNumber.Uint64())
+// readBig reads a *big.Int from 32 ABI bytes at offset in data.
+func readBig(data []byte, offset int) *big.Int {
+	if len(data) < offset+32 {
+		return new(big.Int)
 	}
-	r.Set("log_index", *log.LogIndex)
-	r.Set("protocol", "gateway")
-	r.Set("event_type", "deposit") // refine once Gateway ABI is confirmed
+	return new(big.Int).SetBytes(data[offset : offset+32])
+}
 
-	if err := app.Save(r); err != nil {
-		return fmt.Errorf("save gateway event %s/%d: %w", log.TransactionHash.Hex(), *log.LogIndex, err)
-	}
+// ── CCTP event handlers ───────────────────────────────────────────────────────
 
-	return nil
+// DepositForBurn: USDC exits Arc via CCTP.
+// t1=burnToken(indexed), t2=depositor(indexed), t3=minFinalityThreshold(indexed)
+// data: [amount(u256), mintRecipient(bytes32), destinationDomain(u32), ...]
+func saveCCTPDepositForBurn(app core.App, log *types.Log) error {
+	return saveCrosschain(app, log, func(r *core.Record) {
+		r.Set("protocol", "cctp")
+		r.Set("event_type", "burn")
+		r.Set("source_domain", 26) // Arc is always the source here
+
+		if log.Topic2 != nil {
+			r.Set("sender", addressFromTopic(log.Topic2))
+		}
+		if log.Data != nil && len(*log.Data) >= 64 {
+			d := *log.Data
+			r.Set("amount_usdc", stablecoinHuman(readBig(d, 0)))
+			// mintRecipient is bytes32; last 20 bytes = address
+			r.Set("recipient", addressFromBytes32(d[32:64]))
+			if len(d) >= 96 {
+				r.Set("destination_domain", readUint32(d, 64))
+			}
+		}
+	})
+}
+
+// MintAndWithdraw: USDC arrives on Arc from another chain.
+// t1=mintRecipient(indexed), t2=mintToken(indexed)
+// data: [amount(u256), feeCollected(u256)]
+func saveCCTPMintAndWithdraw(app core.App, log *types.Log) error {
+	return saveCrosschain(app, log, func(r *core.Record) {
+		r.Set("protocol", "cctp")
+		r.Set("event_type", "mint")
+		r.Set("destination_domain", 26)
+
+		if log.Topic1 != nil {
+			r.Set("recipient", addressFromTopic(log.Topic1))
+		}
+		if log.Data != nil && len(*log.Data) >= 32 {
+			r.Set("amount_usdc", stablecoinHuman(readBig(*log.Data, 0)))
+		}
+	})
+}
+
+// MessageReceived: low-level CCTP message delivery on Arc.
+// t1=caller(indexed), t2=nonce(bytes32 indexed), t3=finalityThreshold(indexed)
+// data: [sourceDomain(u32), sender(bytes32), messageBody(bytes)]
+func saveCCTPMessageReceived(app core.App, log *types.Log) error {
+	return saveCrosschain(app, log, func(r *core.Record) {
+		r.Set("protocol", "cctp")
+		r.Set("event_type", "mint")
+		r.Set("destination_domain", 26)
+
+		if log.Topic2 != nil {
+			r.Set("nonce_val", log.Topic2.Hex())
+		}
+		if log.Data != nil && len(*log.Data) >= 64 {
+			d := *log.Data
+			r.Set("source_domain", readUint32(d, 0))
+			// sender is bytes32; last 20 bytes = address
+			r.Set("sender", addressFromBytes32(d[32:64]))
+		}
+	})
+}
+
+// ── Gateway event handlers ────────────────────────────────────────────────────
+
+// Deposited: user deposits USDC into their unified balance on Arc.
+// t1=token(indexed), t2=depositor(indexed), t3=sender(indexed)
+// data: [value(u256)]
+func saveGatewayDeposited(app core.App, log *types.Log) error {
+	return saveCrosschain(app, log, func(r *core.Record) {
+		r.Set("protocol", "gateway")
+		r.Set("event_type", "deposit")
+		r.Set("source_domain", 26)
+		r.Set("destination_domain", 26)
+
+		if log.Topic2 != nil {
+			r.Set("sender", addressFromTopic(log.Topic2))
+		}
+		if log.Topic3 != nil {
+			r.Set("recipient", addressFromTopic(log.Topic3))
+		}
+		if log.Data != nil && len(*log.Data) >= 32 {
+			r.Set("amount_usdc", stablecoinHuman(readBig(*log.Data, 0)))
+		}
+	})
+}
+
+// GatewayBurned: USDC leaves Arc via Gateway bridge.
+// t1=token(indexed), t2=depositor(indexed), t3=transferSpecHash(bytes32 indexed)
+// data: [destinationDomain(u32), destinationRecipient(bytes32), signer(addr), value(u256), ...]
+func saveGatewayBurned(app core.App, log *types.Log) error {
+	return saveCrosschain(app, log, func(r *core.Record) {
+		r.Set("protocol", "gateway")
+		r.Set("event_type", "withdraw")
+		r.Set("source_domain", 26)
+
+		if log.Topic2 != nil {
+			r.Set("sender", addressFromTopic(log.Topic2))
+		}
+		if log.Topic3 != nil {
+			r.Set("nonce_val", log.Topic3.Hex()) // transferSpecHash
+		}
+		if log.Data != nil && len(*log.Data) >= 128 {
+			d := *log.Data
+			r.Set("destination_domain", readUint32(d, 0))
+			r.Set("recipient", addressFromBytes32(d[32:64]))
+			r.Set("amount_usdc", stablecoinHuman(readBig(d, 96)))
+		}
+	})
+}
+
+// AttestationUsed: USDC arrives on Arc from another chain via Gateway.
+// t1=token(indexed), t2=recipient(indexed), t3=transferSpecHash(bytes32 indexed)
+// data: [sourceDomain(u32), sourceDepositor(bytes32), sourceSigner(bytes32), value(u256)]
+func saveAttestationUsed(app core.App, log *types.Log) error {
+	return saveCrosschain(app, log, func(r *core.Record) {
+		r.Set("protocol", "gateway")
+		r.Set("event_type", "deposit")
+		r.Set("destination_domain", 26)
+
+		if log.Topic2 != nil {
+			r.Set("recipient", addressFromTopic(log.Topic2))
+		}
+		if log.Topic3 != nil {
+			r.Set("nonce_val", log.Topic3.Hex()) // transferSpecHash
+		}
+		if log.Data != nil && len(*log.Data) >= 128 {
+			d := *log.Data
+			r.Set("source_domain", readUint32(d, 0))
+			r.Set("sender", addressFromBytes32(d[32:64]))
+			r.Set("amount_usdc", stablecoinHuman(readBig(d, 96)))
+		}
+	})
 }
 
 // fxUpsert finds or creates the fx_swaps record for tradeID, then calls update(r) and saves it.
@@ -1485,6 +1618,14 @@ func addressFromTopic(h *common.Hash) string {
 		return ""
 	}
 	return common.BytesToAddress(h.Bytes()[12:]).Hex()
+}
+
+// addressFromBytes32 extracts an Ethereum address from a 32-byte ABI-padded slice (last 20 bytes).
+func addressFromBytes32(b []byte) string {
+	if len(b) < 32 {
+		return ""
+	}
+	return common.BytesToAddress(b[12:32]).Hex()
 }
 
 // stripQuotes is a no-op helper kept for clarity when working with string values.
