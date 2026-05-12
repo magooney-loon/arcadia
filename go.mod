@@ -6,9 +6,10 @@ require (
 	github.com/enviodev/hypersync-client-go v0.0.0-20260326113944-61b74fa6a262
 	github.com/ethereum/go-ethereum v1.14.5
 	github.com/joho/godotenv v1.5.1
-	github.com/magooney-loon/pb-ext v0.0.0-20260303222458-269caa6df83c
 	github.com/pocketbase/pocketbase v0.38.0
 )
+
+require github.com/magooney-loon/pb-ext v0.0.0-20260512161344-7da57aaae8d6
 
 require (
 	capnproto.org/go/capnp/v3 v3.0.1-alpha.2 // indirect
