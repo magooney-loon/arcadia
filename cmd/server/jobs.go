@@ -38,7 +38,7 @@ func indexerEventsCleanupJob(app core.App) error {
 		func(el *jobs.ExecutionLogger) {
 			el.Start("Indexer Events Cleanup")
 
-			cutoff := time.Now().Add(-2 * time.Hour).UnixMilli()
+			cutoff := time.Now().Add(-2 * time.Hour).Unix()
 			records, err := app.FindRecordsByFilter(
 				"indexer_events",
 				fmt.Sprintf("timestamp < %d", cutoff),
