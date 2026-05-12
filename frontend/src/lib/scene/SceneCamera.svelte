@@ -3,7 +3,7 @@
 	import { OrbitControls } from '@threlte/extras';
 </script>
 
-<T.PerspectiveCamera makeDefault fov={60} position={[0, 6, -90]}>
+<T.PerspectiveCamera makeDefault fov={60} position={[0, 6, -120]}>
 	<OrbitControls
 		enableDamping
 		dampingFactor={0.05}

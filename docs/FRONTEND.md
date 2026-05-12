@@ -49,7 +49,6 @@ Derived from the wireframe SVG (`docs/Arcadia_Wireframe.html`).
 | Element | Value |
 |---|---|
 | Background | `#0a0a0f` |
-| ARCADIA logotype | `#e0e0ee`, extruded 3D, `metalness=0.55` (only non-data mesh — brand anchor) |
 | Wallet nodes | `#ffffff` — form the neural graph structure via force layout |
 | Transfer edges | `#9aa0b4` at 25–40% opacity — the "wireframe" IS the transfer graph |
 | Agent nodes | `#7ee5a8` (green) — glow + pulse, sized by `usdc_spent_fees` |
@@ -91,10 +90,8 @@ All 12 REST endpoints are implemented, typed, and stored. Types match `collectio
 ```
 <Canvas> (full viewport, #0a0a0f background)
 │
-├── <SceneCamera>          ✅  PerspectiveCamera at (0,1.5,10), OrbitControls autoRotate
+├── <SceneCamera>          ✅  PerspectiveCamera at (0,6,18), OrbitControls, pan enabled
 ├── <SceneLighting>        ✅  Ambient + cyan point light + green point light
-│
-├── <ArcLogotype>          ✅  Text3DGeometry "ARCADIA" — brand anchor only, no other static meshes
 │
 ├── <ChainSpine>           ✅  Fetches 50 blocks on mount
 │   └── <BlockNodes>       ✅  InstancedMesh, Z-axis spine, utilization heat colour
@@ -106,10 +103,7 @@ All 12 REST endpoints are implemented, typed, and stored. Types match `collectio
 │
 ├── <CrosschainArrows>         Bezier arcs entering the graph from outside (CCTP/Gateway)
 │
-├── <TokenParticles>           Ring buffer, particles travel along transfer edges
-│   ├── <USDCParticles>        Blue
-│   ├── <EURCParticles>        Gold
-│   └── <USYCParticles>        Purple
+├── <TokenParticles>         ✅  Ring buffer particles traveling along transfer edges, color by token
 │
 ├── <FXSwapArcs>               Bidirectional USDC↔EURC arcs (StableFX)
 │
@@ -196,29 +190,23 @@ src/
 └── lib/
     ├── scene/
     │   ├── Scene.svelte           ✅ Threlte <Canvas> entry point
-    │   ├── SceneCamera.svelte     ✅ PerspectiveCamera + OrbitControls autoRotate
+    │   ├── SceneCamera.svelte     ✅ PerspectiveCamera + OrbitControls (pan, no auto-rotate)
     │   ├── SceneLighting.svelte   ✅ Ambient + point lights (cyan + green)
-    │   │
-    │   ├── core/
-    │   │   ├── ArcLogotype.svelte  ✅ Text3DGeometry "ARCADIA" — brand anchor only
-    │   │   └── CrosschainArrows.svelte
     │   │
     │   ├── chain/
     │   │   ├── ChainSpine.svelte  ✅ Fetches blocks, mounts BlockNodes
-    │   │   └── BlockNodes.svelte  ✅ InstancedMesh Z-spine, heat colour
+    │   │   └── BlockNodes.svelte  ✅ Helix on X axis, heat colour, chain links, head pulse
     │   │
     │   ├── graph/                    ← THE CENTRAL VISUAL
-    │   │   ├── WalletGraph.svelte    ✅ Fetches edges + agents, runs simulation
+    │   │   ├── WalletGraph.svelte    ✅ Fetches edges + agents + transfers, runs simulation
     │   │   ├── WalletNodes.svelte    ✅ Non-agent wallet InstancedMesh
     │   │   ├── AgentNodes.svelte     ✅ Green emissive agent InstancedMesh + pulse
     │   │   ├── TransferEdges.svelte  ✅ LineSegments, brightness ∝ total_usdc
     │   │   └── JobArcs.svelte
     │   │
     │   ├── particles/
-    │   │   ├── TokenParticles.svelte
-    │   │   ├── USDCParticles.svelte
-    │   │   ├── EURCParticles.svelte
-    │   │   └── USYCParticles.svelte
+    │   │   ├── TokenParticles.svelte   ✅ InstancedMesh, color-coded by token, travel along edges
+    │   │   └── ParticleSpawner.svelte   ✅ Watches transfers + layout, spawns on load
     │   │
     │   └── fx/
     │       └── FXSwapArcs.svelte
@@ -234,7 +222,7 @@ src/
     │
     ├── scene-state/
     │   ├── layout.svelte.ts       ✅ d3-force-3d simulation → node x/y/z positions (spherical boundary)
-    │   ├── particles.svelte.ts    ring buffer of live transfers for particle spawning
+    │   ├── particles.svelte.ts    ✅ ring buffer of live transfers for particle spawning
     │   ├── layers.svelte.ts       boolean toggles for each visual layer
     │   └── selection.svelte.ts    currently selected wallet node
     │
@@ -310,7 +298,7 @@ Target: 60fps on mid-range hardware with all layers active.
 - `SceneCamera` — PerspectiveCamera + OrbitControls autoRotate
 - `SceneLighting` — ambient + cyan + green point lights
 - ~~`ArcSphere` — wireframe globe, hex core~~ → **Removed.** Replaced by data-driven `WalletGraph` (Phase 3)
-- `ArcLogotype` — Text3DGeometry "ARCADIA" extracted as standalone brand anchor
+- ~~`ArcLogotype` — Text3DGeometry~~ → **Removed.** No static meshes at all.
 
 ### Phase 2 — Chain spine ✅ (upgraded — helix layout + chain links)
 - `ChainSpine` fetches 50 blocks on mount
@@ -332,10 +320,13 @@ Target: 60fps on mid-range hardware with all layers active.
 - Agent nodes get stronger repulsion (charge -20 vs -6) → float to graph surface
 - Link strength ∝ tx_count (more active connections pull nodes closer)
 
-### Phase 4 — Particles
-- `scene-state/particles.svelte.ts` ring buffer
-- `USDCParticles` travelling along edges
-- Extend to EURC + USYC
+### Phase 4 — Particles ✅
+- `scene-state/particles.svelte.ts` ring buffer (max 500 live particles)
+- `TokenParticles.svelte` — single InstancedMesh, particles lerp along edges, swell mid-journey
+- Color-coded by token type: USDC `#2775ca`, EURC `#e8b84b`, USYC `#7b61ff`
+- `ParticleSpawner.svelte` — watches transfers + layout, spawns on initial load
+- Particles auto-die when `t >= 1`, ticked every frame via `useTask`
+- WalletGraph fetches 200 transfers on mount as particle source data
 
 ### Phase 5 — Live data
 - PocketBase websocket subscriptions (block_stats, transfers, agents, jobs, crosschain, fx)
