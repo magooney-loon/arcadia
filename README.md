@@ -408,11 +408,12 @@ Everything above is queryable via PocketBase REST + real-time via PocketBase web
 
 ## Key Arc Testnet References
 
-- HyperSync endpoint: `https://arc-testnet.hypersync.xyz`
+- **Chain ID**: `5042002`
+- HyperSync endpoint: `https://arc-testnet.hypersync.xyz` (also `https://5042002.hypersync.xyz`)
+- RPC endpoint: `https://rpc.testnet.arc-node.thecanteenapp.com/v1/<key>` — key-gated, get yours via `arc-canteen login && arc-canteen rpc-url`
 - Block explorer: `https://testnet.arcscan.app`
 - Contract addresses: `https://docs.arc.network/arc/references/contract-addresses.md`
 - Faucet (USDC + EURC): `https://faucet.circle.com`
-- RPC endpoints: `https://docs.arc.network/arc/references/connect-to-arc.md`
 - CCTP domain for Arc: **26**
 - ABI lookup: `https://testnet.arcscan.app/address/<contract>` → Contract tab → ABI
 
@@ -423,4 +424,3 @@ Everything above is queryable via PocketBase REST + real-time via PocketBase web
 - [ ] Verify `DepositForBurnTopic` and `MessageReceivedTopic` hashes against live CCTP v2 ABI
 - [ ] Pull StableFX FxEscrow event signatures from ABI via arcscan
 - [ ] Verify Gateway event signatures from ABI via arcscan
-- [ ] Implement `_meta` table for indexer cursor (last processed block) so restarts resume cleanly

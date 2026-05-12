@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"math/big"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -16,43 +15,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/pocketbase/pocketbase/core"
 )
-
-// Arc Testnet — HyperSync endpoint and internal network ID (just a lookup key, not Arc's chain ID).
-const (
-	arcEndpoint    = "https://arc-testnet.hypersync.xyz"
-	arcRPCEndpoint = "https://rpc.arc.network" // confirm from docs.arc.network/arc/references/connect-to-arc.md
-)
-
-var arcNetworkID = utils.NetworkID(99999)
-
-// ── Contract addresses ────────────────────────────────────────────────────────
-
-var (
-	addrUSDC = common.HexToAddress("0x3600000000000000000000000000000000000000")
-	addrEURC = common.HexToAddress("0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a")
-	addrUSYC = common.HexToAddress("0xe9185F0c5F296Ed1797AaE4238D26CCaBEadb86C")
-
-	addrCCTPMessenger     = common.HexToAddress("0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA")
-	addrCCTPTransmitter   = common.HexToAddress("0xE737e5cEBEEBa77EFE34D4aa090756590b1CE275")
-	addrGatewayWallet     = common.HexToAddress("0x0077777d7EBA4688BDeF3E311b846F25870A19B9")
-	addrGatewayMinter     = common.HexToAddress("0x0022222ABE238Cc2C7Bb1f21003F0a260052475B")
-	addrFxEscrow          = common.HexToAddress("0x867650F5eAe8df91445971f14d89fd84F0C9a9f8")
-)
-
-// ── Event topics ──────────────────────────────────────────────────────────────
-
-var (
-	topicTransfer       = common.HexToHash("0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef")
-	topicDepositForBurn = common.HexToHash("0x2fa9ca894982930190727e75500a97d8dc500233a5065e0f3126c48fbe0343c0")
-	topicMsgReceived    = common.HexToHash("0x58200b4c34ae05ee816d710053fff3ad1bcea173d0113462f6fd5162ab9adca5")
-)
-
-// knownTokens maps address → symbol for the three Arc stablecoins.
-var knownTokens = map[common.Address]string{
-	addrUSDC: "USDC",
-	addrEURC: "EURC",
-	addrUSYC: "USYC",
-}
 
 // ── Indexer entry point ───────────────────────────────────────────────────────
 
@@ -71,14 +33,22 @@ func StartIndexer(app core.App) {
 func runIndexer(app core.App) error {
 	ctx := context.Background()
 
+	apiToken := EnvioAPIToken()
+	if apiToken == "" {
+		return fmt.Errorf("ENVIO_API_TOKEN not set — get one at envio.dev")
+	}
+
+	rpc := NextRPCURL()
+	app.Logger().Info("Connecting to Arc", "hypersync", ArcHyperSyncURL, "rpc", rpc)
+
 	hyper, err := hypersyncgo.NewHyper(ctx, options.Options{
 		Blockchains: []options.Node{
 			{
 				Type:        utils.EthereumNetwork,
-				NetworkId:   arcNetworkID,
-				Endpoint:    arcEndpoint,
-				RpcEndpoint: arcRPCEndpoint,
-				ApiToken:    os.Getenv("ENVIO_API_TOKEN"),
+				NetworkId:   ArcNetworkID,
+				Endpoint:    ArcHyperSyncURL,
+				RpcEndpoint: rpc,
+				ApiToken:    apiToken,
 			},
 		},
 	})
@@ -86,7 +56,7 @@ func runIndexer(app core.App) error {
 		return fmt.Errorf("failed to create HyperSync client: %w", err)
 	}
 
-	client, ok := hyper.GetClient(arcNetworkID)
+	client, ok := hyper.GetClient(ArcNetworkID)
 	if !ok {
 		return fmt.Errorf("arc client not found in hyper")
 	}
@@ -115,21 +85,21 @@ func runIndexer(app core.App) error {
 		},
 		Logs: []types.LogSelection{
 			// All ERC-20 Transfer events (USDC, EURC, USYC, …)
-			{Topics: [][]common.Hash{{topicTransfer}}},
+			{Topics: [][]common.Hash{{TopicTransfer}}},
 			// CCTP: DepositForBurn on TokenMessengerV2
 			{
-				Address: []common.Address{addrCCTPMessenger},
-				Topics:  [][]common.Hash{{topicDepositForBurn}},
+				Address: []common.Address{AddrCCTPTokenMessenger},
+				Topics:  [][]common.Hash{{TopicDepositForBurn}},
 			},
 			// CCTP: MessageReceived on MessageTransmitterV2
 			{
-				Address: []common.Address{addrCCTPTransmitter},
-				Topics:  [][]common.Hash{{topicMsgReceived}},
+				Address: []common.Address{AddrCCTPMessageTransmitter},
+				Topics:  [][]common.Hash{{TopicMessageReceived}},
 			},
 			// Gateway: all events from GatewayWallet + GatewayMinter
-			{Address: []common.Address{addrGatewayWallet, addrGatewayMinter}},
+			{Address: []common.Address{AddrGatewayWallet, AddrGatewayMinter}},
 			// StableFX: all events from FxEscrow
-			{Address: []common.Address{addrFxEscrow}},
+			{Address: []common.Address{AddrFxEscrow}},
 		},
 	}
 
@@ -242,14 +212,14 @@ func processBatch(app core.App, res *types.QueryResponse) error {
 			amount := routeLog(txApp, &log)
 			if amount != nil && log.Address != nil {
 				switch *log.Address {
-				case addrUSDC:
+				case AddrUSDC:
 					acc.totalUSDC.Add(acc.totalUSDC, amount)
 					if amount.Cmp(acc.largestUSDC) > 0 {
 						acc.largestUSDC.Set(amount)
 					}
-				case addrEURC:
+				case AddrEURC:
 					acc.totalEURC.Add(acc.totalEURC, amount)
-				case addrUSYC:
+				case AddrUSYC:
 					acc.totalUSYC.Add(acc.totalUSYC, amount)
 				}
 			}
@@ -413,20 +383,20 @@ func routeLog(app core.App, log *types.Log) *big.Int {
 	}
 
 	switch *log.Topic0 {
-	case topicTransfer:
+	case TopicTransfer:
 		return saveTransfer(app, log)
 
-	case topicDepositForBurn:
+	case TopicDepositForBurn:
 		saveCCTPEvent(app, log, "cctp", "burn")
 
-	case topicMsgReceived:
+	case TopicMessageReceived:
 		saveCCTPEvent(app, log, "cctp", "mint")
 
 	default:
 		addr := *log.Address
-		if addr == addrGatewayWallet || addr == addrGatewayMinter {
+		if addr == AddrGatewayWallet || addr == AddrGatewayMinter {
 			saveGatewayEvent(app, log)
-		} else if addr == addrFxEscrow {
+		} else if addr == AddrFxEscrow {
 			saveFxEvent(app, log)
 		}
 	}
@@ -459,7 +429,7 @@ func saveTransfer(app core.App, log *types.Log) *big.Int {
 	}
 
 	symbol := "OTHER"
-	if s, ok := knownTokens[*log.Address]; ok {
+	if s, ok := KnownTokens[*log.Address]; ok {
 		symbol = s
 	}
 
