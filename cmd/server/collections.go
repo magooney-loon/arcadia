@@ -117,6 +117,27 @@ func blocksCollection(app core.App) error {
 // transactionsCollection — Layer 2: every transaction.
 func transactionsCollection(app core.App) error {
 	if collectionExists(app, "transactions") {
+		c, err := app.FindCollectionByNameOrId("transactions")
+		if err != nil {
+			return err
+		}
+		changed := false
+		addMissing := func(field core.Field) {
+			if c.Fields.GetByName(field.GetName()) == nil {
+				c.Fields.Add(field)
+				changed = true
+			}
+		}
+		addMissing(&core.NumberField{Name: "gas_limit"})
+		addMissing(&core.NumberField{Name: "cumulative_gas_used"})
+		addMissing(&core.TextField{Name: "max_fee_per_gas", Required: false, Max: 80})
+		addMissing(&core.TextField{Name: "max_priority_fee_per_gas", Required: false, Max: 80})
+		addMissing(&core.TextField{Name: "priority_fee_per_gas", Required: false, Max: 80})
+		addMissing(&core.TextField{Name: "priority_fee_usdc", Required: false, Max: 40})
+		addMissing(&core.NumberField{Name: "status"})
+		if changed {
+			return app.Save(c)
+		}
 		return nil
 	}
 	c := core.NewBaseCollection("transactions")
@@ -130,11 +151,18 @@ func transactionsCollection(app core.App) error {
 	c.Fields.Add(&core.NumberField{Name: "nonce"})
 	c.Fields.Add(&core.TextField{Name: "sighash", Required: false, Max: 10}) // first 4 bytes hex
 	c.Fields.Add(&core.TextField{Name: "gas_price", Required: false, Max: 80})
+	c.Fields.Add(&core.NumberField{Name: "gas_limit"})
 	c.Fields.Add(&core.NumberField{Name: "gas_used"})
+	c.Fields.Add(&core.NumberField{Name: "cumulative_gas_used"})
 	c.Fields.Add(&core.TextField{Name: "effective_gas_price", Required: false, Max: 80})
+	c.Fields.Add(&core.TextField{Name: "max_fee_per_gas", Required: false, Max: 80})
+	c.Fields.Add(&core.TextField{Name: "max_priority_fee_per_gas", Required: false, Max: 80})
+	c.Fields.Add(&core.TextField{Name: "priority_fee_per_gas", Required: false, Max: 80})
 	// fee in USDC: gas_used * effective_gas_price / 1e18 (native USDC uses 18 decimals)
 	c.Fields.Add(&core.TextField{Name: "fee_usdc", Required: false, Max: 40})
+	c.Fields.Add(&core.TextField{Name: "priority_fee_usdc", Required: false, Max: 40})
 	c.Fields.Add(&core.NumberField{Name: "tx_type"})
+	c.Fields.Add(&core.NumberField{Name: "status"})
 	c.Fields.Add(&core.TextField{Name: "contract_address", Required: false, Max: 42})
 	c.Fields.Add(&core.BoolField{Name: "is_contract_deploy"})
 	c.AddIndex("idx_tx_hash", true, "hash", "")
