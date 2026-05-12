@@ -51,8 +51,6 @@ func registerV1Routes(router *api.VersionedAPIRouter) {
 
 	// live dashboard stats (latest block_stats row)
 	v1.GET("/stats", statsHandler)
-	// lifetime ecosystem totals (bridge, fx, agents, jobs, graph)
-	v1.GET("/overview", overviewHandler)
 
 	// chain data
 	v1.GET("/blocks", blocksHandler)
