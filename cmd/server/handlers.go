@@ -214,16 +214,37 @@ func crosschainHandler(c *core.RequestEvent) error {
 
 	filter := ""
 	params := map[string]any{}
-	if proto := qp(c, "protocol", ""); proto != "" {
-		filter = "protocol = {:p}"
-		params["p"] = proto
-	}
-	if et := qp(c, "event_type", ""); et != "" {
+
+	addFilter := func(clause string) {
 		if filter != "" {
 			filter += " && "
 		}
-		filter += "event_type = {:et}"
+		filter += clause
+	}
+
+	if proto := qp(c, "protocol", ""); proto != "" {
+		addFilter("protocol = {:p}")
+		params["p"] = proto
+	}
+	if et := qp(c, "event_type", ""); et != "" {
+		addFilter("event_type = {:et}")
 		params["et"] = et
+	}
+	if sender := qp(c, "sender", ""); sender != "" {
+		addFilter("sender = {:s}")
+		params["s"] = sender
+	}
+	if recipient := qp(c, "recipient", ""); recipient != "" {
+		addFilter("recipient = {:r}")
+		params["r"] = recipient
+	}
+	// direction=inbound  → USDC arriving on Arc (destination_domain = 26)
+	// direction=outbound → USDC leaving Arc   (source_domain = 26, destination != 26)
+	switch qp(c, "direction", "") {
+	case "inbound":
+		addFilter("destination_domain = 26")
+	case "outbound":
+		addFilter("source_domain = 26 && destination_domain != 26")
 	}
 
 	records, err := c.App.FindRecordsByFilter("crosschain_events", filter, "-block_number", limit, offset, params)
@@ -408,5 +429,114 @@ func edgesHandler(c *core.RequestEvent) error {
 	return c.JSON(http.StatusOK, map[string]any{
 		"edges": recordsToMaps(records),
 		"count": len(records),
+	})
+}
+
+// API_DESC Ecosystem-wide lifetime totals: bridge volume, FX, agent economy, graph size
+// API_TAGS Stats
+func overviewHandler(c *core.RequestEvent) error {
+	db := c.App.DB()
+
+	// ── bridge ────────────────────────────────────────────────────────────────
+	var bridge struct {
+		TotalEvents    int     `db:"total_events"`
+		InboundEvents  int     `db:"inbound_events"`
+		OutboundEvents int     `db:"outbound_events"`
+		InboundUsdc    float64 `db:"inbound_usdc"`
+		OutboundUsdc   float64 `db:"outbound_usdc"`
+		CctpEvents     int     `db:"cctp_events"`
+		GatewayEvents  int     `db:"gateway_events"`
+	}
+	_ = db.NewQuery(`
+		SELECT
+			COUNT(*) AS total_events,
+			SUM(CASE WHEN destination_domain = 26 THEN 1 ELSE 0 END) AS inbound_events,
+			SUM(CASE WHEN source_domain = 26 AND destination_domain != 26 THEN 1 ELSE 0 END) AS outbound_events,
+			COALESCE(SUM(CASE WHEN destination_domain = 26 THEN CAST(amount_usdc AS REAL) ELSE 0 END), 0) AS inbound_usdc,
+			COALESCE(SUM(CASE WHEN source_domain = 26 AND destination_domain != 26 THEN CAST(amount_usdc AS REAL) ELSE 0 END), 0) AS outbound_usdc,
+			SUM(CASE WHEN protocol = 'cctp'    THEN 1 ELSE 0 END) AS cctp_events,
+			SUM(CASE WHEN protocol = 'gateway' THEN 1 ELSE 0 END) AS gateway_events
+		FROM crosschain_events
+	`).One(&bridge)
+
+	// ── fx ────────────────────────────────────────────────────────────────────
+	var fx struct {
+		TotalTrades   int `db:"total_trades"`
+		SettledTrades int `db:"settled_trades"`
+		ActiveTrades  int `db:"active_trades"`
+	}
+	_ = db.NewQuery(`
+		SELECT
+			COUNT(*) AS total_trades,
+			SUM(CASE WHEN status = 'settled'   THEN 1 ELSE 0 END) AS settled_trades,
+			SUM(CASE WHEN status NOT IN ('settled','cancelled') THEN 1 ELSE 0 END) AS active_trades
+		FROM fx_swaps
+	`).One(&fx)
+
+	// ── agents ────────────────────────────────────────────────────────────────
+	var agents struct {
+		TotalAgents int `db:"total_agents"`
+		TotalTxs    int `db:"total_txs"`
+	}
+	_ = db.NewQuery(`
+		SELECT COUNT(*) AS total_agents, COALESCE(SUM(tx_count), 0) AS total_txs
+		FROM agents
+	`).One(&agents)
+
+	// ── jobs ─────────────────────────────────────────────────────────────────
+	var jobs struct {
+		TotalJobs    int     `db:"total_jobs"`
+		SettledJobs  int     `db:"settled_jobs"`
+		DisputedJobs int     `db:"disputed_jobs"`
+		TotalUsdc    float64 `db:"total_usdc"`
+	}
+	_ = db.NewQuery(`
+		SELECT
+			COUNT(*) AS total_jobs,
+			SUM(CASE WHEN status = 'settled'  THEN 1 ELSE 0 END) AS settled_jobs,
+			SUM(CASE WHEN status = 'disputed' THEN 1 ELSE 0 END) AS disputed_jobs,
+			COALESCE(SUM(CASE WHEN status = 'settled' THEN CAST(payment_usdc AS REAL) ELSE 0 END), 0) AS total_usdc
+		FROM agent_jobs
+	`).One(&jobs)
+
+	// ── graph ─────────────────────────────────────────────────────────────────
+	var graph struct {
+		TotalEdges int `db:"total_edges"`
+		TotalTxs   int `db:"total_txs"`
+	}
+	_ = db.NewQuery(`
+		SELECT COUNT(*) AS total_edges, COALESCE(SUM(tx_count), 0) AS total_txs
+		FROM wallet_edges
+	`).One(&graph)
+
+	return c.JSON(http.StatusOK, map[string]any{
+		"bridge": map[string]any{
+			"total_events":    bridge.TotalEvents,
+			"inbound_events":  bridge.InboundEvents,
+			"outbound_events": bridge.OutboundEvents,
+			"inbound_usdc":    bridge.InboundUsdc,
+			"outbound_usdc":   bridge.OutboundUsdc,
+			"cctp_events":     bridge.CctpEvents,
+			"gateway_events":  bridge.GatewayEvents,
+		},
+		"fx": map[string]any{
+			"total_trades":   fx.TotalTrades,
+			"settled_trades": fx.SettledTrades,
+			"active_trades":  fx.ActiveTrades,
+		},
+		"agents": map[string]any{
+			"total_agents": agents.TotalAgents,
+			"total_txs":    agents.TotalTxs,
+		},
+		"jobs": map[string]any{
+			"total_jobs":    jobs.TotalJobs,
+			"settled_jobs":  jobs.SettledJobs,
+			"disputed_jobs": jobs.DisputedJobs,
+			"total_usdc":    jobs.TotalUsdc,
+		},
+		"graph": map[string]any{
+			"total_edges": graph.TotalEdges,
+			"total_txs":   graph.TotalTxs,
+		},
 	})
 }
