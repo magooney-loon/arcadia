@@ -3,6 +3,8 @@ module arcadia
 go 1.25.9
 
 require (
+	github.com/enviodev/hypersync-client-go v0.0.0-20260326113944-61b74fa6a262
+	github.com/ethereum/go-ethereum v1.14.5
 	github.com/magooney-loon/pb-ext v0.0.0-20260303222458-269caa6df83c
 	github.com/pocketbase/pocketbase v0.38.0
 )
@@ -26,9 +28,7 @@ require (
 	github.com/disintegration/imaging v1.6.2 // indirect
 	github.com/domodwyer/mailyak/v3 v3.6.2 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
-	github.com/enviodev/hypersync-client-go v0.0.0-20260326113944-61b74fa6a262 // indirect
 	github.com/ethereum/c-kzg-4844 v1.0.0 // indirect
-	github.com/ethereum/go-ethereum v1.14.5 // indirect
 	github.com/fatih/color v1.19.0 // indirect
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.13 // indirect
