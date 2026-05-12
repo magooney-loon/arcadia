@@ -10,10 +10,10 @@
 	let { blocks }: Props = $props();
 
 	const MAX = 100;
-	const HELIX_RADIUS = 0.65;
-	const HELIX_TURNS = 2;
-	const Z_FRONT = 4;
-	const Z_SPAN = 8;
+	const HELIX_RADIUS = 2.5;
+	const HELIX_TURNS = 3;
+	const X_LEFT = -10;
+	const X_SPAN = 90;
 
 	const dummy = new THREE.Object3D();
 	const col = new THREE.Color();
@@ -30,17 +30,17 @@
 		return col.setHSL(hue, 0.85, lightness);
 	}
 
-	/** Scale: base 0.08, grows with tx_count up to 0.26 */
+	/** Scale: base 0.18, grows with tx_count up to 0.50 */
 	function nodeScale(txCount: number): number {
-		return 0.08 + Math.min((txCount ?? 0) / 60, 1) * 0.18;
+		return 0.18 + Math.min((txCount ?? 0) / 60, 1) * 0.32;
 	}
 
-	/** Helix position for block at index i out of count total */
+	/** Helix position — runs left to right along X axis, spirals in YZ plane */
 	function helixPos(i: number, count: number): [number, number, number] {
 		const frac = count > 1 ? i / (count - 1) : 0;
-		const z = Z_FRONT - frac * Z_SPAN;
+		const x = X_LEFT + frac * X_SPAN;
 		const angle = frac * HELIX_TURNS * Math.PI * 2;
-		return [HELIX_RADIUS * Math.cos(angle), HELIX_RADIUS * Math.sin(angle), z];
+		return [x, HELIX_RADIUS * Math.sin(angle), HELIX_RADIUS * Math.cos(angle)];
 	}
 
 	$effect(() => {

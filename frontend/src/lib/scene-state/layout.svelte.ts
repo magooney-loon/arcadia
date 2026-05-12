@@ -23,11 +23,11 @@ export function getOrderedEdges() {
 	return _orderedEdges;
 }
 
-const SPHERE_RADIUS = 1.8;
-const RADIAL_STRENGTH = 0.2;
-const LINK_DISTANCE = 0.5;
-const AGENT_CHARGE = -12;
-const NODE_CHARGE = -4;
+const SPHERE_RADIUS = 3.5;
+const RADIAL_STRENGTH = 0.18;
+const LINK_DISTANCE = 0.8;
+const AGENT_CHARGE = -15;
+const NODE_CHARGE = -5;
 const TICK_COUNT = 300;
 
 /** d3-force node with our custom properties */

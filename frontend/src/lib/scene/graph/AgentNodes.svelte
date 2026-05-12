@@ -15,9 +15,9 @@
 		Object.entries(getNodePositions()).filter(([, pos]) => pos.isAgent)
 	);
 
-	/** Scale: base 0.07, grows with txCount up to 0.20 */
+	/** Scale: base 0.10, grows with txCount up to 0.28 */
 	function agentScale(txCount: number): number {
-		return 0.07 + Math.min(txCount / 80, 1) * 0.13;
+		return 0.1 + Math.min(txCount / 80, 1) * 0.18;
 	}
 
 	$effect(() => {

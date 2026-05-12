@@ -3,14 +3,13 @@
 	import { OrbitControls } from '@threlte/extras';
 </script>
 
-<T.PerspectiveCamera makeDefault fov={60} position={[0, 1.5, 10]}>
+<T.PerspectiveCamera makeDefault fov={60} position={[0, 6, -90]}>
 	<OrbitControls
-		autoRotate
-		autoRotateSpeed={0.4}
 		enableDamping
 		dampingFactor={0.05}
-		enablePan={false}
-		minDistance={5}
-		maxDistance={20}
+		enablePan
+		panSpeed={0.8}
+		minDistance={3}
+		maxDistance={120}
 	/>
 </T.PerspectiveCamera>
