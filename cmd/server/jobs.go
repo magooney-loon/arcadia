@@ -36,7 +36,7 @@ func indexerHealthJob(app core.App) error {
 			el.Info("Checked at: %s", time.Now().Format(time.RFC3339))
 
 			collections := []string{
-				"blocks", "transactions", "transfers", "traces",
+				"indexer_events", "blocks", "transactions", "transfers", "traces",
 				"crosschain_events", "fx_swaps", "agents", "agent_jobs",
 				"block_stats", "wallet_edges",
 			}
