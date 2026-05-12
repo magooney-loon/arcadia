@@ -5,6 +5,7 @@ go 1.25.9
 require (
 	github.com/enviodev/hypersync-client-go v0.0.0-20260326113944-61b74fa6a262
 	github.com/ethereum/go-ethereum v1.14.5
+	github.com/joho/godotenv v1.5.1
 	github.com/magooney-loon/pb-ext v0.0.0-20260303222458-269caa6df83c
 	github.com/pocketbase/pocketbase v0.38.0
 )

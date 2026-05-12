@@ -4,11 +4,16 @@ import (
 	"flag"
 	"log"
 
+	"github.com/joho/godotenv"
 	app "github.com/magooney-loon/pb-ext/core"
 	"github.com/pocketbase/pocketbase/core"
 )
 
 func main() {
+	// Load .env if present — silently ignored if the file doesn't exist
+	// so production envs that inject vars directly are unaffected.
+	_ = godotenv.Load()
+
 	devMode := flag.Bool("dev", false, "Run in developer mode")
 	generateSpecsDir := flag.String("generate-specs-dir", "", "Generate OpenAPI specs into the provided directory and exit")
 	generateSpecVersion := flag.String("generate-spec-version", "", "Optional API version to generate (requires --generate-specs-dir)")

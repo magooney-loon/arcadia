@@ -66,6 +66,7 @@ func runIndexer(app core.App) error {
 
 	query := &types.Query{
 		FromBlock:        new(big.Int).SetUint64(fromBlock),
+		ToBlock:          new(big.Int).SetUint64(^uint64(0)), // stream to chain tip indefinitely
 		IncludeAllBlocks: true,
 		FieldSelection: types.FieldSelection{
 			Block: []string{
