@@ -35,12 +35,10 @@ func StartIndexer(app core.App) {
 				msg := err.Error()
 				if strings.Contains(msg, "429") {
 					log.Printf("[indexer] rate-limited (429) — waiting 30s before retry (attempt #%d)", attempt)
-					app.Logger().Warn("Indexer rate-limited", "attempt", attempt)
 					recordIndexerEvent(app, "warn", "rate_limited", "HyperSync returned 429; backing off before retry", indexerEventFields{"attempt": attempt, "error": err})
 					time.Sleep(30 * time.Second)
 				} else {
 					log.Printf("[indexer] crashed: %v — restarting in 5s (attempt #%d)", err, attempt)
-					app.Logger().Error("Indexer crashed", "error", err, "attempt", attempt)
 					recordIndexerEvent(app, "error", "run_error", "indexer run failed; restarting", indexerEventFields{"attempt": attempt, "error": err})
 					time.Sleep(5 * time.Second)
 				}
@@ -54,7 +52,6 @@ type indexerEventFields map[string]any
 func recordIndexerEvent(app core.App, level, event, message string, fields indexerEventFields) {
 	c, err := app.FindCollectionByNameOrId("indexer_events")
 	if err != nil {
-		app.Logger().Debug("Indexer event collection unavailable", "event", event, "error", err)
 		return
 	}
 
@@ -76,7 +73,7 @@ func recordIndexerEvent(app core.App, level, event, message string, fields index
 		}
 	}
 	if err := app.Save(r); err != nil {
-		app.Logger().Warn("Failed to persist indexer event", "event", event, "error", err)
+		log.Printf("[indexer] failed to persist indexer event %q: %v", event, err)
 	}
 }
 
@@ -116,7 +113,6 @@ func logIndexerHeartbeat(ctx context.Context, app core.App, client interface {
 		} else {
 			log.Printf("[indexer] heartbeat | idle %s | block %d | completed_batches=%d | tip=? err=%v", idleFor, currentBlock, batchCount, tipErr)
 		}
-		app.Logger().Warn("Indexer heartbeat tip check failed", "block", currentBlock, "batches", batchCount, "idle_for", idleFor.String(), "processing_batch", processingBatch, "processing_for", processingFor.String(), "error", tipErr)
 		if persist {
 			recordIndexerEvent(app, "warn", "heartbeat", "indexer heartbeat tip check failed", indexerEventFields{"attempt": attempt, "batch": batchCount, "block": currentBlock, "error": tipErr})
 		}
@@ -125,10 +121,8 @@ func logIndexerHeartbeat(ctx context.Context, app core.App, client interface {
 
 	if processingBatch > 0 {
 		log.Printf("[indexer] heartbeat | processing batch #%d for %s | block %d | tip %d | lag %d | completed_batches=%d", processingBatch, processingFor, currentBlock, tip, lag, batchCount)
-		app.Logger().Info("Indexer heartbeat", "block", currentBlock, "tip", tip, "lag", lag, "batches", batchCount, "processing_batch", processingBatch, "processing_for", processingFor.String())
 	} else {
 		log.Printf("[indexer] heartbeat | idle %s | block %d | tip %d | lag %d | batches=%d", idleFor, currentBlock, tip, lag, batchCount)
-		app.Logger().Info("Indexer heartbeat", "block", currentBlock, "tip", tip, "lag", lag, "batches", batchCount, "idle_for", idleFor.String())
 	}
 	if persist {
 		recordIndexerEvent(app, "info", "heartbeat", "indexer heartbeat", indexerEventFields{"attempt": attempt, "batch": batchCount, "block": currentBlock, "tip": tip, "lag": lag})
@@ -220,6 +214,7 @@ func runIndexer(app core.App, attempt int) error {
 	lastBatchAtUnixNano.Store(time.Now().UnixNano())
 	var processingBatch atomic.Uint64
 	var processingStartedAtUnixNano atomic.Int64
+	var lastPersistedHeartbeatUnixNano atomic.Int64
 
 	heartbeatStop := make(chan struct{})
 	defer close(heartbeatStop)
@@ -235,9 +230,17 @@ func runIndexer(app core.App, attempt int) error {
 					processingStartedAt = time.Unix(0, started)
 				}
 				activeBatch := processingBatch.Load()
-				// Persist idle heartbeats. During a batch, SQLite may be inside a
-				// long write transaction, so keep in-flight heartbeats to stdout.
-				logIndexerHeartbeat(ctx, app, client, attempt, completedBatches.Load(), currentBlock.Load(), lastBatchAt, activeBatch, processingStartedAt, activeBatch == 0)
+				persistHeartbeat := false
+				if activeBatch == 0 {
+					lastPersisted := time.Unix(0, lastPersistedHeartbeatUnixNano.Load())
+					if lastPersisted.IsZero() || time.Since(lastPersisted) >= time.Minute {
+						persistHeartbeat = true
+						lastPersistedHeartbeatUnixNano.Store(time.Now().UnixNano())
+					}
+				}
+				// During a batch, SQLite may be inside a long write transaction,
+				// so keep in-flight heartbeats to stdout.
+				logIndexerHeartbeat(ctx, app, client, attempt, completedBatches.Load(), currentBlock.Load(), lastBatchAt, activeBatch, processingStartedAt, persistHeartbeat)
 			case <-heartbeatStop:
 				return
 			}
@@ -295,7 +298,6 @@ func runIndexer(app core.App, attempt int) error {
 			processingBatch.Store(0)
 			processingStartedAtUnixNano.Store(0)
 			log.Printf("[indexer] batch processing error: %v", err)
-			app.Logger().Error("Batch processing error", "error", err)
 			recordIndexerEvent(app, "error", "batch_error", "batch failed; cursor was not advanced", indexerEventFields{
 				"attempt":      attempt,
 				"batch":        nextBatch,
@@ -337,16 +339,6 @@ func runIndexer(app core.App, attempt int) error {
 			batchCount, currentBlock.Load(), start, toBlock,
 			len(res.Data.Blocks), len(res.Data.Transactions), len(res.Data.Logs),
 			elapsed,
-		)
-		app.Logger().Info("Indexer progress",
-			"batch", batchCount,
-			"block", currentBlock.Load(),
-			"from_block", start,
-			"to_block", toBlock,
-			"duration_ms", elapsed,
-			"blocks", len(res.Data.Blocks),
-			"transactions", len(res.Data.Transactions),
-			"logs", len(res.Data.Logs),
 		)
 		recordIndexerEvent(app, "info", "batch_done", "finished processing indexer batch", indexerEventFields{
 			"attempt":      attempt,
@@ -565,7 +557,6 @@ func processBatch(app core.App, res *types.QueryResponse) error {
 			stats.Set("utilization_pct", utilPct)
 
 			if err := txApp.Save(stats); err != nil {
-				txApp.Logger().Error("Failed to save block_stats", "block", bn, "error", err)
 				return fmt.Errorf("save block_stats %d: %w", bn, err)
 			}
 		}
@@ -617,16 +608,9 @@ func saveBlock(app core.App, blk *types.Block) error {
 	}
 
 	if err := app.Save(r); err != nil {
-		app.Logger().Error("Failed to save block", "number", blk.Number.Uint64(), "error", err)
 		return fmt.Errorf("save block %d: %w", blk.Number.Uint64(), err)
 	}
 
-	app.Logger().Debug("Block", "number", blk.Number.Uint64(), "hash", func() string {
-		if blk.Hash != nil {
-			return blk.Hash.Hex()[:10] + "…"
-		}
-		return ""
-	}())
 	return nil
 }
 
@@ -687,7 +671,6 @@ func saveTransaction(app core.App, tx *types.Transaction) (*big.Int, error) {
 	r.Set("is_contract_deploy", isDeployment)
 
 	if err := app.Save(r); err != nil {
-		app.Logger().Error("Failed to save transaction", "hash", tx.Hash.Hex(), "error", err)
 		return nil, fmt.Errorf("save transaction %s: %w", tx.Hash.Hex(), err)
 	}
 	return feeWei, nil
@@ -768,17 +751,8 @@ func saveTransfer(app core.App, log *types.Log) (*big.Int, error) {
 	r.Set("amount_human", stablecoinHuman(amountRaw))
 
 	if err := app.Save(r); err != nil {
-		app.Logger().Error("Failed to save transfer", "tx", txHash, "error", err)
 		return nil, fmt.Errorf("save transfer %s/%d: %w", txHash, logIdx, err)
 	}
-
-	app.Logger().Debug("Transfer",
-		"token", symbol,
-		"amount", stablecoinHuman(amountRaw),
-		"from", from.Hex()[:10]+"…",
-		"to", to.Hex()[:10]+"…",
-		"tx", txHash[:10]+"…",
-	)
 
 	// update wallet graph edge
 	if err := upsertWalletEdge(app, from.Hex(), to.Hex(), amountRaw, log.BlockNumber); err != nil {
@@ -816,20 +790,9 @@ func saveCCTPEvent(app core.App, log *types.Log, protocol, eventType string) err
 	// Full ABI decode can be added once the exact ABI is confirmed.
 
 	if err := app.Save(r); err != nil {
-		app.Logger().Error("Failed to save cctp event", "error", err)
 		return fmt.Errorf("save cctp event %s/%d: %w", log.TransactionHash.Hex(), *log.LogIndex, err)
 	}
 
-	app.Logger().Debug("CCTP event",
-		"type", eventType,
-		"tx", log.TransactionHash.Hex()[:10]+"…",
-		"block", func() uint64 {
-			if log.BlockNumber != nil {
-				return log.BlockNumber.Uint64()
-			}
-			return 0
-		}(),
-	)
 	return nil
 }
 
@@ -857,11 +820,9 @@ func saveGatewayEvent(app core.App, log *types.Log) error {
 	r.Set("event_type", "deposit") // refine once Gateway ABI is confirmed
 
 	if err := app.Save(r); err != nil {
-		app.Logger().Error("Failed to save gateway event", "error", err)
 		return fmt.Errorf("save gateway event %s/%d: %w", log.TransactionHash.Hex(), *log.LogIndex, err)
 	}
 
-	app.Logger().Debug("Gateway event", "tx", log.TransactionHash.Hex()[:10]+"…")
 	return nil
 }
 
@@ -888,11 +849,9 @@ func saveFxEvent(app core.App, log *types.Log) error {
 	r.Set("status", "created") // refine once FxEscrow ABI is confirmed
 
 	if err := app.Save(r); err != nil {
-		app.Logger().Error("Failed to save fx event", "error", err)
 		return fmt.Errorf("save fx event %s/%d: %w", log.TransactionHash.Hex(), *log.LogIndex, err)
 	}
 
-	app.Logger().Debug("FX swap event", "tx", log.TransactionHash.Hex()[:10]+"…")
 	return nil
 }
 
@@ -930,7 +889,6 @@ func upsertWalletEdge(app core.App, from, to string, amount *big.Int, blockNumbe
 	}
 
 	if err := app.Save(r); err != nil {
-		app.Logger().Error("Failed to upsert wallet edge", "from", from, "to", to, "error", err)
 		return fmt.Errorf("save wallet edge %s -> %s: %w", from, to, err)
 	}
 	return nil
@@ -955,13 +913,13 @@ func resolveStartBlock(ctx context.Context, app core.App, client interface {
 }) uint64 {
 	last := getLastIndexedBlock(app)
 	if last > 0 {
-		app.Logger().Info("Resuming indexer from saved cursor", "from_block", last)
+		log.Printf("[indexer] resuming from saved cursor %d", last)
 		return last
 	}
 
 	height, err := client.GetHeight(ctx)
 	if err != nil || height == nil {
-		app.Logger().Warn("Could not fetch chain height, starting from block 0", "error", err)
+		log.Printf("[indexer] could not fetch chain height, starting from block 0: %v", err)
 		return 0
 	}
 
@@ -972,8 +930,7 @@ func resolveStartBlock(ctx context.Context, app core.App, client interface {
 		start = tip - lookback
 	}
 
-	app.Logger().Info("Fresh start — beginning 1 hour behind chain tip",
-		"tip", tip, "from_block", start, "lookback_blocks", lookback)
+	log.Printf("[indexer] fresh start | tip=%d from_block=%d lookback_blocks=%d", tip, start, lookback)
 	return start
 }
 
@@ -1002,7 +959,6 @@ func setLastIndexedBlock(app core.App, block uint64) error {
 	}
 	r.Set("value", strconv.FormatUint(block, 10))
 	if err := app.Save(r); err != nil {
-		app.Logger().Error("Failed to persist lastBlock cursor", "error", err)
 		return fmt.Errorf("save lastBlock cursor %d: %w", block, err)
 	}
 	return nil
