@@ -33,6 +33,10 @@
 		"vite": "^8.0.7"
 	},
 	"dependencies": {
-		"pocketbase": "^0.26.9"
+		"@threlte/core": "^8.5.14",
+		"@threlte/extras": "^9.17.1",
+		"@types/three": "^0.184.1",
+		"pocketbase": "^0.26.9",
+		"three": "^0.184.0"
 	}
 }
