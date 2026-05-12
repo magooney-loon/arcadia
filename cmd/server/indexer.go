@@ -62,10 +62,12 @@ func runIndexer(app core.App) error {
 				Endpoint:       ArcHyperSyncURL,
 				RpcEndpoint:    rpc,
 				ApiToken:       apiToken,
-				MaxNumRetries:  10,
-				RetryBaseMs:    2 * time.Second,
-				RetryBackoffMs: 2 * time.Second,
-				RetryCeilingMs: 30 * time.Second,
+				// Fail fast on 429 so our outer backoff+rotation kicks in quickly.
+				// Library retries: 3 attempts × ≤3s ceiling = ≤9s before error surfaces.
+				MaxNumRetries:  3,
+				RetryBaseMs:    500 * time.Millisecond,
+				RetryBackoffMs: 500 * time.Millisecond,
+				RetryCeilingMs: 3 * time.Second,
 			},
 		},
 	})
@@ -151,13 +153,14 @@ func runIndexer(app core.App) error {
 			if subErr != nil {
 				errMsg := subErr.Error()
 				if strings.Contains(errMsg, "429") {
-					log.Printf("[indexer] Subscribe() 429 rate-limited at block %d", currentBlock.Load())
+					log.Printf("[indexer] 429 rate-limited after %d batches at block %d — handing off to backoff", batchCount, currentBlock.Load())
 				} else {
-					log.Printf("[indexer] Subscribe() error at block %d: %v", currentBlock.Load(), subErr)
+					log.Printf("[indexer] Subscribe() error after %d batches at block %d: %v", batchCount, currentBlock.Load(), subErr)
 				}
 				return subErr
 			}
-			log.Printf("[indexer] Subscribe() completed at block %d", currentBlock.Load())
+			// Subscribe() returned nil — stream exhausted its planned range. Restart from cursor.
+			log.Printf("[indexer] Subscribe() finished cleanly after %d batches at block %d — reconnecting", batchCount, currentBlock.Load())
 			return nil
 
 		case res, ok := <-stream.Channel():
@@ -289,7 +292,39 @@ func processBatch(app core.App, res *types.QueryResponse) error {
 			}
 		}
 
-		// 4. Block stats — one upsert per block in this batch
+		// 4. Block stats + tx_count back-fill onto blocks.
+		//    Sort blocks ascending so we can compute consecutive block_time_ms.
+		type blkTs struct {
+			num uint64
+			ts  int64
+		}
+		var sortedBlocks []blkTs
+		for _, blk := range res.Data.Blocks {
+			if blk.Number != nil && blk.Timestamp != nil {
+				sortedBlocks = append(sortedBlocks, blkTs{blk.Number.Uint64(), blk.Timestamp.Unix()})
+			}
+		}
+		// simple insertion sort (batches are small)
+		for i := 1; i < len(sortedBlocks); i++ {
+			for j := i; j > 0 && sortedBlocks[j].num < sortedBlocks[j-1].num; j-- {
+				sortedBlocks[j], sortedBlocks[j-1] = sortedBlocks[j-1], sortedBlocks[j]
+			}
+		}
+
+		// block_time_ms indexed by block number — look up prev from DB for the first block
+		blockTimeMs := make(map[uint64]int64)
+		for i, bt := range sortedBlocks {
+			if i == 0 {
+				prev, _ := txApp.FindRecordsByFilter("blocks", "number = {:n}", "", 1, 0, map[string]any{"n": bt.num - 1})
+				if len(prev) > 0 {
+					prevTs := prev[0].GetInt("timestamp")
+					blockTimeMs[bt.num] = (bt.ts - int64(prevTs)) * 1000
+				}
+			} else {
+				blockTimeMs[bt.num] = (bt.ts - sortedBlocks[i-1].ts) * 1000
+			}
+		}
+
 		for _, blk := range res.Data.Blocks {
 			if blk.Number == nil || blk.Timestamp == nil {
 				continue
@@ -297,7 +332,16 @@ func processBatch(app core.App, res *types.QueryResponse) error {
 			bn := blk.Number.Uint64()
 			acc := getAcc(bn)
 
-			// skip if already persisted (indexer restart reprocessing same range)
+			// back-fill tx_count onto the blocks record
+			if existing, _ := txApp.FindRecordsByFilter("blocks", "number = {:n}", "", 1, 0, map[string]any{"n": bn}); len(existing) > 0 {
+				existing[0].Set("tx_count", acc.txCount)
+				if bms, ok := blockTimeMs[bn]; ok && bms > 0 {
+					existing[0].Set("block_time_ms", bms)
+				}
+				_ = txApp.Save(existing[0])
+			}
+
+			// skip block_stats if already persisted (indexer restart)
 			if existing, _ := txApp.FindRecordsByFilter("block_stats", "block_number = {:n}", "", 1, 0, map[string]any{"n": bn}); len(existing) > 0 {
 				continue
 			}
@@ -317,10 +361,18 @@ func processBatch(app core.App, res *types.QueryResponse) error {
 			}
 			utilPct := float64(gasUsed) / float64(gasLimit) * 100
 
+			bms := blockTimeMs[bn]
+			var tps float64
+			if bms > 0 {
+				tps = float64(acc.txCount) / (float64(bms) / 1000.0)
+			}
+
 			stats := core.NewRecord(mustCollection(txApp, "block_stats"))
 			stats.Set("block_number", bn)
 			stats.Set("timestamp", blk.Timestamp.Unix())
 			stats.Set("tx_count", acc.txCount)
+			stats.Set("block_time_ms", bms)
+			stats.Set("tps", tps)
 			stats.Set("avg_fee_usdc", weiToUSDC(avgFee))
 			stats.Set("total_fee_usdc", weiToUSDC(acc.totalFee))
 			stats.Set("total_usdc_transferred", stablecoinHuman(acc.totalUSDC))

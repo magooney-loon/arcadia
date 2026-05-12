@@ -48,6 +48,26 @@ func statsHandler(c *core.RequestEvent) error {
 	}
 	latest := rows[0].PublicExport()
 
+	// rolling 10-block avg for tps + block_time_ms (stored values may be 0 for old rows)
+	recent, _ := c.App.FindRecordsByFilter("block_stats", "", "-block_number", 10, 0)
+	if len(recent) >= 2 {
+		var totalTxs, totalBms int64
+		var count int
+		for _, r := range recent {
+			bms := r.GetInt("block_time_ms")
+			if bms > 0 {
+				totalTxs += int64(r.GetInt("tx_count"))
+				totalBms += int64(bms)
+				count++
+			}
+		}
+		if count > 0 && totalBms > 0 {
+			avgBms := totalBms / int64(count)
+			latest["block_time_ms"] = avgBms
+			latest["tps"] = float64(totalTxs) / float64(count) / (float64(avgBms) / 1000.0)
+		}
+	}
+
 	// indexer cursor
 	cursor, _ := c.App.FindRecordsByFilter("indexer_meta", "key = 'lastBlock'", "", 1, 0)
 	if len(cursor) > 0 {
