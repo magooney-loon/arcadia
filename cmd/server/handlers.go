@@ -110,6 +110,13 @@ func transactionsHandler(c *core.RequestEvent) error {
 		filter += "from_addr = {:f}"
 		params["f"] = from
 	}
+	if to := qp(c, "to", ""); to != "" {
+		if filter != "" {
+			filter += " && "
+		}
+		filter += "to_addr = {:t}"
+		params["t"] = to
+	}
 
 	records, err := c.App.FindRecordsByFilter("transactions", filter, "-block_number", limit, offset, params)
 	if err != nil {
@@ -176,15 +183,25 @@ func walletHandler(c *core.RequestEvent) error {
 	outEdges, _ := c.App.FindRecordsByFilter("wallet_edges", "from_wallet = {:a}", "-tx_count", 20, 0, map[string]any{"a": address})
 	inEdges, _ := c.App.FindRecordsByFilter("wallet_edges", "to_wallet = {:a}", "-tx_count", 20, 0, map[string]any{"a": address})
 
+	// transactions
+	txsSent, _ := c.App.FindRecordsByFilter("transactions", "from_addr = {:a}", "-block_number", limit, offset, map[string]any{"a": address})
+	txsReceived, _ := c.App.FindRecordsByFilter("transactions", "to_addr = {:a}", "-block_number", limit, offset, map[string]any{"a": address})
+
 	// agent status
 	agentRecords, _ := c.App.FindRecordsByFilter("agents", "agent_address = {:a}", "", 1, 0, map[string]any{"a": address})
-	isAgent := len(agentRecords) > 0
+	var agentData any
+	if len(agentRecords) > 0 {
+		agentData = agentRecords[0].PublicExport()
+	}
 
 	return c.JSON(http.StatusOK, map[string]any{
-		"address":       address,
-		"is_agent":      isAgent,
-		"sent":          recordsToMaps(sent),
-		"received":      recordsToMaps(received),
+		"address":        address,
+		"is_agent":       agentData != nil,
+		"agent":          agentData,
+		"txs_sent":       recordsToMaps(txsSent),
+		"txs_received":   recordsToMaps(txsReceived),
+		"sent":           recordsToMaps(sent),
+		"received":       recordsToMaps(received),
 		"outgoing_edges": recordsToMaps(outEdges),
 		"incoming_edges": recordsToMaps(inEdges),
 	})
@@ -201,6 +218,13 @@ func crosschainHandler(c *core.RequestEvent) error {
 		filter = "protocol = {:p}"
 		params["p"] = proto
 	}
+	if et := qp(c, "event_type", ""); et != "" {
+		if filter != "" {
+			filter += " && "
+		}
+		filter += "event_type = {:et}"
+		params["et"] = et
+	}
 
 	records, err := c.App.FindRecordsByFilter("crosschain_events", filter, "-block_number", limit, offset, params)
 	if err != nil {
@@ -212,11 +236,19 @@ func crosschainHandler(c *core.RequestEvent) error {
 	})
 }
 
-// API_DESC Recent StableFX USDC↔EURC swap events
+// API_DESC Recent StableFX USDC↔EURC swap events — filterable by status
 // API_TAGS FX
 func fxHandler(c *core.RequestEvent) error {
 	limit, offset := limitOffset(c)
-	records, err := c.App.FindRecordsByFilter("fx_swaps", "", "-block_number", limit, offset)
+
+	filter := ""
+	params := map[string]any{}
+	if status := qp(c, "status", ""); status != "" {
+		filter = "status = {:s}"
+		params["s"] = status
+	}
+
+	records, err := c.App.FindRecordsByFilter("fx_swaps", filter, "-block_number", limit, offset, params)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error()})
 	}
@@ -274,6 +306,20 @@ func agentJobsHandler(c *core.RequestEvent) error {
 		filter = "status = {:s}"
 		params["s"] = status
 	}
+	if employer := qp(c, "employer", ""); employer != "" {
+		if filter != "" {
+			filter += " && "
+		}
+		filter += "employer_address = {:e}"
+		params["e"] = employer
+	}
+	if worker := qp(c, "worker", ""); worker != "" {
+		if filter != "" {
+			filter += " && "
+		}
+		filter += "worker_address = {:w}"
+		params["w"] = worker
+	}
 
 	records, err := c.App.FindRecordsByFilter("agent_jobs", filter, "-created_at_block", limit, offset, params)
 	if err != nil {
@@ -282,6 +328,42 @@ func agentJobsHandler(c *core.RequestEvent) error {
 	return c.JSON(http.StatusOK, map[string]any{
 		"jobs":  recordsToMaps(records),
 		"count": len(records),
+	})
+}
+
+// API_DESC Internal contract-to-contract calls — filterable by tx hash or address
+// API_TAGS Chain
+func tracesHandler(c *core.RequestEvent) error {
+	limit, offset := limitOffset(c)
+
+	filter := ""
+	params := map[string]any{}
+	if tx := qp(c, "tx", ""); tx != "" {
+		filter = "tx_hash = {:tx}"
+		params["tx"] = tx
+	}
+	if from := qp(c, "from", ""); from != "" {
+		if filter != "" {
+			filter += " && "
+		}
+		filter += "from_addr = {:f}"
+		params["f"] = from
+	}
+	if to := qp(c, "to", ""); to != "" {
+		if filter != "" {
+			filter += " && "
+		}
+		filter += "to_addr = {:t}"
+		params["t"] = to
+	}
+
+	records, err := c.App.FindRecordsByFilter("traces", filter, "-block_number", limit, offset, params)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error()})
+	}
+	return c.JSON(http.StatusOK, map[string]any{
+		"traces": recordsToMaps(records),
+		"count":  len(records),
 	})
 }
 

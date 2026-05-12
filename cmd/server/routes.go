@@ -55,6 +55,7 @@ func registerV1Routes(router *api.VersionedAPIRouter) {
 	// chain data
 	v1.GET("/blocks", blocksHandler)
 	v1.GET("/transactions", transactionsHandler)
+	v1.GET("/traces", tracesHandler)
 
 	// token flows  — ?token=USDC|EURC|USYC, ?from=addr, ?to=addr
 	v1.GET("/transfers", transfersHandler)
