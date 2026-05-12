@@ -2,7 +2,9 @@
 
 ## Vision
 
-A fullscreen 3D visualizer for the Arc L1 chain. The centrepiece is a wireframe globe representing Arc — capital flows in from outside (cross-chain), circulates inside (transfers, agent jobs, FX swaps), and the chain spine runs through the Z axis as time. Everything is live via PocketBase websockets. No dashboards, no tables — just the chain breathing.
+A fullscreen 3D visualizer for the Arc L1 chain. The centrepiece is a **living neural graph** — wallet nodes positioned by force-directed layout form a brain-like 3D structure, connected by transfer edges that trace the network's synaptic pathways. There are no static decorative meshes. Every sphere, line, and particle represents real on-chain data: blocks, transfers, agents, jobs, FX swaps. The only non-data element is the ARCADIA logotype as a brand anchor. Capital flows in from outside (cross-chain), circulates inside (transfers, agent jobs, FX swaps), and the chain spine runs through the Z axis as time. Everything is live via PocketBase websockets. No dashboards, no tables — just the chain breathing.
+
+**Design principle:** If a mesh doesn't represent data, it doesn't belong in the scene.
 
 ---
 
@@ -47,10 +49,10 @@ Derived from the wireframe SVG (`docs/Arcadia_Wireframe.html`).
 | Element | Value |
 |---|---|
 | Background | `#0a0a0f` |
-| Sphere grid / skeleton | `#9aa0b4` at 25–40% opacity |
-| ARCADIA logotype | `#e0e0ee`, extruded 3D, `metalness=0.55` |
-| Wallet nodes | `#ffffff` |
-| Agent nodes | `#7ee5a8` (green) |
+| ARCADIA logotype | `#e0e0ee`, extruded 3D, `metalness=0.55` (only non-data mesh — brand anchor) |
+| Wallet nodes | `#ffffff` — form the neural graph structure via force layout |
+| Transfer edges | `#9aa0b4` at 25–40% opacity — the "wireframe" IS the transfer graph |
+| Agent nodes | `#7ee5a8` (green) — glow + pulse, sized by `usdc_spent_fees` |
 | Cross-chain inflows | `#6be3ff` (cyan) |
 | USDC flow | `#2775ca` (Circle blue) |
 | EURC flow | `#e8b84b` (EUR gold) |
@@ -92,22 +94,20 @@ All 12 REST endpoints are implemented, typed, and stored. Types match `collectio
 ├── <SceneCamera>          ✅  PerspectiveCamera at (0,1.5,10), OrbitControls autoRotate
 ├── <SceneLighting>        ✅  Ambient + cyan point light + green point light
 │
-├── <ArcSphere>            ✅  Wireframe globe — visual anchor
-│   ├── <SphereGrid>       ✅  SphereGeometry wireframe, #9aa0b4 25% opacity
-│   ├── hex core           ✅  Flat CylinderGeometry(6 sides) wireframe #7ee5a8, subtle pulse
-│   ├── ARCADIA logotype   ✅  Text3DGeometry extruded, MeshStandardMaterial metalness=0.55
-│   └── <CrosschainArrows>     Bezier arcs entering the sphere from outside (CCTP/Gateway)
+├── <ArcLogotype>          ✅  Text3DGeometry "ARCADIA" — brand anchor only, no other static meshes
 │
 ├── <ChainSpine>           ✅  Fetches 50 blocks on mount
 │   └── <BlockNodes>       ✅  InstancedMesh, Z-axis spine, utilization heat colour
 │
-├── <WalletGraph>              Force-directed graph of wallet activity
-│   ├── <WalletNodes>          InstancedMesh — large pool, visible nodes = active wallets
-│   ├── <AgentNodes>           Subset with green glow + pulse
-│   ├── <TransferEdges>        LineSegments, width ∝ transfer amount
+├── <WalletGraph>              THE CENTRAL VISUAL — force-directed neural graph of all wallet activity
+│   ├── <WalletNodes>          InstancedMesh — all active wallets, force-laid in 3D spherical cluster
+│   ├── <AgentNodes>           Green-glowing subset, pulse speed ∝ TPS, scale ∝ usdc_spent_fees
+│   ├── <TransferEdges>        LineSegments — the "wireframe" of the brain, opacity ∝ total_usdc
 │   └── <JobArcs>              Curved lines employer↔worker (amber)
 │
-├── <TokenParticles>           Ring buffer, particles travel along edges
+├── <CrosschainArrows>         Bezier arcs entering the graph from outside (CCTP/Gateway)
+│
+├── <TokenParticles>           Ring buffer, particles travel along transfer edges
 │   ├── <USDCParticles>        Blue
 │   ├── <EURCParticles>        Gold
 │   └── <USYCParticles>        Purple
@@ -145,8 +145,9 @@ onMount
   → fetchStats() + fetchBlockStats() + fetchBlocks() + fetchAgents() + fetchEdges() (parallel)
   → stores populate
   → scene reads stores via $derived / reactive props
-  → d3-force-3d runs on wallet edges → produces x/y/z positions
-  → WalletNodes + TransferEdges placed
+  → d3-force-3d runs on wallet edges → produces x/y/z positions with spherical boundary
+  → WalletNodes + TransferEdges placed — THIS IS THE CENTRAL VISUAL (the "brain")
+  → BlockNodes placed on Z spine through the graph
 ```
 
 ### Real-time (PocketBase websockets)
@@ -199,16 +200,15 @@ src/
     │   ├── SceneCamera.svelte     ✅ PerspectiveCamera + OrbitControls autoRotate
     │   ├── SceneLighting.svelte   ✅ Ambient + point lights (cyan + green)
     │   │
-    │   ├── sphere/
-    │   │   ├── ArcSphere.svelte   ✅ Hex core + Text3DGeometry logotype
-    │   │   ├── SphereGrid.svelte  ✅ Wireframe globe
+    │   ├── core/
+    │   │   ├── ArcLogotype.svelte  ✅ Text3DGeometry "ARCADIA" — brand anchor only
     │   │   └── CrosschainArrows.svelte
     │   │
     │   ├── chain/
     │   │   ├── ChainSpine.svelte  ✅ Fetches blocks, mounts BlockNodes
-    │   │   └── BlockNodes.svelte  ✅ InstancedMesh Z-spine, heat colour, axle
+    │   │   └── BlockNodes.svelte  ✅ InstancedMesh Z-spine, heat colour
     │   │
-    │   ├── graph/
+    │   ├── graph/                    ← THE CENTRAL VISUAL
     │   │   ├── WalletGraph.svelte
     │   │   ├── WalletNodes.svelte
     │   │   ├── AgentNodes.svelte
@@ -270,11 +270,14 @@ Threlte v8 renamed `useFrame` → `useTask`. All animation loops use `useTask((d
 ### Suspense + Align avoided
 Threlte's `Suspense` and `Align` components mutate internal `$state` from inside Promise callbacks, which Svelte 5 runes mode forbids. Text3DGeometry is used without Suspense; centering is done manually via `oncreate` callback + bounding box computation directly on the Three.js mesh.
 
-### d3-force-3d for wallet layout
-The `wallet_edges` data has `tx_count` as edge strength and `from_is_agent`/`to_is_agent` flags. Running a force simulation on load gives organic, stable 3D positioning. Agent nodes get a separate charge modifier. Re-run debounced 5s when new edges arrive.
+### d3-force-3d for wallet layout — the neural graph
+The `wallet_edges` data has `tx_count` as edge strength and `from_is_agent`/`to_is_agent` flags. A force simulation positions wallets in 3D with a **spherical boundary constraint** — nodes naturally cluster into a brain-like shape without any static sphere mesh. Transfer edges between nodes create the "wireframe" organically. Agent nodes get a separate charge modifier (stronger repulsion → they sit on the surface). Re-run debounced 5s when new edges arrive.
 
 ### Separate geometry per token type
 USDC, EURC, and USYC particles use different `THREE.BufferGeometry` instances so each can have its own colour without shader branching.
+
+### No static decorative meshes
+Every mesh in the scene represents on-chain data. The old `SphereGrid` (static wireframe globe) and hex core (decorative cylinder) have been removed. The "globe" shape now emerges from the force-directed wallet layout itself. The only exception is the ARCADIA logotype, kept as a brand anchor.
 
 ### Raycasting for interaction
 On click, cast a ray against the WalletNodes InstancedMesh, get the instance index, look up the wallet address from the layout store, trigger `fetchWallet`.
@@ -302,26 +305,27 @@ Target: 60fps on mid-range hardware with all layers active.
 
 ## Implementation Phases
 
-### Phase 1 — Scene shell ✅
+### Phase 1 — Scene shell ✅ (updated — static meshes removed)
 - Threlte + Three.js installed
 - Full-viewport `<Canvas>` in `+page.svelte`
 - `SceneCamera` — PerspectiveCamera + OrbitControls autoRotate
 - `SceneLighting` — ambient + cyan + green point lights
-- `ArcSphere` — wireframe globe, hex core with pulse, ARCADIA Text3DGeometry
+- ~~`ArcSphere` — wireframe globe, hex core~~ → **Removed.** Replaced by data-driven `WalletGraph` (Phase 3)
+- `ArcLogotype` — Text3DGeometry "ARCADIA" extracted as standalone brand anchor
 
-### Phase 2 — Chain spine ✅
+### Phase 2 — Chain spine ✅ (updated — static axle removed)
 - `ChainSpine` fetches 50 blocks on mount
 - `BlockNodes` InstancedMesh along Z axis (z=+3 most recent → z=-3 oldest)
 - Utilization heat colour (blue→orange via HSL)
 - Node scale proportional to tx_count
-- Faint axle cylinder threading the sphere
+- ~~Faint axle cylinder~~ → **Removed.** No static decorative meshes.
 
-### Phase 3 — Wallet graph
+### Phase 3 — Wallet graph ← THE CENTRAL VISUAL, replaces the old static sphere
 - Install `d3-force-3d`
-- `scene-state/layout.svelte.ts` — force simulation on wallet edges
-- `WalletGraph` / `WalletNodes` InstancedMesh
-- `TransferEdges` LineSegments
-- `AgentNodes` green glow + pulse
+- `scene-state/layout.svelte.ts` — force simulation on wallet edges with spherical boundary
+- `WalletGraph` / `WalletNodes` InstancedMesh — all wallets, neural graph layout
+- `TransferEdges` LineSegments — these ARE the "wireframe" of the brain
+- `AgentNodes` green glow + pulse (pulse speed ∝ TPS, scale ∝ usdc_spent_fees)
 
 ### Phase 4 — Particles
 - `scene-state/particles.svelte.ts` ring buffer

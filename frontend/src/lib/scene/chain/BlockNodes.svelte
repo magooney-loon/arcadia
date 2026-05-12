@@ -49,12 +49,6 @@
 	});
 </script>
 
-<!-- Faint axle through the sphere along Z -->
-<T.Mesh rotation.x={Math.PI / 2}>
-	<T.CylinderGeometry args={[0.006, 0.006, 8, 6]} />
-	<T.MeshBasicMaterial color="#2a2a4a" transparent opacity={0.55} />
-</T.Mesh>
-
 <!-- Block nodes — InstancedMesh, one sphere per block, colored by utilization -->
 <T.InstancedMesh bind:ref={meshRef} args={[undefined, undefined, MAX]}>
 	<T.SphereGeometry args={[1, 8, 6]} />

@@ -2,13 +2,13 @@
 	import { Canvas } from '@threlte/core';
 	import SceneCamera from './SceneCamera.svelte';
 	import SceneLighting from './SceneLighting.svelte';
-	import ArcSphere from './sphere/ArcSphere.svelte';
+	import ArcLogotype from './core/ArcLogotype.svelte';
 	import ChainSpine from './chain/ChainSpine.svelte';
 </script>
 
 <Canvas>
 	<SceneCamera />
 	<SceneLighting />
-	<ArcSphere />
+	<ArcLogotype />
 	<ChainSpine />
 </Canvas>
