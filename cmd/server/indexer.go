@@ -21,8 +21,11 @@ import (
 // ── Indexer entry point ───────────────────────────────────────────────────────
 
 func StartIndexer(app core.App) {
-	log.Println("[indexer] starting Arcadia HyperSync indexer")
+	const startupDelay = 10 * time.Second
+	log.Printf("[indexer] scheduled Arcadia HyperSync indexer startup in %s", startupDelay)
 	go func() {
+		time.Sleep(startupDelay)
+		log.Println("[indexer] starting Arcadia HyperSync indexer")
 		attempt := 0
 		for {
 			attempt++
