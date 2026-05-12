@@ -191,6 +191,9 @@ func runIndexer(app core.App) error {
 					"block", currentBlock.Load(),
 				)
 			}
+			// Pace requests to avoid HyperSync free-tier burst throttling.
+			// 400ms between batches ≈ 2.5 req/s — well within typical fair-use limits.
+			time.Sleep(400 * time.Millisecond)
 			stream.Ack()
 
 		case <-heartbeat.C:
@@ -730,6 +733,11 @@ func upsertWalletEdge(app core.App, from, to string, amount *big.Int, blockNumbe
 // arcBlocksPerDay is a conservative estimate based on Arc's ~1 second block time.
 const arcBlocksPerDay = uint64(86_400)
 
+// arcCatchupLookback is how far back we start on a fresh DB.
+// 1 hour gives enough context data without blowing the free-tier rate limit
+// during catch-up (18 batches of 200 blocks vs 3024 for 7 days).
+const arcCatchupLookback = uint64(3_600)
+
 // resolveStartBlock returns the block to stream from.
 // If a cursor exists in the DB we resume from there. On a fresh start we fetch
 // the current chain tip and walk back 7 days so we don't blow the free-tier
@@ -750,13 +758,13 @@ func resolveStartBlock(ctx context.Context, app core.App, client interface {
 	}
 
 	tip := height.Uint64()
-	lookback := 7 * arcBlocksPerDay
+	lookback := arcCatchupLookback
 	start := uint64(0)
 	if tip > lookback {
 		start = tip - lookback
 	}
 
-	app.Logger().Info("Fresh start — beginning 7 days behind chain tip",
+	app.Logger().Info("Fresh start — beginning 1 hour behind chain tip",
 		"tip", tip, "from_block", start, "lookback_blocks", lookback)
 	return start
 }
