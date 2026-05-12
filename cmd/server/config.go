@@ -6,6 +6,7 @@ import (
 
 	"github.com/enviodev/hypersync-client-go/utils"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
 )
 
 // arcRPCPool is the ordered list of public Arc RPC endpoints used for rotation.
@@ -27,15 +28,15 @@ const (
 	ArcHyperSyncURL = "https://arc-testnet.hypersync.xyz"
 
 	// Public JSON-RPC endpoints (no auth required)
-	ArcRPCPrimary    = "https://rpc.testnet.arc.network"
+	ArcRPCPrimary     = "https://rpc.testnet.arc.network"
 	ArcRPCBlockdaemon = "https://rpc.blockdaemon.testnet.arc.network"
-	ArcRPCDRPC       = "https://rpc.drpc.testnet.arc.network"
-	ArcRPCQuickNode  = "https://rpc.quicknode.testnet.arc.network"
+	ArcRPCDRPC        = "https://rpc.drpc.testnet.arc.network"
+	ArcRPCQuickNode   = "https://rpc.quicknode.testnet.arc.network"
 
 	// WebSocket endpoints
-	ArcWSS           = "wss://rpc.testnet.arc.network"
-	ArcWSSDrpc       = "wss://rpc.drpc.testnet.arc.network"
-	ArcWSSQuickNode  = "wss://rpc.quicknode.testnet.arc.network"
+	ArcWSS          = "wss://rpc.testnet.arc.network"
+	ArcWSSDrpc      = "wss://rpc.drpc.testnet.arc.network"
+	ArcWSSQuickNode = "wss://rpc.quicknode.testnet.arc.network"
 
 	// Block explorer
 	ArcExplorer = "https://testnet.arcscan.app"
@@ -73,15 +74,17 @@ var (
 	AddrFxEscrow = common.HexToAddress("0x867650F5eAe8df91445971f14d89fd84F0C9a9f8")
 
 	// Common Ethereum contracts deployed on Arc
-	AddrPermit2       = common.HexToAddress("0x000000000022D473030F116dDEE9F6B43aC78BA3")
-	AddrMulticall3    = common.HexToAddress("0xcA11bde05977b3631167028862bE2a173976CA11")
+	AddrPermit2        = common.HexToAddress("0x000000000022D473030F116dDEE9F6B43aC78BA3")
+	AddrMulticall3     = common.HexToAddress("0xcA11bde05977b3631167028862bE2a173976CA11")
 	AddrCreate2Factory = common.HexToAddress("0x4e59b44847b379578588920cA78FbF26c0B4956C")
 
-	// ERC-8004 Agent Registry — TBD: confirm from Arc docs/Discord
-	AddrAgentRegistry = common.HexToAddress("0x0000000000000000000000000000000000000000")
+	// ERC-8004 agent registries on Arc testnet
+	AddrAgentRegistry      = common.HexToAddress("0x8004A818BFB912233c491871b3d84c89A494BD9e")
+	AddrReputationRegistry = common.HexToAddress("0x8004B663056A597Dffe9eCcC1965A193B7388713")
+	AddrValidationRegistry = common.HexToAddress("0x8004Cb1BF31DAf7788923b405b754f57acEB4272")
 
-	// ERC-8183 Job Escrow — TBD: confirm from Arc docs/Discord
-	AddrJobEscrow = common.HexToAddress("0x0000000000000000000000000000000000000000")
+	// ERC-8183 AgenticCommerce reference implementation on Arc testnet
+	AddrAgenticCommerce = common.HexToAddress("0x0747EEf0706327138c69792bF28Cd525089e4583")
 )
 
 // KnownTokens maps contract address → symbol for the three Arc stablecoins.
@@ -108,13 +111,11 @@ var (
 	// MessageReceived(address,uint32,uint64,bytes32,bytes)
 	TopicMessageReceived = common.HexToHash("0x58200b4c34ae05ee816d710053fff3ad1bcea173d0113462f6fd5162ab9adca5")
 
-	// ERC-8004 — TBD: verify against deployed ABI
-	TopicAgentRegistered = common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000000")
+	// ERC-8004 IdentityRegistry is ERC-721; agent registration mints a token.
+	TopicAgentRegistered = TopicTransfer
 
-	// ERC-8183 — TBD: verify against deployed ABI
-	TopicJobCreated   = common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000000")
-	TopicJobDelivered = common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000000")
-	TopicJobSettled   = common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000000")
+	// ERC-8183 AgenticCommerce reference implementation.
+	TopicJobCreated = crypto.Keccak256Hash([]byte("JobCreated(uint256,address,address,address,uint256,address)"))
 )
 
 // ── Environment variables ─────────────────────────────────────────────────────

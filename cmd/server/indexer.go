@@ -166,6 +166,8 @@ func newIndexerQuery(fromBlock, toBlock uint64) *types.Query {
 			},
 			{Address: []common.Address{AddrGatewayWallet, AddrGatewayMinter}},
 			{Address: []common.Address{AddrFxEscrow}},
+			{Address: []common.Address{AddrAgentRegistry}, Topics: [][]common.Hash{{TopicAgentRegistered}}},
+			{Address: []common.Address{AddrAgenticCommerce}, Topics: [][]common.Hash{{TopicJobCreated}}},
 		},
 	}
 }
@@ -1014,8 +1016,12 @@ func routeLog(app core.App, log *types.Log) (*big.Int, error) {
 		return nil, nil
 	}
 
+	addr := *log.Address
 	switch *log.Topic0 {
 	case TopicTransfer:
+		if addr == AddrAgentRegistry {
+			return nil, saveAgentRegistration(app, log)
+		}
 		return saveTransfer(app, log)
 
 	case TopicDepositForBurn:
@@ -1024,8 +1030,10 @@ func routeLog(app core.App, log *types.Log) (*big.Int, error) {
 	case TopicMessageReceived:
 		return nil, saveCCTPEvent(app, log, "cctp", "mint")
 
+	case TopicJobCreated:
+		return nil, saveAgentJobCreated(app, log)
+
 	default:
-		addr := *log.Address
 		if addr == AddrGatewayWallet || addr == AddrGatewayMinter {
 			return nil, saveGatewayEvent(app, log)
 		} else if addr == AddrFxEscrow {
@@ -1183,6 +1191,73 @@ func saveFxEvent(app core.App, log *types.Log) error {
 		return fmt.Errorf("save fx event %s/%d: %w", log.TransactionHash.Hex(), *log.LogIndex, err)
 	}
 
+	return nil
+}
+
+func saveAgentRegistration(app core.App, log *types.Log) error {
+	if log.Topic1 == nil || log.Topic2 == nil || log.TransactionHash == nil {
+		return nil
+	}
+	zero := common.Hash{}
+	if *log.Topic1 != zero {
+		return nil
+	}
+
+	owner := addressFromTopic(log.Topic2)
+	existing, err := app.FindRecordsByFilter("agents", "agent_address = {:a}", "", 1, 0, map[string]any{"a": owner})
+	if err != nil {
+		return fmt.Errorf("find agent %s: %w", owner, err)
+	}
+	if len(existing) > 0 {
+		return nil
+	}
+
+	r := core.NewRecord(mustCollection(app, "agents"))
+	r.Set("agent_address", owner)
+	if log.BlockNumber != nil {
+		r.Set("registered_at_block", log.BlockNumber.Uint64())
+	}
+	r.Set("tx_hash", log.TransactionHash.Hex())
+	r.Set("tx_count", 0)
+	r.Set("usdc_spent_fees", "0")
+	r.Set("usdc_transferred", "0")
+
+	if err := app.Save(r); err != nil {
+		return fmt.Errorf("save agent registration %s: %w", owner, err)
+	}
+	return nil
+}
+
+func saveAgentJobCreated(app core.App, log *types.Log) error {
+	if log.Address == nil || *log.Address != AddrAgenticCommerce || log.Topic1 == nil || log.Topic2 == nil || log.Topic3 == nil || log.TransactionHash == nil {
+		return nil
+	}
+
+	jobID := new(big.Int).SetBytes(log.Topic1.Bytes()).String()
+	existing, err := app.FindRecordsByFilter("agent_jobs", "job_id = {:j}", "", 1, 0, map[string]any{"j": jobID})
+	if err != nil {
+		return fmt.Errorf("find agent job %s: %w", jobID, err)
+	}
+	if len(existing) > 0 {
+		return nil
+	}
+
+	client := addressFromTopic(log.Topic2)
+	provider := addressFromTopic(log.Topic3)
+
+	r := core.NewRecord(mustCollection(app, "agent_jobs"))
+	r.Set("job_id", jobID)
+	r.Set("employer_address", client)
+	r.Set("worker_address", provider)
+	r.Set("status", "created")
+	if log.BlockNumber != nil {
+		r.Set("created_at_block", log.BlockNumber.Uint64())
+	}
+	r.Set("create_tx_hash", log.TransactionHash.Hex())
+
+	if err := app.Save(r); err != nil {
+		return fmt.Errorf("save agent job %s: %w", jobID, err)
+	}
 	return nil
 }
 
