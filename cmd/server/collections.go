@@ -1,101 +1,342 @@
 package main
 
-// Collection example
-
 import (
 	"github.com/pocketbase/pocketbase/core"
 )
 
-// registerCollections sets up all database collections for the application
 func registerCollections(app core.App) {
 	app.OnServe().BindFunc(func(e *core.ServeEvent) error {
-		if err := todoCollection(e.App); err != nil {
-			app.Logger().Error("Failed to create todo collection", "error", err)
+		for _, fn := range []func(core.App) error{
+			metaCollection,
+			blocksCollection,
+			transactionsCollection,
+			transfersCollection,
+			tracesCollection,
+			crosschainEventsCollection,
+			fxSwapsCollection,
+			agentsCollection,
+			agentJobsCollection,
+			blockStatsCollection,
+			walletEdgesCollection,
+		} {
+			if err := fn(e.App); err != nil {
+				app.Logger().Error("Collection setup error", "error", err)
+			}
 		}
-
 		return e.Next()
 	})
 }
 
-// todoCollection creates a todos collection for CRUD demo
-func todoCollection(app core.App) error {
-	// Check if todos collection already exists
-	existingCollection, _ := app.FindCollectionByNameOrId("todos")
-	if existingCollection != nil {
-		app.Logger().Info("Todos collection already exists")
+func collectionExists(app core.App, name string) bool {
+	c, _ := app.FindCollectionByNameOrId(name)
+	return c != nil
+}
+
+// metaCollection stores indexer cursor state (key/value pairs).
+func metaCollection(app core.App) error {
+	if collectionExists(app, "indexer_meta") {
 		return nil
 	}
-
-	// Create new todos collection
-	collection := core.NewBaseCollection("todos")
-
-	// Find users collection for optional relation (v2 auth)
-	usersCollection, err := app.FindCollectionByNameOrId("users")
-	if err != nil {
+	c := core.NewBaseCollection("indexer_meta")
+	c.Fields.Add(&core.TextField{Name: "key", Required: true, Max: 100})
+	c.Fields.Add(&core.TextField{Name: "value", Required: false, Max: 500})
+	c.AddIndex("idx_meta_key", true, "key", "")
+	c.ViewRule = nil
+	if err := app.Save(c); err != nil {
 		return err
 	}
+	app.Logger().Info("Created indexer_meta collection")
+	return nil
+}
 
-	// Add optional user relation
-	collection.Fields.Add(&core.RelationField{
-		Name:          "user",
-		Required:      false, // Optional - v1 routes won't use this
-		CollectionId:  usersCollection.Id,
-		CascadeDelete: true,
-	})
-
-	// Add title field (required)
-	collection.Fields.Add(&core.TextField{
-		Name:     "title",
-		Required: true,
-		Max:      200,
-	})
-
-	// Add description field (optional)
-	collection.Fields.Add(&core.TextField{
-		Name:     "description",
-		Required: false,
-		Max:      1000,
-	})
-
-	// Add completed field (boolean, default false)
-	collection.Fields.Add(&core.BoolField{
-		Name: "completed",
-	})
-
-	// Add priority field (select)
-	collection.Fields.Add(&core.SelectField{
-		Name:   "priority",
-		Values: []string{"low", "medium", "high"},
-	})
-
-	// Add auto-date fields
-	collection.Fields.Add(&core.AutodateField{
-		Name:     "created",
-		OnCreate: true,
-	})
-
-	collection.Fields.Add(&core.AutodateField{
-		Name:     "updated",
-		OnCreate: true,
-		OnUpdate: true,
-	})
-
-	// Set collection rules - public access for v1
-	collection.ViewRule = nil   // Public read
-	collection.CreateRule = nil // Public create
-	collection.UpdateRule = nil // Public update
-	collection.DeleteRule = nil // Public delete
-
-	// Add indexes
-	collection.AddIndex("idx_todos_user", false, "user", "")
-	collection.AddIndex("idx_todos_completed", false, "completed", "")
-
-	// Save the collection
-	if err := app.Save(collection); err != nil {
-		app.Logger().Error("Failed to create todos collection", "error", err)
+// blocksCollection — Layer 1: chain skeleton.
+func blocksCollection(app core.App) error {
+	if collectionExists(app, "blocks") {
+		return nil
+	}
+	c := core.NewBaseCollection("blocks")
+	c.Fields.Add(&core.NumberField{Name: "number", Required: true})
+	c.Fields.Add(&core.TextField{Name: "hash", Required: true, Max: 66})
+	c.Fields.Add(&core.TextField{Name: "parent_hash", Required: false, Max: 66})
+	c.Fields.Add(&core.TextField{Name: "miner", Required: false, Max: 42})
+	c.Fields.Add(&core.NumberField{Name: "timestamp"})
+	c.Fields.Add(&core.NumberField{Name: "gas_used"})
+	c.Fields.Add(&core.NumberField{Name: "gas_limit"})
+	// base_fee_per_gas stored as string — big.Int, sub-wei precision
+	c.Fields.Add(&core.TextField{Name: "base_fee_per_gas", Required: false, Max: 80})
+	c.Fields.Add(&core.NumberField{Name: "size"})
+	// derived fields computed at index time
+	c.Fields.Add(&core.NumberField{Name: "tx_count"})
+	c.Fields.Add(&core.NumberField{Name: "block_time_ms"}) // ms since previous block
+	c.Fields.Add(&core.NumberField{Name: "utilization_pct"})
+	c.AddIndex("idx_blocks_number", true, "number", "")
+	c.AddIndex("idx_blocks_hash", true, "hash", "")
+	c.ViewRule = nil
+	if err := app.Save(c); err != nil {
 		return err
 	}
+	app.Logger().Info("Created blocks collection")
+	return nil
+}
 
-	app.Logger().Info("Created todos collection")
+// transactionsCollection — Layer 2: every transaction.
+func transactionsCollection(app core.App) error {
+	if collectionExists(app, "transactions") {
+		return nil
+	}
+	c := core.NewBaseCollection("transactions")
+	c.Fields.Add(&core.TextField{Name: "hash", Required: true, Max: 66})
+	c.Fields.Add(&core.NumberField{Name: "block_number"})
+	c.Fields.Add(&core.NumberField{Name: "transaction_index"})
+	c.Fields.Add(&core.TextField{Name: "from_addr", Required: false, Max: 42})
+	c.Fields.Add(&core.TextField{Name: "to_addr", Required: false, Max: 42})
+	// value / amounts as strings to preserve uint256 precision
+	c.Fields.Add(&core.TextField{Name: "value", Required: false, Max: 80})
+	c.Fields.Add(&core.NumberField{Name: "nonce"})
+	c.Fields.Add(&core.TextField{Name: "sighash", Required: false, Max: 10}) // first 4 bytes hex
+	c.Fields.Add(&core.TextField{Name: "gas_price", Required: false, Max: 80})
+	c.Fields.Add(&core.NumberField{Name: "gas_used"})
+	c.Fields.Add(&core.TextField{Name: "effective_gas_price", Required: false, Max: 80})
+	// fee in USDC: gas_used * effective_gas_price / 1e18 (native USDC uses 18 decimals)
+	c.Fields.Add(&core.TextField{Name: "fee_usdc", Required: false, Max: 40})
+	c.Fields.Add(&core.NumberField{Name: "tx_type"})
+	c.Fields.Add(&core.TextField{Name: "contract_address", Required: false, Max: 42})
+	c.Fields.Add(&core.BoolField{Name: "is_contract_deploy"})
+	c.AddIndex("idx_tx_hash", true, "hash", "")
+	c.AddIndex("idx_tx_block", false, "block_number", "")
+	c.AddIndex("idx_tx_from", false, "from_addr", "")
+	c.AddIndex("idx_tx_to", false, "to_addr", "")
+	c.ViewRule = nil
+	if err := app.Save(c); err != nil {
+		return err
+	}
+	app.Logger().Info("Created transactions collection")
+	return nil
+}
+
+// transfersCollection — Layer 3: all ERC-20 token transfers (USDC, EURC, USYC, …).
+func transfersCollection(app core.App) error {
+	if collectionExists(app, "transfers") {
+		return nil
+	}
+	c := core.NewBaseCollection("transfers")
+	c.Fields.Add(&core.TextField{Name: "tx_hash", Required: true, Max: 66})
+	c.Fields.Add(&core.NumberField{Name: "block_number"})
+	c.Fields.Add(&core.NumberField{Name: "log_index"})
+	c.Fields.Add(&core.TextField{Name: "token_address", Required: true, Max: 42})
+	c.Fields.Add(&core.SelectField{
+		Name:   "token_symbol",
+		Values: []string{"USDC", "EURC", "USYC", "OTHER"},
+	})
+	c.Fields.Add(&core.TextField{Name: "from_addr", Required: false, Max: 42})
+	c.Fields.Add(&core.TextField{Name: "to_addr", Required: false, Max: 42})
+	c.Fields.Add(&core.TextField{Name: "amount_raw", Required: false, Max: 80})
+	// amount_human = amount_raw / 1e6 (ERC-20 stablecoins use 6 decimals)
+	c.Fields.Add(&core.TextField{Name: "amount_human", Required: false, Max: 40})
+	c.AddIndex("idx_transfers_unique", true, "tx_hash, log_index", "")
+	c.AddIndex("idx_transfers_block", false, "block_number", "")
+	c.AddIndex("idx_transfers_token", false, "token_address", "")
+	c.AddIndex("idx_transfers_from", false, "from_addr", "")
+	c.AddIndex("idx_transfers_to", false, "to_addr", "")
+	c.ViewRule = nil
+	if err := app.Save(c); err != nil {
+		return err
+	}
+	app.Logger().Info("Created transfers collection")
+	return nil
+}
+
+// tracesCollection — Layer 4: internal contract-to-contract calls.
+func tracesCollection(app core.App) error {
+	if collectionExists(app, "traces") {
+		return nil
+	}
+	c := core.NewBaseCollection("traces")
+	c.Fields.Add(&core.TextField{Name: "tx_hash", Required: true, Max: 66})
+	c.Fields.Add(&core.NumberField{Name: "block_number"})
+	c.Fields.Add(&core.TextField{Name: "from_addr", Required: false, Max: 42})
+	c.Fields.Add(&core.TextField{Name: "to_addr", Required: false, Max: 42})
+	c.Fields.Add(&core.TextField{Name: "value", Required: false, Max: 80})
+	c.Fields.Add(&core.TextField{Name: "call_type", Required: false, Max: 20})
+	c.Fields.Add(&core.TextField{Name: "trace_type", Required: false, Max: 20})
+	c.Fields.Add(&core.NumberField{Name: "gas_used"})
+	c.Fields.Add(&core.TextField{Name: "error_msg", Required: false, Max: 200})
+	c.AddIndex("idx_traces_tx", false, "tx_hash", "")
+	c.AddIndex("idx_traces_block", false, "block_number", "")
+	c.ViewRule = nil
+	if err := app.Save(c); err != nil {
+		return err
+	}
+	app.Logger().Info("Created traces collection")
+	return nil
+}
+
+// crosschainEventsCollection — Layer 6: CCTP burns/mints and Gateway deposits/withdrawals.
+func crosschainEventsCollection(app core.App) error {
+	if collectionExists(app, "crosschain_events") {
+		return nil
+	}
+	c := core.NewBaseCollection("crosschain_events")
+	c.Fields.Add(&core.TextField{Name: "tx_hash", Required: true, Max: 66})
+	c.Fields.Add(&core.NumberField{Name: "block_number"})
+	c.Fields.Add(&core.NumberField{Name: "log_index"})
+	c.Fields.Add(&core.SelectField{
+		Name:   "protocol",
+		Values: []string{"cctp", "gateway"},
+	})
+	c.Fields.Add(&core.SelectField{
+		Name:   "event_type",
+		Values: []string{"burn", "mint", "deposit", "withdraw"},
+	})
+	c.Fields.Add(&core.NumberField{Name: "source_domain"})
+	c.Fields.Add(&core.NumberField{Name: "destination_domain"})
+	c.Fields.Add(&core.TextField{Name: "sender", Required: false, Max: 42})
+	c.Fields.Add(&core.TextField{Name: "recipient", Required: false, Max: 42})
+	c.Fields.Add(&core.TextField{Name: "amount_usdc", Required: false, Max: 40})
+	c.Fields.Add(&core.TextField{Name: "nonce_val", Required: false, Max: 80})
+	c.AddIndex("idx_crosschain_unique", true, "tx_hash, log_index", "")
+	c.AddIndex("idx_crosschain_block", false, "block_number", "")
+	c.ViewRule = nil
+	if err := app.Save(c); err != nil {
+		return err
+	}
+	app.Logger().Info("Created crosschain_events collection")
+	return nil
+}
+
+// fxSwapsCollection — Layer 6b: StableFX USDC↔EURC swap settlements.
+func fxSwapsCollection(app core.App) error {
+	if collectionExists(app, "fx_swaps") {
+		return nil
+	}
+	c := core.NewBaseCollection("fx_swaps")
+	c.Fields.Add(&core.TextField{Name: "tx_hash", Required: true, Max: 66})
+	c.Fields.Add(&core.NumberField{Name: "block_number"})
+	c.Fields.Add(&core.NumberField{Name: "log_index"})
+	c.Fields.Add(&core.TextField{Name: "maker", Required: false, Max: 42})
+	c.Fields.Add(&core.TextField{Name: "taker", Required: false, Max: 42})
+	c.Fields.Add(&core.TextField{Name: "sell_token", Required: false, Max: 42})
+	c.Fields.Add(&core.TextField{Name: "buy_token", Required: false, Max: 42})
+	c.Fields.Add(&core.TextField{Name: "sell_amount", Required: false, Max: 40})
+	c.Fields.Add(&core.TextField{Name: "buy_amount", Required: false, Max: 40})
+	c.Fields.Add(&core.TextField{Name: "implied_rate", Required: false, Max: 20})
+	c.Fields.Add(&core.SelectField{
+		Name:   "status",
+		Values: []string{"created", "settled", "cancelled"},
+	})
+	c.AddIndex("idx_fx_unique", true, "tx_hash, log_index", "")
+	c.AddIndex("idx_fx_block", false, "block_number", "")
+	c.ViewRule = nil
+	if err := app.Save(c); err != nil {
+		return err
+	}
+	app.Logger().Info("Created fx_swaps collection")
+	return nil
+}
+
+// agentsCollection — Layer 5a: registered ERC-8004 AI agents.
+func agentsCollection(app core.App) error {
+	if collectionExists(app, "agents") {
+		return nil
+	}
+	c := core.NewBaseCollection("agents")
+	c.Fields.Add(&core.TextField{Name: "agent_address", Required: true, Max: 42})
+	c.Fields.Add(&core.TextField{Name: "metadata_uri", Required: false, Max: 500})
+	c.Fields.Add(&core.NumberField{Name: "registered_at_block"})
+	c.Fields.Add(&core.TextField{Name: "tx_hash", Required: false, Max: 66})
+	// aggregated stats updated by indexer
+	c.Fields.Add(&core.NumberField{Name: "tx_count"})
+	c.Fields.Add(&core.TextField{Name: "usdc_spent_fees", Required: false, Max: 40})
+	c.Fields.Add(&core.TextField{Name: "usdc_transferred", Required: false, Max: 40})
+	c.AddIndex("idx_agents_address", true, "agent_address", "")
+	c.ViewRule = nil
+	if err := app.Save(c); err != nil {
+		return err
+	}
+	app.Logger().Info("Created agents collection")
+	return nil
+}
+
+// agentJobsCollection — Layer 5b: ERC-8183 job lifecycle events.
+func agentJobsCollection(app core.App) error {
+	if collectionExists(app, "agent_jobs") {
+		return nil
+	}
+	c := core.NewBaseCollection("agent_jobs")
+	c.Fields.Add(&core.TextField{Name: "job_id", Required: true, Max: 80})
+	c.Fields.Add(&core.TextField{Name: "employer_address", Required: false, Max: 42})
+	c.Fields.Add(&core.TextField{Name: "worker_address", Required: false, Max: 42})
+	c.Fields.Add(&core.TextField{Name: "payment_usdc", Required: false, Max: 40})
+	c.Fields.Add(&core.SelectField{
+		Name:   "status",
+		Values: []string{"created", "accepted", "delivered", "settled", "disputed"},
+	})
+	c.Fields.Add(&core.NumberField{Name: "created_at_block"})
+	c.Fields.Add(&core.NumberField{Name: "settled_at_block"})
+	c.Fields.Add(&core.TextField{Name: "create_tx_hash", Required: false, Max: 66})
+	c.Fields.Add(&core.TextField{Name: "settle_tx_hash", Required: false, Max: 66})
+	c.AddIndex("idx_jobs_id", true, "job_id", "")
+	c.AddIndex("idx_jobs_employer", false, "employer_address", "")
+	c.AddIndex("idx_jobs_worker", false, "worker_address", "")
+	c.ViewRule = nil
+	if err := app.Save(c); err != nil {
+		return err
+	}
+	app.Logger().Info("Created agent_jobs collection")
+	return nil
+}
+
+// blockStatsCollection — Layer 7: pre-aggregated per-block metrics.
+func blockStatsCollection(app core.App) error {
+	if collectionExists(app, "block_stats") {
+		return nil
+	}
+	c := core.NewBaseCollection("block_stats")
+	c.Fields.Add(&core.NumberField{Name: "block_number", Required: true})
+	c.Fields.Add(&core.NumberField{Name: "timestamp"})
+	c.Fields.Add(&core.NumberField{Name: "tps"})
+	c.Fields.Add(&core.NumberField{Name: "tx_count"})
+	c.Fields.Add(&core.NumberField{Name: "failed_tx_count"})
+	c.Fields.Add(&core.TextField{Name: "avg_fee_usdc", Required: false, Max: 40})
+	c.Fields.Add(&core.TextField{Name: "total_fee_usdc", Required: false, Max: 40})
+	c.Fields.Add(&core.TextField{Name: "total_usdc_transferred", Required: false, Max: 40})
+	c.Fields.Add(&core.TextField{Name: "total_eurc_transferred", Required: false, Max: 40})
+	c.Fields.Add(&core.TextField{Name: "total_usyc_transferred", Required: false, Max: 40})
+	c.Fields.Add(&core.NumberField{Name: "unique_senders"})
+	c.Fields.Add(&core.NumberField{Name: "unique_receivers"})
+	c.Fields.Add(&core.NumberField{Name: "new_contracts"})
+	c.Fields.Add(&core.TextField{Name: "largest_usdc_transfer", Required: false, Max: 40})
+	c.Fields.Add(&core.NumberField{Name: "utilization_pct"})
+	c.Fields.Add(&core.NumberField{Name: "block_time_ms"})
+	c.AddIndex("idx_bstats_number", true, "block_number", "")
+	c.ViewRule = nil
+	if err := app.Save(c); err != nil {
+		return err
+	}
+	app.Logger().Info("Created block_stats collection")
+	return nil
+}
+
+// walletEdgesCollection — Layer 8: wallet graph (nodes + edges for 3D viz).
+func walletEdgesCollection(app core.App) error {
+	if collectionExists(app, "wallet_edges") {
+		return nil
+	}
+	c := core.NewBaseCollection("wallet_edges")
+	c.Fields.Add(&core.TextField{Name: "from_wallet", Required: true, Max: 42})
+	c.Fields.Add(&core.TextField{Name: "to_wallet", Required: true, Max: 42})
+	c.Fields.Add(&core.TextField{Name: "total_usdc", Required: false, Max: 40})
+	c.Fields.Add(&core.NumberField{Name: "tx_count"})
+	c.Fields.Add(&core.NumberField{Name: "last_seen_block"})
+	c.Fields.Add(&core.BoolField{Name: "from_is_agent"})
+	c.Fields.Add(&core.BoolField{Name: "to_is_agent"})
+	c.AddIndex("idx_edges_unique", true, "from_wallet, to_wallet", "")
+	c.AddIndex("idx_edges_from", false, "from_wallet", "")
+	c.AddIndex("idx_edges_to", false, "to_wallet", "")
+	c.ViewRule = nil
+	if err := app.Save(c); err != nil {
+		return err
+	}
+	app.Logger().Info("Created wallet_edges collection")
 	return nil
 }
