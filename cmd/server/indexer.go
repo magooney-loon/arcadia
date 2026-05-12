@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"math/big"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	hypersyncgo "github.com/enviodev/hypersync-client-go"
@@ -19,12 +21,23 @@ import (
 // ── Indexer entry point ───────────────────────────────────────────────────────
 
 func StartIndexer(app core.App) {
-	app.Logger().Info("Starting Arcadia HyperSync indexer")
+	log.Println("[indexer] starting Arcadia HyperSync indexer")
 	go func() {
+		attempt := 0
 		for {
+			attempt++
+			log.Printf("[indexer] run attempt #%d", attempt)
 			if err := runIndexer(app); err != nil {
-				app.Logger().Error("Indexer crashed, restarting in 5s", "error", err)
-				time.Sleep(5 * time.Second)
+				msg := err.Error()
+				if strings.Contains(msg, "429") {
+					log.Printf("[indexer] rate-limited (429) — waiting 30s before retry (attempt #%d)", attempt)
+					app.Logger().Warn("Indexer rate-limited", "attempt", attempt)
+					time.Sleep(30 * time.Second)
+				} else {
+					log.Printf("[indexer] crashed: %v — restarting in 5s (attempt #%d)", err, attempt)
+					app.Logger().Error("Indexer crashed", "error", err, "attempt", attempt)
+					time.Sleep(5 * time.Second)
+				}
 			}
 		}
 	}()
@@ -39,16 +52,20 @@ func runIndexer(app core.App) error {
 	}
 
 	rpc := NextRPCURL()
-	app.Logger().Info("Connecting to Arc", "hypersync", ArcHyperSyncURL, "rpc", rpc)
+	log.Printf("[indexer] connecting — hypersync: %s  rpc: %s", ArcHyperSyncURL, rpc)
 
 	hyper, err := hypersyncgo.NewHyper(ctx, options.Options{
 		Blockchains: []options.Node{
 			{
-				Type:        utils.EthereumNetwork,
-				NetworkId:   ArcNetworkID,
-				Endpoint:    ArcHyperSyncURL,
-				RpcEndpoint: rpc,
-				ApiToken:    apiToken,
+				Type:           utils.EthereumNetwork,
+				NetworkId:      ArcNetworkID,
+				Endpoint:       ArcHyperSyncURL,
+				RpcEndpoint:    rpc,
+				ApiToken:       apiToken,
+				MaxNumRetries:  10,
+				RetryBaseMs:    2 * time.Second,
+				RetryBackoffMs: 2 * time.Second,
+				RetryCeilingMs: 30 * time.Second,
 			},
 		},
 	})
@@ -61,8 +78,8 @@ func runIndexer(app core.App) error {
 		return fmt.Errorf("arc client not found in hyper")
 	}
 
-	fromBlock := getLastIndexedBlock(app)
-	app.Logger().Info("Resuming indexer", "from_block", fromBlock)
+	fromBlock := resolveStartBlock(ctx, app, client)
+	log.Printf("[indexer] streaming from block %d", fromBlock)
 
 	query := &types.Query{
 		FromBlock:        new(big.Int).SetUint64(fromBlock),
@@ -85,55 +102,101 @@ func runIndexer(app core.App) error {
 			},
 		},
 		Logs: []types.LogSelection{
-			// All ERC-20 Transfer events (USDC, EURC, USYC, …)
 			{Topics: [][]common.Hash{{TopicTransfer}}},
-			// CCTP: DepositForBurn on TokenMessengerV2
 			{
 				Address: []common.Address{AddrCCTPTokenMessenger},
 				Topics:  [][]common.Hash{{TopicDepositForBurn}},
 			},
-			// CCTP: MessageReceived on MessageTransmitterV2
 			{
 				Address: []common.Address{AddrCCTPMessageTransmitter},
 				Topics:  [][]common.Hash{{TopicMessageReceived}},
 			},
-			// Gateway: all events from GatewayWallet + GatewayMinter
 			{Address: []common.Address{AddrGatewayWallet, AddrGatewayMinter}},
-			// StableFX: all events from FxEscrow
 			{Address: []common.Address{AddrFxEscrow}},
 		},
 	}
 
-	stream, err := client.Stream(ctx, query, options.DefaultStreamOptions())
+	streamOpts := &options.StreamOptions{
+		Concurrency: big.NewInt(1),   // single in-flight request — avoids 429 bursts
+		BatchSize:   big.NewInt(200), // blocks per batch; small enough for free tier
+	}
+
+	log.Println("[indexer] creating stream...")
+	stream, err := client.Stream(ctx, query, streamOpts)
 	if err != nil {
 		return fmt.Errorf("failed to create stream: %w", err)
 	}
-	if err := stream.Subscribe(); err != nil {
-		return fmt.Errorf("failed to subscribe: %w", err)
-	}
-	defer stream.Unsubscribe()
+
+	// Subscribe() is blocking — it does the initial GetArrow fetch then calls
+	// g.Wait() which blocks until the worker finishes. Run it in a goroutine
+	// and forward its return value so our select loop can detect fatal errors.
+	subErrCh := make(chan error, 1)
+	go func() {
+		log.Println("[indexer] Subscribe() starting (initial fetch + worker)...")
+		subErrCh <- stream.Subscribe()
+	}()
+
+	var currentBlock atomic.Uint64
+	currentBlock.Store(fromBlock)
+
+	batchCount := 0
+	heartbeat := time.NewTicker(15 * time.Second)
+	defer heartbeat.Stop()
+
+	log.Println("[indexer] event loop running — waiting for first batch")
 
 	for {
 		select {
-		case err := <-stream.Err():
-			return fmt.Errorf("stream error: %w", err)
+		case subErr := <-subErrCh:
+			if subErr != nil {
+				errMsg := subErr.Error()
+				if strings.Contains(errMsg, "429") {
+					log.Printf("[indexer] Subscribe() 429 rate-limited at block %d", currentBlock.Load())
+				} else {
+					log.Printf("[indexer] Subscribe() error at block %d: %v", currentBlock.Load(), subErr)
+				}
+				return subErr
+			}
+			log.Printf("[indexer] Subscribe() completed at block %d", currentBlock.Load())
+			return nil
 
-		case res := <-stream.Channel():
+		case res, ok := <-stream.Channel():
+			if !ok {
+				log.Println("[indexer] channel closed")
+				return nil
+			}
+			batchStart := time.Now()
 			if err := processBatch(app, res); err != nil {
+				log.Printf("[indexer] batch processing error: %v", err)
 				app.Logger().Error("Batch processing error", "error", err)
-			} else if res.NextBlock != nil {
-				setLastIndexedBlock(app, res.NextBlock.Uint64())
-				app.Logger().Info("Batch indexed", "next_block", res.NextBlock.Uint64(),
-					"blocks", len(res.Data.Blocks),
-					"txs", len(res.Data.Transactions),
-					"logs", len(res.Data.Logs),
+			}
+			if res.NextBlock != nil {
+				next := res.NextBlock.Uint64()
+				currentBlock.Store(next)
+				setLastIndexedBlock(app, next)
+			}
+			batchCount++
+			elapsed := time.Since(batchStart).Milliseconds()
+			log.Printf("[indexer] batch #%d | block %d | blocks=%d txs=%d logs=%d | %dms",
+				batchCount, currentBlock.Load(),
+				len(res.Data.Blocks), len(res.Data.Transactions), len(res.Data.Logs),
+				elapsed,
+			)
+			if batchCount%10 == 0 {
+				app.Logger().Info("Indexer progress",
+					"batch", batchCount,
+					"block", currentBlock.Load(),
 				)
 			}
 			stream.Ack()
 
+		case <-heartbeat.C:
+			log.Printf("[indexer] heartbeat | block %d | batches: %d", currentBlock.Load(), batchCount)
+			app.Logger().Info("Indexer heartbeat", "block", currentBlock.Load(), "batches", batchCount)
+
 		case <-stream.Done():
-			app.Logger().Info("Stream complete, reconnecting")
-			return nil // outer loop restarts
+			log.Printf("[indexer] stream done at block %d — reconnecting", currentBlock.Load())
+			return nil
 		}
 	}
 }
@@ -234,6 +297,11 @@ func processBatch(app core.App, res *types.QueryResponse) error {
 			bn := blk.Number.Uint64()
 			acc := getAcc(bn)
 
+			// skip if already persisted (indexer restart reprocessing same range)
+			if existing, _ := txApp.FindRecordsByFilter("block_stats", "block_number = {:n}", "", 1, 0, map[string]any{"n": bn}); len(existing) > 0 {
+				continue
+			}
+
 			avgFee := new(big.Int)
 			if acc.txCount > 0 && acc.totalFee.Sign() > 0 {
 				avgFee.Div(acc.totalFee, big.NewInt(int64(acc.txCount)))
@@ -314,7 +382,15 @@ func saveBlock(app core.App, blk *types.Block) {
 
 	if err := app.Save(r); err != nil {
 		app.Logger().Error("Failed to save block", "number", blk.Number.Uint64(), "error", err)
+		return
 	}
+
+	app.Logger().Debug("Block", "number", blk.Number.Uint64(), "hash", func() string {
+		if blk.Hash != nil {
+			return blk.Hash.Hex()[:10] + "…"
+		}
+		return ""
+	}())
 }
 
 // saveTransaction saves the transaction and returns the fee in wei (for stats accumulation).
@@ -452,6 +528,14 @@ func saveTransfer(app core.App, log *types.Log) *big.Int {
 		return nil
 	}
 
+	app.Logger().Debug("Transfer",
+		"token", symbol,
+		"amount", stablecoinHuman(amountRaw),
+		"from", from.Hex()[:10]+"…",
+		"to", to.Hex()[:10]+"…",
+		"tx", txHash[:10]+"…",
+	)
+
 	// update wallet graph edge
 	upsertWalletEdge(app, from.Hex(), to.Hex(), amountRaw, log.BlockNumber)
 
@@ -484,7 +568,19 @@ func saveCCTPEvent(app core.App, log *types.Log, protocol, eventType string) {
 
 	if err := app.Save(r); err != nil {
 		app.Logger().Error("Failed to save cctp event", "error", err)
+		return
 	}
+
+	app.Logger().Debug("CCTP event",
+		"type", eventType,
+		"tx", log.TransactionHash.Hex()[:10]+"…",
+		"block", func() uint64 {
+			if log.BlockNumber != nil {
+				return log.BlockNumber.Uint64()
+			}
+			return 0
+		}(),
+	)
 }
 
 func saveGatewayEvent(app core.App, log *types.Log) {
@@ -509,7 +605,10 @@ func saveGatewayEvent(app core.App, log *types.Log) {
 
 	if err := app.Save(r); err != nil {
 		app.Logger().Error("Failed to save gateway event", "error", err)
+		return
 	}
+
+	app.Logger().Debug("Gateway event", "tx", log.TransactionHash.Hex()[:10]+"…")
 }
 
 func saveFxEvent(app core.App, log *types.Log) {
@@ -533,7 +632,10 @@ func saveFxEvent(app core.App, log *types.Log) {
 
 	if err := app.Save(r); err != nil {
 		app.Logger().Error("Failed to save fx event", "error", err)
+		return
 	}
+
+	app.Logger().Debug("FX swap event", "tx", log.TransactionHash.Hex()[:10]+"…")
 }
 
 // upsertWalletEdge increments the edge (from→to) in the wallet graph.
@@ -572,6 +674,40 @@ func upsertWalletEdge(app core.App, from, to string, amount *big.Int, blockNumbe
 }
 
 // ── Cursor management ─────────────────────────────────────────────────────────
+
+// arcBlocksPerDay is a conservative estimate based on Arc's ~1 second block time.
+const arcBlocksPerDay = uint64(86_400)
+
+// resolveStartBlock returns the block to stream from.
+// If a cursor exists in the DB we resume from there. On a fresh start we fetch
+// the current chain tip and walk back 7 days so we don't blow the free-tier
+// Envio soft limits (100k events / 5GB) by replaying the entire chain history.
+func resolveStartBlock(ctx context.Context, app core.App, client interface {
+	GetHeight(context.Context) (*big.Int, error)
+}) uint64 {
+	last := getLastIndexedBlock(app)
+	if last > 0 {
+		app.Logger().Info("Resuming indexer from saved cursor", "from_block", last)
+		return last
+	}
+
+	height, err := client.GetHeight(ctx)
+	if err != nil || height == nil {
+		app.Logger().Warn("Could not fetch chain height, starting from block 0", "error", err)
+		return 0
+	}
+
+	tip := height.Uint64()
+	lookback := 7 * arcBlocksPerDay
+	start := uint64(0)
+	if tip > lookback {
+		start = tip - lookback
+	}
+
+	app.Logger().Info("Fresh start — beginning 7 days behind chain tip",
+		"tip", tip, "from_block", start, "lookback_blocks", lookback)
+	return start
+}
 
 func getLastIndexedBlock(app core.App) uint64 {
 	records, err := app.FindRecordsByFilter("indexer_meta", "key = 'lastBlock'", "", 1, 0)
