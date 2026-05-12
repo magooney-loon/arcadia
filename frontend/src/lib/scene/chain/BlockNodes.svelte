@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { T } from '@threlte/core';
+	import { T, useTask } from '@threlte/core';
 	import * as THREE from 'three';
 	import type { Block } from '$lib/api/chain/types.js';
 
@@ -10,21 +10,37 @@
 	let { blocks }: Props = $props();
 
 	const MAX = 100;
+	const HELIX_RADIUS = 0.65;
+	const HELIX_TURNS = 2;
+	const Z_FRONT = 4;
+	const Z_SPAN = 8;
+
 	const dummy = new THREE.Object3D();
 	const col = new THREE.Color();
 
 	let meshRef = $state<THREE.InstancedMesh | undefined>();
+	let linesRef = $state<THREE.LineSegments | undefined>();
+	let t = 0;
 
-	// Utilization 0% → cool blue (hue 0.583) — 100% → hot orange (hue 0.069)
-	function heatColor(util: number): THREE.Color {
-		const t = Math.max(0, Math.min((util ?? 0) / 100, 1));
-		const hue = 0.583 - t * 0.514;
-		return col.setHSL(hue, 0.9, 0.65);
+	/** Heat color with age-based dimming. ageFactor 1=newest, 0=oldest */
+	function heatColor(util: number, ageFactor: number): THREE.Color {
+		const u = Math.max(0, Math.min((util ?? 0) / 100, 1));
+		const hue = 0.583 - u * 0.514;
+		const lightness = 0.18 + ageFactor * 0.52;
+		return col.setHSL(hue, 0.85, lightness);
 	}
 
-	// Scale: base 0.07, grows with tx_count up to 0.17
+	/** Scale: base 0.08, grows with tx_count up to 0.26 */
 	function nodeScale(txCount: number): number {
-		return 0.07 + Math.min((txCount ?? 0) / 80, 1) * 0.1;
+		return 0.08 + Math.min((txCount ?? 0) / 60, 1) * 0.18;
+	}
+
+	/** Helix position for block at index i out of count total */
+	function helixPos(i: number, count: number): [number, number, number] {
+		const frac = count > 1 ? i / (count - 1) : 0;
+		const z = Z_FRONT - frac * Z_SPAN;
+		const angle = frac * HELIX_TURNS * Math.PI * 2;
+		return [HELIX_RADIUS * Math.cos(angle), HELIX_RADIUS * Math.sin(angle), z];
 	}
 
 	$effect(() => {
@@ -33,24 +49,81 @@
 		const count = Math.min(blocks.length, MAX);
 		meshRef.count = count;
 
+		const hasLines = linesRef && count >= 2;
+		const linePositions = hasLines ? new Float32Array((count - 1) * 6) : null;
+		const lineColors = hasLines ? new Float32Array((count - 1) * 6) : null;
+
 		for (let i = 0; i < count; i++) {
 			const b = blocks[i];
-			// Most recent (i=0) at z=+3 (front of sphere), oldest at z=-3 (back)
-			const z = 3 - (i / Math.max(count - 1, 1)) * 6;
-			dummy.position.set(0, 0, z);
+			const ageFactor = 1 - i / Math.max(count - 1, 1);
+			const [x, y, z] = helixPos(i, count);
+
+			dummy.position.set(x, y, z);
 			dummy.scale.setScalar(nodeScale(b.tx_count));
 			dummy.updateMatrix();
 			meshRef.setMatrixAt(i, dummy.matrix);
-			meshRef.setColorAt(i, heatColor(b.utilization_pct ?? 0));
+
+			const c = heatColor(b.utilization_pct ?? 0, ageFactor);
+			meshRef.setColorAt(i, c);
+
+			// Chain link segment: block i → block i+1
+			if (linePositions && lineColors && i < count - 1) {
+				const [nx, ny, nz] = helixPos(i + 1, count);
+				const idx = i * 6;
+				linePositions[idx] = x;
+				linePositions[idx + 1] = y;
+				linePositions[idx + 2] = z;
+				linePositions[idx + 3] = nx;
+				linePositions[idx + 4] = ny;
+				linePositions[idx + 5] = nz;
+				lineColors[idx] = c.r;
+				lineColors[idx + 1] = c.g;
+				lineColors[idx + 2] = c.b;
+				lineColors[idx + 3] = c.r;
+				lineColors[idx + 4] = c.g;
+				lineColors[idx + 5] = c.b;
+			}
 		}
 
 		meshRef.instanceMatrix.needsUpdate = true;
 		if (meshRef.instanceColor) meshRef.instanceColor.needsUpdate = true;
+
+		// Push chain link geometry to GPU
+		if (linesRef && linePositions && lineColors) {
+			const geom = linesRef.geometry;
+			geom.setAttribute('position', new THREE.BufferAttribute(linePositions, 3));
+			geom.setAttribute('color', new THREE.BufferAttribute(lineColors, 3));
+			geom.setDrawRange(0, (count - 1) * 2);
+			geom.computeBoundingSphere();
+		}
+	});
+
+	// Pulse the newest block (index 0) — "heartbeat" of the chain
+	useTask((delta: number) => {
+		if (!meshRef || blocks.length === 0) return;
+		t += delta * 2.5;
+
+		const b = blocks[0];
+		const count = Math.min(blocks.length, MAX);
+		const [x, y, z] = helixPos(0, count);
+		const scale = nodeScale(b.tx_count) * (1 + Math.sin(t) * 0.15);
+
+		dummy.position.set(x, y, z);
+		dummy.scale.setScalar(scale);
+		dummy.updateMatrix();
+		meshRef.setMatrixAt(0, dummy.matrix);
+		meshRef.instanceMatrix.needsUpdate = true;
 	});
 </script>
 
-<!-- Block nodes — InstancedMesh, one sphere per block, colored by utilization -->
+<!-- Chain links connecting consecutive blocks -->
+<T.LineSegments bind:ref={linesRef}>
+	<T.BufferGeometry />
+	<T.LineBasicMaterial vertexColors transparent opacity={0.4} />
+</T.LineSegments>
+
+<!-- Block nodes — icosahedrons, lit by scene lights, heat-colored -->
 <T.InstancedMesh bind:ref={meshRef} args={[undefined, undefined, MAX]}>
-	<T.SphereGeometry args={[1, 8, 6]} />
-	<T.MeshBasicMaterial />
+	<T.IcosahedronGeometry args={[1, 1]} />
+	<T.MeshStandardMaterial metalness={0.3} roughness={0.5} />
 </T.InstancedMesh>
