@@ -116,6 +116,13 @@ var (
 
 	// ERC-8183 AgenticCommerce reference implementation.
 	TopicJobCreated = crypto.Keccak256Hash([]byte("JobCreated(uint256,address,address,address,uint256,address)"))
+
+	// FxEscrow (StableFX) — verified from implementation ABI at 0x721eAFa9C1e38DD7fFf81d30ea1a5500b37Cf658
+	TopicTradeRecorded      = crypto.Keccak256Hash([]byte("TradeRecorded(uint256,bytes32)"))
+	TopicMakerFunded        = crypto.Keccak256Hash([]byte("MakerFunded(uint256,address)"))
+	TopicTakerFunded        = crypto.Keccak256Hash([]byte("TakerFunded(uint256,address)"))
+	TopicTradeStatusChanged = crypto.Keccak256Hash([]byte("TradeStatusChanged(uint256,address,uint8)"))
+	TopicFeesProcessed      = crypto.Keccak256Hash([]byte("FeesProcessed(uint256,uint256,uint256)"))
 )
 
 // ── Environment variables ─────────────────────────────────────────────────────

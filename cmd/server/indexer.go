@@ -1033,11 +1033,14 @@ func routeLog(app core.App, log *types.Log) (*big.Int, error) {
 	case TopicJobCreated:
 		return nil, saveAgentJobCreated(app, log)
 
+	case TopicTradeRecorded, TopicMakerFunded, TopicTakerFunded, TopicTradeStatusChanged, TopicFeesProcessed:
+		if addr == AddrFxEscrow {
+			return nil, saveFxEvent(app, log)
+		}
+
 	default:
 		if addr == AddrGatewayWallet || addr == AddrGatewayMinter {
 			return nil, saveGatewayEvent(app, log)
-		} else if addr == AddrFxEscrow {
-			return nil, saveFxEvent(app, log)
 		}
 	}
 	return nil, nil
@@ -1165,30 +1168,104 @@ func saveGatewayEvent(app core.App, log *types.Log) error {
 	return nil
 }
 
-func saveFxEvent(app core.App, log *types.Log) error {
-	if log.TransactionHash == nil || log.LogIndex == nil {
-		return nil
-	}
-	existing, err := app.FindRecordsByFilter("fx_swaps",
-		"tx_hash = {:h} && log_index = {:i}", "", 1, 0,
-		map[string]any{"h": log.TransactionHash.Hex(), "i": *log.LogIndex})
+// fxUpsert finds or creates the fx_swaps record for tradeID, then calls update(r) and saves it.
+func fxUpsert(app core.App, tradeID string, update func(*core.Record)) error {
+	existing, err := app.FindRecordsByFilter("fx_swaps", "trade_id = {:id}", "", 1, 0, map[string]any{"id": tradeID})
 	if err != nil {
-		return fmt.Errorf("find fx event %s/%d: %w", log.TransactionHash.Hex(), *log.LogIndex, err)
+		return fmt.Errorf("find fx trade %s: %w", tradeID, err)
 	}
+	var r *core.Record
 	if len(existing) > 0 {
+		r = existing[0]
+	} else {
+		r = core.NewRecord(mustCollection(app, "fx_swaps"))
+		r.Set("trade_id", tradeID)
+		r.Set("status", "created")
+	}
+	update(r)
+	if err := app.Save(r); err != nil {
+		return fmt.Errorf("save fx trade %s: %w", tradeID, err)
+	}
+	return nil
+}
+
+func saveFxEvent(app core.App, log *types.Log) error {
+	if log.Topic0 == nil || log.Topic1 == nil {
 		return nil
 	}
 
-	r := core.NewRecord(mustCollection(app, "fx_swaps"))
-	r.Set("tx_hash", log.TransactionHash.Hex())
-	if log.BlockNumber != nil {
-		r.Set("block_number", log.BlockNumber.Uint64())
-	}
-	r.Set("log_index", *log.LogIndex)
-	r.Set("status", "created") // refine once FxEscrow ABI is confirmed
+	// All FxEscrow events have trade ID as topic1 (indexed uint256)
+	tradeID := new(big.Int).SetBytes(log.Topic1.Bytes()).String()
 
-	if err := app.Save(r); err != nil {
-		return fmt.Errorf("save fx event %s/%d: %w", log.TransactionHash.Hex(), *log.LogIndex, err)
+	switch *log.Topic0 {
+	case TopicTradeRecorded:
+		// TradeRecorded(uint256 indexed id, bytes32 indexed quoteId)
+		if log.Topic2 == nil {
+			return nil
+		}
+		quoteID := log.Topic2.Hex()
+		return fxUpsert(app, tradeID, func(r *core.Record) {
+			r.Set("quote_id", quoteID)
+			r.Set("status", "created")
+			if log.BlockNumber != nil {
+				r.Set("block_number", log.BlockNumber.Uint64())
+			}
+			if log.TransactionHash != nil {
+				r.Set("tx_hash", log.TransactionHash.Hex())
+			}
+		})
+
+	case TopicMakerFunded:
+		// MakerFunded(uint256 indexed id, address indexed maker)
+		if log.Topic2 == nil {
+			return nil
+		}
+		maker := addressFromTopic(log.Topic2)
+		return fxUpsert(app, tradeID, func(r *core.Record) {
+			r.Set("maker", maker)
+			if r.GetString("status") == "taker_funded" {
+				r.Set("status", "maker_funded")
+			}
+		})
+
+	case TopicTakerFunded:
+		// TakerFunded(uint256 indexed id, address indexed taker)
+		if log.Topic2 == nil {
+			return nil
+		}
+		taker := addressFromTopic(log.Topic2)
+		return fxUpsert(app, tradeID, func(r *core.Record) {
+			r.Set("taker", taker)
+			r.Set("status", "taker_funded")
+		})
+
+	case TopicTradeStatusChanged:
+		// TradeStatusChanged(uint256 indexed id, address indexed actor, uint8 newStatus)
+		// newStatus is ABI-encoded in data: pad-left uint8
+		if log.Data == nil || len(*log.Data) < 32 {
+			return nil
+		}
+		statusCode := int(new(big.Int).SetBytes((*log.Data)[:32]).Int64())
+		statusStr := "settled"
+		if statusCode == 3 {
+			statusStr = "cancelled"
+		}
+		return fxUpsert(app, tradeID, func(r *core.Record) {
+			r.Set("status_code", statusCode)
+			r.Set("status", statusStr)
+		})
+
+	case TopicFeesProcessed:
+		// FeesProcessed(uint256 indexed id, uint256 takerFee, uint256 makerFee)
+		if log.Data == nil || len(*log.Data) < 64 {
+			return nil
+		}
+		takerFee := new(big.Int).SetBytes((*log.Data)[:32]).String()
+		makerFee := new(big.Int).SetBytes((*log.Data)[32:64]).String()
+		return fxUpsert(app, tradeID, func(r *core.Record) {
+			r.Set("taker_fee", takerFee)
+			r.Set("maker_fee", makerFee)
+		})
 	}
 
 	return nil

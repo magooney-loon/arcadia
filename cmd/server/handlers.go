@@ -236,16 +236,38 @@ func crosschainHandler(c *core.RequestEvent) error {
 	})
 }
 
-// API_DESC Recent StableFX USDC↔EURC swap events — filterable by status
+// API_DESC StableFX trades — filterable by status, maker, taker, or quote_id
 // API_TAGS FX
 func fxHandler(c *core.RequestEvent) error {
 	limit, offset := limitOffset(c)
 
 	filter := ""
 	params := map[string]any{}
+
 	if status := qp(c, "status", ""); status != "" {
 		filter = "status = {:s}"
 		params["s"] = status
+	}
+	if maker := qp(c, "maker", ""); maker != "" {
+		if filter != "" {
+			filter += " && "
+		}
+		filter += "maker = {:m}"
+		params["m"] = maker
+	}
+	if taker := qp(c, "taker", ""); taker != "" {
+		if filter != "" {
+			filter += " && "
+		}
+		filter += "taker = {:t}"
+		params["t"] = taker
+	}
+	if quoteID := qp(c, "quote_id", ""); quoteID != "" {
+		if filter != "" {
+			filter += " && "
+		}
+		filter += "quote_id = {:q}"
+		params["q"] = quoteID
 	}
 
 	records, err := c.App.FindRecordsByFilter("fx_swaps", filter, "-block_number", limit, offset, params)
@@ -253,8 +275,8 @@ func fxHandler(c *core.RequestEvent) error {
 		return c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error()})
 	}
 	return c.JSON(http.StatusOK, map[string]any{
-		"swaps": recordsToMaps(records),
-		"count": len(records),
+		"trades": recordsToMaps(records),
+		"count":  len(records),
 	})
 }
 
