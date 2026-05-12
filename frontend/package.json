@@ -36,6 +36,7 @@
 		"@threlte/core": "^8.5.14",
 		"@threlte/extras": "^9.17.1",
 		"@types/three": "^0.184.1",
+		"d3-force-3d": "^3.0.6",
 		"pocketbase": "^0.26.9",
 		"three": "^0.184.0"
 	}

@@ -4,11 +4,13 @@
 	import SceneLighting from './SceneLighting.svelte';
 	import ArcLogotype from './core/ArcLogotype.svelte';
 	import ChainSpine from './chain/ChainSpine.svelte';
+	import WalletGraph from './graph/WalletGraph.svelte';
 </script>
 
 <Canvas>
 	<SceneCamera />
 	<SceneLighting />
-	<ArcLogotype />
+	<WalletGraph />
 	<ChainSpine />
+	<ArcLogotype />
 </Canvas>

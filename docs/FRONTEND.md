@@ -99,11 +99,10 @@ All 12 REST endpoints are implemented, typed, and stored. Types match `collectio
 ├── <ChainSpine>           ✅  Fetches 50 blocks on mount
 │   └── <BlockNodes>       ✅  InstancedMesh, Z-axis spine, utilization heat colour
 │
-├── <WalletGraph>              THE CENTRAL VISUAL — force-directed neural graph of all wallet activity
-│   ├── <WalletNodes>          InstancedMesh — all active wallets, force-laid in 3D spherical cluster
-│   ├── <AgentNodes>           Green-glowing subset, pulse speed ∝ TPS, scale ∝ usdc_spent_fees
-│   ├── <TransferEdges>        LineSegments — the "wireframe" of the brain, opacity ∝ total_usdc
-│   └── <JobArcs>              Curved lines employer↔worker (amber)
+├── <WalletGraph>          ✅  THE CENTRAL VISUAL — force-directed neural graph of all wallet activity
+│   ├── <TransferEdges>    ✅  LineSegments — the "wireframe" of the brain, brightness ∝ total_usdc
+│   ├── <WalletNodes>      ✅  InstancedMesh — all active wallets, force-laid in 3D spherical cluster
+│   └── <AgentNodes>       ✅  Green emissive subset, pulse animation, stronger repulsion → surface
 │
 ├── <CrosschainArrows>         Bezier arcs entering the graph from outside (CCTP/Gateway)
 │
@@ -209,10 +208,10 @@ src/
     │   │   └── BlockNodes.svelte  ✅ InstancedMesh Z-spine, heat colour
     │   │
     │   ├── graph/                    ← THE CENTRAL VISUAL
-    │   │   ├── WalletGraph.svelte
-    │   │   ├── WalletNodes.svelte
-    │   │   ├── AgentNodes.svelte
-    │   │   ├── TransferEdges.svelte
+    │   │   ├── WalletGraph.svelte    ✅ Fetches edges + agents, runs simulation
+    │   │   ├── WalletNodes.svelte    ✅ Non-agent wallet InstancedMesh
+    │   │   ├── AgentNodes.svelte     ✅ Green emissive agent InstancedMesh + pulse
+    │   │   ├── TransferEdges.svelte  ✅ LineSegments, brightness ∝ total_usdc
     │   │   └── JobArcs.svelte
     │   │
     │   ├── particles/
@@ -234,7 +233,7 @@ src/
     │   └── WalletInspector.svelte
     │
     ├── scene-state/
-    │   ├── layout.svelte.ts       d3-force-3d simulation → node x/y/z positions
+    │   ├── layout.svelte.ts       ✅ d3-force-3d simulation → node x/y/z positions (spherical boundary)
     │   ├── particles.svelte.ts    ring buffer of live transfers for particle spawning
     │   ├── layers.svelte.ts       boolean toggles for each visual layer
     │   └── selection.svelte.ts    currently selected wallet node
@@ -313,19 +312,25 @@ Target: 60fps on mid-range hardware with all layers active.
 - ~~`ArcSphere` — wireframe globe, hex core~~ → **Removed.** Replaced by data-driven `WalletGraph` (Phase 3)
 - `ArcLogotype` — Text3DGeometry "ARCADIA" extracted as standalone brand anchor
 
-### Phase 2 — Chain spine ✅ (updated — static axle removed)
+### Phase 2 — Chain spine ✅ (upgraded — helix layout + chain links)
 - `ChainSpine` fetches 50 blocks on mount
-- `BlockNodes` InstancedMesh along Z axis (z=+3 most recent → z=-3 oldest)
-- Utilization heat colour (blue→orange via HSL)
-- Node scale proportional to tx_count
-- ~~Faint axle cylinder~~ → **Removed.** No static decorative meshes.
+- `BlockNodes` InstancedMesh in DNA **helix layout** (2 turns over Z +4 → -4, radius 0.65)
+- IcosahedronGeometry (detail 1) with MeshStandardMaterial — lit by scene lights
+- Utilization heat colour (blue→orange via HSL) with age-based dimming (newest bright, oldest dim)
+- Node scale 0.08–0.26 proportional to tx_count
+- **Chain links** — LineSegments connecting consecutive blocks, vertex-colored by heat
+- Head block pulses ±15% ("heartbeat") via useTask
+- ~~Faint axle cylinder~~ → **Removed.** Chain links ARE the spine now.
 
-### Phase 3 — Wallet graph ← THE CENTRAL VISUAL, replaces the old static sphere
-- Install `d3-force-3d`
-- `scene-state/layout.svelte.ts` — force simulation on wallet edges with spherical boundary
-- `WalletGraph` / `WalletNodes` InstancedMesh — all wallets, neural graph layout
-- `TransferEdges` LineSegments — these ARE the "wireframe" of the brain
-- `AgentNodes` green glow + pulse (pulse speed ∝ TPS, scale ∝ usdc_spent_fees)
+### Phase 3 — Wallet graph ✅ THE CENTRAL VISUAL — the "brain"
+- `d3-force-3d` installed
+- `scene-state/layout.svelte.ts` — force simulation on wallet edges with spherical boundary constraint (radius 3.0, radial force at 2.1)
+- `WalletGraph` container — fetches 500 edges + 200 agents on mount, runs simulation
+- `WalletNodes` InstancedMesh (pool 5000) — white IcosahedronGeometry, scale by txCount
+- `TransferEdges` LineSegments — the "wireframe" of the brain, brightness ∝ total_usdc (HSL lightness 0.15–0.50)
+- `AgentNodes` InstancedMesh (pool 500) — green emissive, scale by txCount, pulse ±12% at 1.8 rad/s
+- Agent nodes get stronger repulsion (charge -20 vs -6) → float to graph surface
+- Link strength ∝ tx_count (more active connections pull nodes closer)
 
 ### Phase 4 — Particles
 - `scene-state/particles.svelte.ts` ring buffer
