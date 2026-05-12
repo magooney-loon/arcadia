@@ -132,6 +132,43 @@ func logIndexerHeartbeat(ctx context.Context, app core.App, client interface {
 	}
 }
 
+func newIndexerQuery(fromBlock, toBlock uint64) *types.Query {
+	return &types.Query{
+		FromBlock:        new(big.Int).SetUint64(fromBlock),
+		ToBlock:          new(big.Int).SetUint64(toBlock),
+		IncludeAllBlocks: true,
+		FieldSelection: types.FieldSelection{
+			Block: []string{
+				"number", "hash", "parent_hash", "timestamp",
+				"gas_used", "gas_limit", "base_fee_per_gas", "miner", "size",
+			},
+			Transaction: []string{
+				"hash", "block_number", "transaction_index",
+				"from", "to", "value", "nonce", "input",
+				"gas_price", "gas_used", "effective_gas_price",
+				"type", "contract_address",
+			},
+			Log: []string{
+				"block_number", "transaction_hash", "log_index",
+				"address", "topic0", "topic1", "topic2", "topic3", "data",
+			},
+		},
+		Logs: []types.LogSelection{
+			{Topics: [][]common.Hash{{TopicTransfer}}},
+			{
+				Address: []common.Address{AddrCCTPTokenMessenger},
+				Topics:  [][]common.Hash{{TopicDepositForBurn}},
+			},
+			{
+				Address: []common.Address{AddrCCTPMessageTransmitter},
+				Topics:  [][]common.Hash{{TopicMessageReceived}},
+			},
+			{Address: []common.Address{AddrGatewayWallet, AddrGatewayMinter}},
+			{Address: []common.Address{AddrFxEscrow}},
+		},
+	}
+}
+
 func runIndexer(app core.App, attempt int) error {
 	ctx := context.Background()
 
@@ -173,61 +210,6 @@ func runIndexer(app core.App, attempt int) error {
 	log.Printf("[indexer] streaming from block %d", fromBlock)
 	recordIndexerEvent(app, "info", "stream_start", "streaming from saved start block", indexerEventFields{"attempt": attempt, "block": fromBlock})
 
-	query := &types.Query{
-		FromBlock:        new(big.Int).SetUint64(fromBlock),
-		ToBlock:          new(big.Int).SetUint64(^uint64(0)), // stream to chain tip indefinitely
-		IncludeAllBlocks: true,
-		FieldSelection: types.FieldSelection{
-			Block: []string{
-				"number", "hash", "parent_hash", "timestamp",
-				"gas_used", "gas_limit", "base_fee_per_gas", "miner", "size",
-			},
-			Transaction: []string{
-				"hash", "block_number", "transaction_index",
-				"from", "to", "value", "nonce", "input",
-				"gas_price", "gas_used", "effective_gas_price",
-				"type", "contract_address",
-			},
-			Log: []string{
-				"block_number", "transaction_hash", "log_index",
-				"address", "topic0", "topic1", "topic2", "topic3", "data",
-			},
-		},
-		Logs: []types.LogSelection{
-			{Topics: [][]common.Hash{{TopicTransfer}}},
-			{
-				Address: []common.Address{AddrCCTPTokenMessenger},
-				Topics:  [][]common.Hash{{TopicDepositForBurn}},
-			},
-			{
-				Address: []common.Address{AddrCCTPMessageTransmitter},
-				Topics:  [][]common.Hash{{TopicMessageReceived}},
-			},
-			{Address: []common.Address{AddrGatewayWallet, AddrGatewayMinter}},
-			{Address: []common.Address{AddrFxEscrow}},
-		},
-	}
-
-	streamOpts := &options.StreamOptions{
-		Concurrency: big.NewInt(1),   // single in-flight request — avoids 429 bursts
-		BatchSize:   big.NewInt(200), // blocks per batch; small enough for free tier
-	}
-
-	log.Println("[indexer] creating stream...")
-	stream, err := client.Stream(ctx, query, streamOpts)
-	if err != nil {
-		return fmt.Errorf("failed to create stream: %w", err)
-	}
-
-	// Subscribe() is blocking — it does the initial GetArrow fetch then calls
-	// g.Wait() which blocks until the worker finishes. Run it in a goroutine
-	// and forward its return value so our select loop can detect fatal errors.
-	subErrCh := make(chan error, 1)
-	go func() {
-		log.Println("[indexer] Subscribe() starting (initial fetch + worker)...")
-		subErrCh <- stream.Subscribe()
-	}()
-
 	var currentBlock atomic.Uint64
 	currentBlock.Store(fromBlock)
 	var completedBatches atomic.Uint64
@@ -259,120 +241,122 @@ func runIndexer(app core.App, attempt int) error {
 		}
 	}()
 
-	log.Println("[indexer] event loop running — waiting for first batch")
+	log.Println("[indexer] explicit GetArrow loop running")
 
 	for {
-		select {
-		case subErr := <-subErrCh:
-			if subErr != nil {
-				errMsg := subErr.Error()
-				if strings.Contains(errMsg, "429") {
-					log.Printf("[indexer] 429 rate-limited after %d batches at block %d — handing off to backoff", completedBatches.Load(), currentBlock.Load())
-				} else {
-					log.Printf("[indexer] Subscribe() error after %d batches at block %d: %v", completedBatches.Load(), currentBlock.Load(), subErr)
-				}
-				return subErr
-			}
-			// Subscribe() returned nil — stream exhausted its planned range. Restart from cursor.
-			log.Printf("[indexer] Subscribe() finished cleanly after %d batches at block %d — reconnecting", completedBatches.Load(), currentBlock.Load())
-			return nil
+		start := currentBlock.Load()
+		tipCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		tip, tipErr := getChainTip(tipCtx, client)
+		cancel()
+		if tipErr != nil {
+			return fmt.Errorf("fetch chain tip before batch: %w", tipErr)
+		}
+		if start >= tip {
+			time.Sleep(2 * time.Second)
+			continue
+		}
 
-		case res, ok := <-stream.Channel():
-			if !ok {
-				log.Println("[indexer] channel closed")
-				return nil
-			}
-			nextBatch := completedBatches.Load() + 1
-			batchStart := time.Now()
-			processingBatch.Store(nextBatch)
-			processingStartedAtUnixNano.Store(batchStart.UnixNano())
-			log.Printf("[indexer] batch #%d starting | current block %d | blocks=%d txs=%d logs=%d",
-				nextBatch, currentBlock.Load(), len(res.Data.Blocks), len(res.Data.Transactions), len(res.Data.Logs))
-			recordIndexerEvent(app, "info", "batch_start", "started processing indexer batch", indexerEventFields{
-				"attempt":      attempt,
-				"batch":        nextBatch,
-				"block":        currentBlock.Load(),
-				"blocks":       len(res.Data.Blocks),
-				"transactions": len(res.Data.Transactions),
-				"logs":         len(res.Data.Logs),
-			})
-			if err := processBatch(app, res); err != nil {
-				processingBatch.Store(0)
-				processingStartedAtUnixNano.Store(0)
-				log.Printf("[indexer] batch processing error: %v", err)
-				app.Logger().Error("Batch processing error", "error", err)
-				recordIndexerEvent(app, "error", "batch_error", "batch failed; cursor was not advanced", indexerEventFields{
-					"attempt":      attempt,
-					"batch":        nextBatch,
-					"block":        currentBlock.Load(),
-					"blocks":       len(res.Data.Blocks),
-					"transactions": len(res.Data.Transactions),
-					"logs":         len(res.Data.Logs),
-					"error":        err,
-				})
-				return err
-			}
-			if res.NextBlock != nil {
-				next := res.NextBlock.Uint64()
-				currentBlock.Store(next)
-				if err := setLastIndexedBlock(app, next); err != nil {
-					processingBatch.Store(0)
-					processingStartedAtUnixNano.Store(0)
-					recordIndexerEvent(app, "error", "cursor_error", "failed to persist cursor after batch", indexerEventFields{"attempt": attempt, "batch": nextBatch, "block": next, "error": err})
-					return err
-				}
-			}
-			batchCount := completedBatches.Add(1)
-			elapsed := time.Since(batchStart).Milliseconds()
-			lastBatchAtUnixNano.Store(time.Now().UnixNano())
+		toBlock := start + 200
+		if toBlock <= start || toBlock > tip+1 {
+			toBlock = tip + 1
+		}
+
+		nextBatch := completedBatches.Load() + 1
+		batchStart := time.Now()
+		processingBatch.Store(nextBatch)
+		processingStartedAtUnixNano.Store(batchStart.UnixNano())
+		log.Printf("[indexer] batch #%d fetching | range=[%d,%d) | tip=%d | lag=%d", nextBatch, start, toBlock, tip, tip-start)
+
+		res, err := client.GetArrow(ctx, newIndexerQuery(start, toBlock))
+		if err != nil {
 			processingBatch.Store(0)
 			processingStartedAtUnixNano.Store(0)
-			log.Printf("[indexer] batch #%d | block %d | blocks=%d txs=%d logs=%d | %dms",
-				batchCount, currentBlock.Load(),
-				len(res.Data.Blocks), len(res.Data.Transactions), len(res.Data.Logs),
-				elapsed,
-			)
-			app.Logger().Info("Indexer progress",
-				"batch", batchCount,
-				"block", currentBlock.Load(),
-				"duration_ms", elapsed,
-				"blocks", len(res.Data.Blocks),
-				"transactions", len(res.Data.Transactions),
-				"logs", len(res.Data.Logs),
-			)
-			recordIndexerEvent(app, "info", "batch_done", "finished processing indexer batch", indexerEventFields{
+			return fmt.Errorf("fetch batch range [%d,%d): %w", start, toBlock, err)
+		}
+
+		nextBlock := "<nil>"
+		if res.NextBlock != nil {
+			nextBlock = res.NextBlock.String()
+		}
+		log.Printf("[indexer] batch #%d processing | current block %d | next_block=%s | blocks=%d txs=%d logs=%d",
+			nextBatch, start, nextBlock, len(res.Data.Blocks), len(res.Data.Transactions), len(res.Data.Logs))
+		recordIndexerEvent(app, "info", "batch_start", "started processing indexer batch", indexerEventFields{
+			"attempt":      attempt,
+			"batch":        nextBatch,
+			"block":        start,
+			"blocks":       len(res.Data.Blocks),
+			"transactions": len(res.Data.Transactions),
+			"logs":         len(res.Data.Logs),
+		})
+		if err := processBatch(app, res); err != nil {
+			processingBatch.Store(0)
+			processingStartedAtUnixNano.Store(0)
+			log.Printf("[indexer] batch processing error: %v", err)
+			app.Logger().Error("Batch processing error", "error", err)
+			recordIndexerEvent(app, "error", "batch_error", "batch failed; cursor was not advanced", indexerEventFields{
 				"attempt":      attempt,
-				"batch":        batchCount,
-				"block":        currentBlock.Load(),
-				"duration_ms":  elapsed,
+				"batch":        nextBatch,
+				"block":        start,
 				"blocks":       len(res.Data.Blocks),
 				"transactions": len(res.Data.Transactions),
 				"logs":         len(res.Data.Logs),
+				"error":        err,
 			})
-			if batchCount%10 == 0 {
-				app.Logger().Info("Indexer progress",
-					"batch", batchCount,
-					"block", currentBlock.Load(),
-				)
-				recordIndexerEvent(app, "info", "progress", "processed indexer batch", indexerEventFields{
-					"attempt":      attempt,
-					"batch":        batchCount,
-					"block":        currentBlock.Load(),
-					"duration_ms":  elapsed,
-					"blocks":       len(res.Data.Blocks),
-					"transactions": len(res.Data.Transactions),
-					"logs":         len(res.Data.Logs),
-				})
-			}
-			// Pace requests to avoid HyperSync free-tier burst throttling.
-			// 400ms between batches ≈ 2.5 req/s — well within typical fair-use limits.
-			time.Sleep(400 * time.Millisecond)
-			stream.Ack()
-
-		case <-stream.Done():
-			log.Printf("[indexer] stream done at block %d — reconnecting", currentBlock.Load())
-			return nil
+			return err
 		}
+
+		if res.NextBlock == nil {
+			processingBatch.Store(0)
+			processingStartedAtUnixNano.Store(0)
+			return fmt.Errorf("batch range [%d,%d) returned nil next_block", start, toBlock)
+		}
+		next := res.NextBlock.Uint64()
+		if next <= start {
+			processingBatch.Store(0)
+			processingStartedAtUnixNano.Store(0)
+			return fmt.Errorf("batch range [%d,%d) did not advance next_block: %d", start, toBlock, next)
+		}
+
+		currentBlock.Store(next)
+		if err := setLastIndexedBlock(app, next); err != nil {
+			processingBatch.Store(0)
+			processingStartedAtUnixNano.Store(0)
+			recordIndexerEvent(app, "error", "cursor_error", "failed to persist cursor after batch", indexerEventFields{"attempt": attempt, "batch": nextBatch, "block": next, "error": err})
+			return err
+		}
+
+		batchCount := completedBatches.Add(1)
+		elapsed := time.Since(batchStart).Milliseconds()
+		lastBatchAtUnixNano.Store(time.Now().UnixNano())
+		processingBatch.Store(0)
+		processingStartedAtUnixNano.Store(0)
+		log.Printf("[indexer] batch #%d | block %d | range=[%d,%d) | blocks=%d txs=%d logs=%d | %dms",
+			batchCount, currentBlock.Load(), start, toBlock,
+			len(res.Data.Blocks), len(res.Data.Transactions), len(res.Data.Logs),
+			elapsed,
+		)
+		app.Logger().Info("Indexer progress",
+			"batch", batchCount,
+			"block", currentBlock.Load(),
+			"from_block", start,
+			"to_block", toBlock,
+			"duration_ms", elapsed,
+			"blocks", len(res.Data.Blocks),
+			"transactions", len(res.Data.Transactions),
+			"logs", len(res.Data.Logs),
+		)
+		recordIndexerEvent(app, "info", "batch_done", "finished processing indexer batch", indexerEventFields{
+			"attempt":      attempt,
+			"batch":        batchCount,
+			"block":        currentBlock.Load(),
+			"duration_ms":  elapsed,
+			"blocks":       len(res.Data.Blocks),
+			"transactions": len(res.Data.Transactions),
+			"logs":         len(res.Data.Logs),
+		})
+
+		// Pace requests to avoid HyperSync free-tier burst throttling.
+		time.Sleep(400 * time.Millisecond)
 	}
 }
 
