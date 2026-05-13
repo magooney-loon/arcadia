@@ -1,12 +1,23 @@
 <script lang="ts">
 	import '../app.css';
+	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { resolve } from '$app/paths';
 	import favicon from '$lib/assets/favicon.svg';
+	import { stats, fetchStats } from '$lib/stores/stats.svelte';
+	import { health, fetchHealth } from '$lib/stores/health.svelte';
+	import * as fmt from '$lib/fmt.js';
 
 	let { children } = $props();
 
 	let drawerOpen = $state(false);
+
+	onMount(() => {
+		fetchStats();
+		fetchHealth();
+		const id = setInterval(() => { fetchStats(); fetchHealth(); }, 8000);
+		return () => clearInterval(id);
+	});
 
 	const NAV = [
 		{
@@ -82,10 +93,10 @@
 
 		<div class="topbar-meta">
 			<span class="pill"><span class="pulse-dot"></span> arc testnet</span>
-			<span class="pill">head <span class="val">#—</span></span>
-			<span class="pill">tps <span class="val">—</span></span>
-			<span class="pill">block <span class="val">—ms</span></span>
-			<span class="pill">indexer <span class="val acc">·</span> 0 lag</span>
+			<span class="pill">head <span class="val">#{stats.data?.indexed_block ?? '—'}</span></span>
+			<span class="pill">tps <span class="val">{fmt.tps(stats.data?.tps)}</span></span>
+			<span class="pill">block <span class="val">{fmt.ms(stats.data?.block_time_ms)}</span></span>
+			<span class="pill">lag <span class="val {(health.data?.lag_blocks ?? 0) > 50 ? 'warn' : 'acc'}">{health.data?.lag_blocks ?? '—'}</span></span>
 		</div>
 
 		<button class="hamburger" onclick={() => (drawerOpen = true)} aria-label="Open navigation">
@@ -118,11 +129,14 @@
 
 	<!-- Status bar (desktop) -->
 	<footer class="statusbar">
-		<span class="seg"><span class="dot acc"></span> indexer <span class="v ok">live</span></span>
-		<span class="seg">rpc <span class="v">arc.rpc.circle.com</span></span>
-		<span class="seg">finality <span class="v">single-slot</span></span>
+		<span class="seg">
+			<span class="dot {health.data?.syncing ? 'warn' : 'acc'}"></span>
+			indexer <span class="v {health.data?.syncing ? '' : 'ok'}">{health.data?.syncing ? 'syncing' : 'live'}</span>
+		</span>
+		<span class="seg">errors/h <span class="v">{health.data?.errors_1h ?? '—'}</span></span>
+		<span class="seg">batch <span class="v">{health.data?.avg_batch_ms ? Math.round(health.data.avg_batch_ms) + 'ms' : '—'}</span></span>
 		<span class="seg right">v0.4.2-rc1</span>
-		<span class="seg">ws ↔ <span class="v ok">connected</span></span>
+		<span class="seg">fees p50 <span class="v">{fmt.usdc(stats.data?.avg_fee_usdc)}</span></span>
 	</footer>
 </div>
 
