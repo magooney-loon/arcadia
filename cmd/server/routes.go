@@ -88,6 +88,7 @@ func registerV1Routes(router *api.VersionedAPIRouter) {
 	v1.GET("/block/{number}", blockDetailHandler)
 
 	// analytics (pre-aggregated, window-scoped)
+	v1.GET("/analytics/overview", analyticsOverviewHandler)
 	v1.GET("/analytics/fees", analyticsFeesHandler)
 	v1.GET("/analytics/volume", analyticsVolumeHandler)
 	v1.GET("/analytics/bridge_flow", analyticsBridgeFlowHandler)

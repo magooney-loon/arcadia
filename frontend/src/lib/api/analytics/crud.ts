@@ -6,7 +6,9 @@ import type {
 	VolumeResponse,
 	BridgeFlowFilter,
 	BridgeFlowResponse,
-	AgentLeaderboardResponse
+	AgentLeaderboardResponse,
+	OverviewFilter,
+	OverviewResponse
 } from './types.js';
 
 function qs(params: Record<string, string | number | undefined | null>): string {
@@ -40,6 +42,12 @@ export class AnalyticsCrudClient {
 	async agentLeaderboard(limit = 50): Promise<AgentLeaderboardResponse> {
 		const res = await fetch(`${getApiUrl()}/api/v1/analytics/agent_leaderboard${qs({ limit })}`);
 		if (!res.ok) throw new Error(`analytics/agent_leaderboard: ${res.status}`);
+		return res.json();
+	}
+
+	async overview(filter: OverviewFilter = {}): Promise<OverviewResponse> {
+		const res = await fetch(`${getApiUrl()}/api/v1/analytics/overview${qs(filter as Record<string, string | number | undefined | null>)}`);
+		if (!res.ok) throw new Error(`analytics/overview: ${res.status}`);
 		return res.json();
 	}
 }

@@ -6,7 +6,9 @@ import type {
 	VolumeResponse,
 	BridgeFlowFilter,
 	BridgeFlowResponse,
-	AgentLeaderboardResponse
+	AgentLeaderboardResponse,
+	OverviewFilter,
+	OverviewResponse
 } from '../api/analytics/types.js';
 
 const client = new AnalyticsCrudClient();
@@ -35,6 +37,13 @@ export interface AgentLeaderboardState {
 	error: string | null;
 }
 
+export interface OverviewState {
+	data: OverviewResponse | null;
+	loading: boolean;
+	error: string | null;
+}
+
+export const analyticsOverview = $state<OverviewState>({ data: null, loading: false, error: null });
 export const analyticsFees = $state<FeesState>({ data: null, loading: false, error: null });
 export const analyticsVolume = $state<VolumeState>({ data: null, loading: false, error: null });
 export const analyticsBridgeFlow = $state<BridgeFlowState>({ data: null, loading: false, error: null });
@@ -73,6 +82,18 @@ export async function fetchAnalyticsBridgeFlow(filter: BridgeFlowFilter = {}) {
 		analyticsBridgeFlow.error = String(e);
 	} finally {
 		analyticsBridgeFlow.loading = false;
+	}
+}
+
+export async function fetchAnalyticsOverview(filter: OverviewFilter = {}) {
+	analyticsOverview.loading = true;
+	analyticsOverview.error = null;
+	try {
+		analyticsOverview.data = await client.overview(filter);
+	} catch (e) {
+		analyticsOverview.error = String(e);
+	} finally {
+		analyticsOverview.loading = false;
 	}
 }
 

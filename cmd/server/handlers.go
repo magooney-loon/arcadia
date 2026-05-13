@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/core"
 )
 
@@ -874,6 +875,83 @@ func analyticsBridgeFlowHandler(c *core.RequestEvent) error {
 		"outbound_count": countOut,
 		"net_flow":       totalIn - totalOut,
 		"by_chain":       byChain,
+	})
+}
+
+// API_DESC Single-request 24h dashboard summary: transfer count, volume, fees, bridge, agents
+// API_TAGS Stats
+func analyticsOverviewHandler(c *core.RequestEvent) error {
+	window := qp(c, "window", "24h")
+	_, wParams := windowBlockFilter(c.App, window)
+	fromBlock := wParams["from"]
+
+	// Exact transfer count + volume — no row cap
+	var tStats struct {
+		Count  int     `db:"cnt"`
+		Volume float64 `db:"vol"`
+	}
+	_ = c.App.DB().NewQuery(
+		`SELECT COUNT(*) AS cnt, COALESCE(SUM(CAST(amount_human AS REAL)), 0) AS vol
+		 FROM transfers WHERE block_number >= {:from} AND token_symbol != 'OTHER'`).
+		Bind(dbx.Params{"from": fromBlock}).One(&tStats)
+
+	// Block stats rows for fee aggregation + percentiles (5k cap well above any 24h window)
+	bsRows, _ := c.App.FindRecordsByFilter("block_stats",
+		"block_number >= {:from}", "-block_number", 5000, 0, wParams)
+	fees := make([]float64, 0, len(bsRows))
+	var feesTotal, totalTxs, failedTxs float64
+	for _, r := range bsRows {
+		fees = append(fees, parseUSDC(r.GetString("avg_fee_usdc")))
+		feesTotal += parseUSDC(r.GetString("total_fee_usdc"))
+		totalTxs += float64(r.GetInt("tx_count"))
+		failedTxs += float64(r.GetInt("failed_tx_count"))
+	}
+	sort.Float64s(fees)
+	var failedRatio float64
+	if totalTxs > 0 {
+		failedRatio = failedTxs / totalTxs
+	}
+
+	// Bridge inbound (arriving on Arc)
+	var bridgeIn struct {
+		Vol   float64 `db:"vol"`
+		Count int     `db:"cnt"`
+	}
+	_ = c.App.DB().NewQuery(
+		`SELECT COALESCE(SUM(CAST(amount_usdc AS REAL)), 0) AS vol, COUNT(*) AS cnt
+		 FROM crosschain_events WHERE block_number >= {:from} AND destination_domain = 26`).
+		Bind(dbx.Params{"from": fromBlock}).One(&bridgeIn)
+
+	// Bridge outbound (leaving Arc)
+	var bridgeOut struct {
+		Vol   float64 `db:"vol"`
+		Count int     `db:"cnt"`
+	}
+	_ = c.App.DB().NewQuery(
+		`SELECT COALESCE(SUM(CAST(amount_usdc AS REAL)), 0) AS vol, COUNT(*) AS cnt
+		 FROM crosschain_events WHERE block_number >= {:from} AND source_domain = 26 AND destination_domain != 26`).
+		Bind(dbx.Params{"from": fromBlock}).One(&bridgeOut)
+
+	// Total registered agents (not window-scoped — total count)
+	var agentCount struct {
+		Count int `db:"cnt"`
+	}
+	_ = c.App.DB().NewQuery(`SELECT COUNT(*) AS cnt FROM agents`).One(&agentCount)
+
+	return c.JSON(http.StatusOK, map[string]any{
+		"window":                window,
+		"transfers_count":       tStats.Count,
+		"transfer_volume":       tStats.Volume,
+		"fees_total":            feesTotal,
+		"fee_p50":               percentileFloat(fees, 50),
+		"fee_p95":               percentileFloat(fees, 95),
+		"failed_tx_ratio":       failedRatio,
+		"bridge_inbound_vol":    bridgeIn.Vol,
+		"bridge_inbound_count":  bridgeIn.Count,
+		"bridge_outbound_vol":   bridgeOut.Vol,
+		"bridge_outbound_count": bridgeOut.Count,
+		"bridge_net_flow":       bridgeIn.Vol - bridgeOut.Vol,
+		"agent_count":           agentCount.Count,
 	})
 }
 

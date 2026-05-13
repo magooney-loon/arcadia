@@ -86,3 +86,25 @@ export interface AgentLeaderboardResponse {
 	leaderboard: AgentLeaderboardEntry[];
 	count: number;
 }
+
+// ── /analytics/overview ───────────────────────────────────────────────────────
+
+export interface OverviewFilter {
+	window?: Window;
+}
+
+export interface OverviewResponse {
+	window: string;
+	transfers_count: number;
+	transfer_volume: number;
+	fees_total: number;
+	fee_p50: number;
+	fee_p95: number;
+	failed_tx_ratio: number;
+	bridge_inbound_vol: number;
+	bridge_inbound_count: number;
+	bridge_outbound_vol: number;
+	bridge_outbound_count: number;
+	bridge_net_flow: number;
+	agent_count: number;
+}

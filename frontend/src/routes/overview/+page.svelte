@@ -5,10 +5,8 @@
 	import { blocks, transactions, fetchBlocks, fetchTransactions } from '$lib/stores/chain.svelte';
 	import { blockStats, fetchBlockStats } from '$lib/stores/blockStats.svelte';
 	import {
-		analyticsFees,
-		fetchAnalyticsFees,
-		analyticsVolume,
-		fetchAnalyticsVolume,
+		analyticsOverview,
+		fetchAnalyticsOverview,
 		analyticsBridgeFlow,
 		fetchAnalyticsBridgeFlow,
 		analyticsAgentLeaderboard,
@@ -26,8 +24,7 @@
 		refresh();
 		fetchBlockStats(200);
 		fetchAgentLeaderboard(5);
-		fetchAnalyticsFees();
-		fetchAnalyticsVolume();
+		fetchAnalyticsOverview();
 		fetchAnalyticsBridgeFlow();
 		const id = setInterval(refresh, 6000);
 		return () => clearInterval(id);
@@ -92,52 +89,43 @@
 			<div class="value">{fmt.tps(stats.data?.tps)}<span class="unit">tx/s</span></div>
 		</div>
 		<div class="stat">
-			<div class="label">Block time</div>
-			<div class="value">
-				{stats.data?.block_time_ms ? Math.round(stats.data.block_time_ms) : '—'}<span class="unit"
-					>ms</span
-				>
-			</div>
+			<div class="label">Transfers 24h</div>
+			<div class="value">{fmt.num(analyticsOverview.data?.transfers_count)}</div>
 		</div>
 		<div class="stat">
-			<div class="label">Transfers 24h</div>
-			<div class="value">{fmt.num(analyticsVolume.data?.total_transfers)}</div>
+			<div class="label">Volume 24h</div>
+			<div class="value">{fmt.usdc(analyticsOverview.data?.transfer_volume)}</div>
 		</div>
 		<div class="stat">
 			<div class="label">Fees 24h</div>
-			<div class="value">{fmt.usdc(analyticsFees.data?.total_fees)}</div>
+			<div class="value">{fmt.usdc(analyticsOverview.data?.fees_total)}</div>
 		</div>
 		<div class="stat">
-			<div class="label">Bridge net flow</div>
-			<div class="value {(bridgeFlow?.net_flow ?? 0) >= 0 ? '' : 'err'}">
-				{fmt.usdc(bridgeFlow?.net_flow)}
+			<div class="label">Bridge net flow 24h</div>
+			<div class="value {(analyticsOverview.data?.bridge_net_flow ?? 0) >= 0 ? '' : 'err'}">
+				{fmt.usdc(analyticsOverview.data?.bridge_net_flow)}
 			</div>
-			<div class="delta up">24h inbound − outbound</div>
 		</div>
 		<div class="stat">
 			<div class="label">Agents</div>
-			<div class="value">{analyticsAgentLeaderboard.data?.count ?? '—'}</div>
+			<div class="value">{analyticsOverview.data?.agent_count ?? '—'}</div>
 		</div>
 	</div>
 
 	<!-- Fee analytics · stat cards -->
-	{#if analyticsFees.data && analyticsFees.data.block_count > 0}
-		<div class="grid" style="grid-template-columns:repeat(4,1fr);margin-top:12px">
+	{#if analyticsOverview.data}
+		<div class="grid" style="grid-template-columns:repeat(3,1fr);margin-top:12px">
 			<div class="stat">
 				<div class="label">Fee p50</div>
-				<div class="value">{fmt.usdc(analyticsFees.data.avg_fee_p50, 6)}</div>
+				<div class="value" style="color:var(--info)">{fmt.usdc(analyticsOverview.data.fee_p50, 6)}</div>
 			</div>
 			<div class="stat">
 				<div class="label">Fee p95</div>
-				<div class="value">{fmt.usdc(analyticsFees.data.avg_fee_p95, 6)}</div>
-			</div>
-			<div class="stat">
-				<div class="label">Avg block time</div>
-				<div class="value">{fmt.ms(analyticsFees.data.avg_block_time_ms)}</div>
+				<div class="value" style="color:var(--warn)">{fmt.usdc(analyticsOverview.data.fee_p95, 6)}</div>
 			</div>
 			<div class="stat">
 				<div class="label">Failed tx ratio</div>
-				<div class="value">{(analyticsFees.data.failed_tx_ratio * 100).toFixed(2)}%</div>
+				<div class="value" style="color:{analyticsOverview.data.failed_tx_ratio > 0.05 ? 'var(--err)' : 'var(--ok)'}">{(analyticsOverview.data.failed_tx_ratio * 100).toFixed(2)}%</div>
 			</div>
 		</div>
 	{/if}

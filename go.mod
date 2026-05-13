@@ -9,7 +9,10 @@ require (
 	github.com/pocketbase/pocketbase v0.38.0
 )
 
-require github.com/magooney-loon/pb-ext v0.0.0-20260512161344-7da57aaae8d6
+require (
+	github.com/magooney-loon/pb-ext v0.0.0-20260512161344-7da57aaae8d6
+	github.com/pocketbase/dbx v1.12.0
+)
 
 require (
 	capnproto.org/go/capnp/v3 v3.0.1-alpha.2 // indirect
@@ -57,7 +60,6 @@ require (
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/pierrec/lz4/v4 v4.1.15 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
-	github.com/pocketbase/dbx v1.12.0 // indirect
 	github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/shirou/gopsutil v3.21.4-0.20210419000835-c7a38de76ee5+incompatible // indirect
