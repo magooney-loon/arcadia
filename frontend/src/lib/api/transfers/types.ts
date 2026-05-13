@@ -20,6 +20,7 @@ export interface TransfersResponse {
 export interface TransferFilter {
 	limit?: number;
 	offset?: number;
+	block?: string;
 	token?: 'USDC' | 'EURC' | 'USYC' | 'OTHER';
 	from?: string;
 	to?: string;

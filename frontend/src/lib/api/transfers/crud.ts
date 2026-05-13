@@ -12,8 +12,10 @@ function qs(params: Record<string, string | number | undefined>): string {
 
 export class TransfersCrudClient {
 	async list(filter: TransferFilter = {}): Promise<TransfersResponse> {
-		const { limit = 50, offset = 0, ...rest } = filter;
-		const res = await fetch(`${getApiUrl()}/api/v1/transfers${qs({ limit, offset, ...rest })}`);
+		const { limit = 50, offset = 0, block, token, from, to } = filter;
+		const res = await fetch(
+			`${getApiUrl()}/api/v1/transfers${qs({ limit, offset, block, token, from, to })}`
+		);
 		if (!res.ok) throw new Error(`transfers: ${res.status}`);
 		return res.json();
 	}
