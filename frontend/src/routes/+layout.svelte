@@ -61,7 +61,7 @@
 
 	const NAV: { group: string; items: NavItem[] }[] = [
 		{
-			group: 'Live',
+			group: 'Data',
 			items: [
 				{ id: 'overview', label: 'Overview', href: resolve('/overview/') },
 				{ id: 'blocks', label: 'Blocks', href: resolve('/blocks/'), live: false },
@@ -78,7 +78,7 @@
 			]
 		},
 		{
-			group: 'Agents · ERC-8004',
+			group: 'Agents',
 			items: [
 				{ id: 'agents', label: 'Agent registry', href: resolve('/agents/') },
 				{ id: 'jobs', label: 'Job market', href: resolve('/jobs/') },
@@ -112,7 +112,18 @@
 <div class="app">
 	<!-- Logo (desktop) -->
 	<a class="logo" href={resolve('/overview/')}>
-		<div class="logo-mark"></div>
+		<div class="logo-mark">
+			<svg viewBox="0 0 32 32" fill="none" style="width:100%;height:100%"
+				><path
+					d="M16 2A14 14 0 0 0 4.1 22.5L7.8 21A10 10 0 0 1 16 6V2Z"
+					fill="var(--accent)"
+				/><path
+					d="M4.1 22.5A14 14 0 0 0 28 20L24.8 17.5A10 10 0 0 1 7.8 21L4.1 22.5Z"
+					fill="var(--accent)"
+					opacity="0.5"
+				/><circle cx="16" cy="16" r="3" fill="var(--accent)" /></svg
+			>
+		</div>
 		<div class="logo-text">ARCADIA<span class="net">·explorer</span></div>
 	</a>
 
@@ -120,7 +131,18 @@
 	<header class="topbar">
 		<!-- Mobile: logo inline -->
 		<a class="logo-inline" href={resolve('/overview/')} aria-label="Home">
-			<div class="logo-mark" style="width:18px;height:18px"></div>
+			<div class="logo-mark" style="width:18px;height:18px">
+				<svg viewBox="0 0 32 32" fill="none" style="width:100%;height:100%"
+					><path
+						d="M16 2A14 14 0 0 0 4.1 22.5L7.8 21A10 10 0 0 1 16 6V2Z"
+						fill="var(--accent)"
+					/><path
+						d="M4.1 22.5A14 14 0 0 0 28 20L24.8 17.5A10 10 0 0 1 7.8 21L4.1 22.5Z"
+						fill="var(--accent)"
+						opacity="0.5"
+					/><circle cx="16" cy="16" r="3" fill="var(--accent)" /></svg
+				>
+			</div>
 			<span class="logo-text" style="font-size:12px">ARCADIA</span>
 		</a>
 
