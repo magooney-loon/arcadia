@@ -1,6 +1,66 @@
 # arcadia
 
-A real-time streaming blockchain indexer and 3D visualizer for the Arc L1 chain. Built with Go + PocketBase + HyperSync. Indexes every layer of Arc's onchain activity — blocks, transactions, USDC/EURC transfers, internal traces, AI agent registrations, job settlements, cross-chain flows, and derived economic metrics — then streams it live to a 3D frontend via PocketBase websockets.
+A real-time streaming blockchain indexer and UI dashboard for the Arc L1 chain. Built with Go + PocketBase + HyperSync + SvelteKit. Indexes every layer of Arc's onchain activity — blocks, transactions, USDC/EURC/USYC transfers, internal traces, AI agent registrations, job settlements, cross-chain flows, FX swaps, and derived economic metrics — then streams it live to a 3D frontend via PocketBase websockets.
+
+---
+
+## Get Started
+
+```bash
+# Clone the repo
+git clone https://github.com/magooney-loon/arcadia.git
+cd arcadia
+```
+
+Install the **pb-cli** toolchain (used to build and manage the PocketBase extension server):
+
+```bash
+go install github.com/magooney-loon/pb-ext/cmd/pb-cli@latest
+```
+
+Read more about the toolchain and available scripts:  
+**https://github.com/magooney-loon/pb-ext/tree/main/pkg/scripts**
+
+Set your Envio API token (get one at https://envio.dev):
+
+```bash
+export ENVIO_API_TOKEN=your_token_here
+```
+
+Run in dev mode:
+
+```bash
+go run ./cmd/server --dev
+```
+
+Or build and run:
+
+```bash
+go build -o arcadia ./cmd/server
+./arcadia serve
+```
+
+The server starts on `http://127.0.0.1:8090`. PocketBase admin UI is available at `/_/`.
+
+---
+
+## Project Structure
+
+```
+arcadia/
+├── cmd/server/           # Server entry point and all backend code
+│   ├── main.go           # App bootstrap, flags (--dev, --generate-specs-dir, --validate-specs-dir)
+│   ├── config.go         # Arc network constants, contract addresses, event topics, env vars
+│   ├── collections.go    # PocketBase collection schema definitions (14 collections)
+│   ├── routes.go         # Versioned REST API route registration (v1)
+│   ├── handlers.go       # HTTP handler implementations for all API endpoints
+│   ├── indexer.go        # HyperSync indexer loop, batch processing, record upserts
+│   └── jobs.go           # Background cron jobs (health check, event cleanup)
+├── docs/                 # Arc network reference documentation
+├── frontend/             # SvelteKit 3D visualizer frontend (separate build)
+├── go.mod                # Go module (Go 1.25, PocketBase v0.38, pb-ext, HyperSync)
+└── README.md
+```
 
 ---
 
@@ -26,7 +86,7 @@ Durable log of indexer lifecycle, progress, and error events. Auto-cleaned: reco
 |---|---|
 | `timestamp` | Unix seconds |
 | `level` | `debug` / `info` / `warn` / `error` |
-| `event` | Short event key (e.g. `batch_done`, `run_error`) |
+| `event` | Short event key (e.g. `batch_done`, `run_error`, `heartbeat`) |
 | `message` | Human-readable description |
 | `attempt` / `batch` / `block` / `tip` / `lag` | Numeric context fields |
 | `duration_ms` / `blocks` / `transactions` / `logs` | Batch metrics |
@@ -182,23 +242,23 @@ Shows capital entering/leaving Arc via CCTP and Gateway. Arc is CCTP domain **26
 
 | Contract | Address | Events |
 |---|---|---|
-| **TokenMessengerV2** | `0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA` | `DepositForBurn` (USDC exits a chain) |
-| **MessageTransmitterV2** | `0xE737e5cEBEEBa77EFE34D4aa090756590b1CE275` | `MessageReceived` (USDC arrives on Arc) |
+| **TokenMessengerV2** | `0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA` | `DepositForBurn`, `MintAndWithdraw` |
+| **MessageTransmitterV2** | `0xE737e5cEBEEBa77EFE34D4aa090756590b1CE275` | `MessageReceived` |
 | **TokenMinterV2** | `0xb43db544E2c27092c107639Ad201b3dEfAbcF192` | mint/burn execution |
 | **CCTPMessage** | `0xbaC0179bB358A8936169a63408C8481D582390C4` | Message routing |
 
 **Gateway contracts (Arc Testnet):**
 
-| Contract | Address | Purpose |
+| Contract | Address | Events |
 |---|---|---|
-| **GatewayWallet** | `0x0077777d7EBA4688BDeF3E311b846F25870A19B9` | User-facing unified balance |
-| **GatewayMinter** | `0x0022222ABE238Cc2C7Bb1f21003F0a260052475B` | Cross-chain mint/burn handler |
+| **GatewayWallet** | `0x0077777d7EBA4688BDeF3E311b846F25870A19B9` | `Deposited`, `GatewayBurned` |
+| **GatewayMinter** | `0x0022222ABE238Cc2C7Bb1f21003F0a260052475B` | `AttestationUsed` |
 
 | Field | Why |
 |---|---|
 | `tx_hash` + `log_index` | Dedup key |
 | `protocol` | `cctp` / `gateway` |
-| `event_type` | `burn` / `mint` / `deposit` / `withdraw` |
+| `event_type` | `burn` / `mint` / `deposit` / `withdraw` / `attestation_used` |
 | `source_domain` | CCTP domain ID of origin chain |
 | `destination_domain` | CCTP domain ID of destination (Arc = 26) |
 | `amount_usdc` | Transfer size |
@@ -220,6 +280,16 @@ StableFX is Circle's onchain FX engine on Arc. The `FxEscrow` contract settles U
 |---|---|
 | **FxEscrow** | `0x867650F5eAe8df91445971f14d89fd84F0C9a9f8` |
 
+Indexed events (verified from implementation ABI):
+
+| Event | Description |
+|---|---|
+| `TradeRecorded(uint256, bytes32)` | Swap executed on-chain |
+| `MakerFunded(uint256, address)` | Liquidity provider funded |
+| `TakerFunded(uint256, address)` | Swap initiator funded |
+| `TradeStatusChanged(uint256, address, uint8)` | Status transition (created/settled/cancelled) |
+| `FeesProcessed(uint256, uint256, uint256)` | Fee breakdown |
+
 | Field | Why |
 |---|---|
 | `tx_hash` + `log_index` | Dedup key |
@@ -232,8 +302,6 @@ StableFX is Circle's onchain FX engine on Arc. The `FxEscrow` contract settles U
 | `implied_rate` | `buy_amount / sell_amount` — live USDC/EURC rate |
 | `block_number` | Timeline |
 | `status` | `created` / `settled` / `cancelled` |
-
-> Full ABI decode pending confirmation: verify signatures via `testnet.arcscan.app/address/0x867650F5eAe8df91445971f14d89fd84F0C9a9f8`
 
 ---
 
@@ -309,9 +377,11 @@ query := &types.Query{
         {Topics: [][]common.Hash{{TopicTransfer}}},
         // CCTP DepositForBurn — USDC exits a chain
         {Address: []common.Address{AddrCCTPTokenMessenger}, Topics: [][]common.Hash{{TopicDepositForBurn}}},
-        // CCTP MessageReceived — USDC arrives on Arc
+        // CCTP MintAndWithdraw — USDC minted on Arc
+        {Address: []common.Address{AddrCCTPTokenMessenger}, Topics: [][]common.Hash{{TopicMintAndWithdraw}}},
+        // CCTP MessageReceived — cross-chain message arrives on Arc
         {Address: []common.Address{AddrCCTPMessageTransmitter}, Topics: [][]common.Hash{{TopicMessageReceived}}},
-        // Gateway deposits/withdrawals
+        // Gateway deposits, burns, attestations
         {Address: []common.Address{AddrGatewayWallet, AddrGatewayMinter}},
         // StableFX swap lifecycle
         {Address: []common.Address{AddrFxEscrow}},
@@ -370,6 +440,8 @@ AddrAgenticCommerce = "0x0747EEf0706327138c69792bF28Cd525089e4583"
 
 ## Event Signatures (Keccak256 Topics)
 
+All topics are verified against on-chain ABIs unless noted.
+
 ```go
 // ERC-20: Transfer(address indexed from, address indexed to, uint256 value)
 TopicTransfer = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
@@ -377,32 +449,62 @@ TopicTransfer = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b
 // ERC-20: Approval(address indexed owner, address indexed spender, uint256 value)
 TopicApproval = "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925"
 
-// CCTP v2 — DepositForBurn(uint64,address,uint256,address,bytes32,uint32,bytes32,bytes32,uint256,uint32,bytes)
-TopicDepositForBurn = "0x2fa9ca894982930190727e75500a97d8dc500233a5065e0f3126c48fbe0343c0"
+// CCTP v2 — TokenMessengerV2 (verified from impl 0xf07c0ad1)
+// DepositForBurn(address,uint256,address,bytes32,uint32,bytes32,bytes32,uint256,uint32,bytes)
+TopicDepositForBurn = keccak256("DepositForBurn(address,uint256,address,bytes32,uint32,bytes32,bytes32,uint256,uint32,bytes)")
 
-// CCTP v2 — MessageReceived(address,uint32,uint64,bytes32,bytes)
-TopicMessageReceived = "0x58200b4c34ae05ee816d710053fff3ad1bcea173d0113462f6fd5162ab9adca5"
+// CCTP v2 — TokenMessengerV2
+// MintAndWithdraw(address,uint256,address,uint256)
+TopicMintAndWithdraw = keccak256("MintAndWithdraw(address,uint256,address,uint256)")
+
+// CCTP v2 — MessageTransmitterV2 (verified from impl 0xa849059b)
+// MessageReceived(address,uint32,bytes32,bytes32,uint32,bytes)
+TopicMessageReceived = keccak256("MessageReceived(address,uint32,bytes32,bytes32,uint32,bytes)")
+
+// GatewayWallet (verified from impl 0x44eeddc9)
+// Deposited(address,address,address,uint256)
+TopicGatewayDeposited = keccak256("Deposited(address,address,address,uint256)")
+
+// GatewayWallet — outbound bridge (USDC leaving Arc)
+// GatewayBurned(address,address,bytes32,uint32,bytes32,address,uint256,uint256,uint256,uint256)
+TopicGatewayBurned = keccak256("GatewayBurned(address,address,bytes32,uint32,bytes32,address,uint256,uint256,uint256,uint256)")
+
+// GatewayMinter (verified from impl 0x9ef4c7ad) — inbound bridge (USDC arriving on Arc)
+// AttestationUsed(address,address,bytes32,uint32,bytes32,bytes32,uint256)
+TopicAttestationUsed = keccak256("AttestationUsed(address,address,bytes32,uint32,bytes32,bytes32,uint256)")
 
 // ERC-8004 — agent registration = ERC-721 mint from AddrAgentRegistry (reuses TopicTransfer, topic1 = zero)
 TopicAgentRegistered = TopicTransfer
 
-// ERC-8183 — JobCreated(uint256,address,address,address,uint256,address)
-TopicJobCreated = crypto.Keccak256Hash([]byte("JobCreated(uint256,address,address,address,uint256,address)"))
+// ERC-8183 — AgenticCommerce
+// JobCreated(uint256,address,address,address,uint256,address)
+TopicJobCreated = keccak256("JobCreated(uint256,address,address,address,uint256,address)")
 
-// StableFX FxEscrow — SwapCreated, SwapSettled, SwapCancelled (pending ABI confirmation)
+// FxEscrow (StableFX) — verified from implementation ABI
+TopicTradeRecorded      = keccak256("TradeRecorded(uint256,bytes32)")
+TopicMakerFunded        = keccak256("MakerFunded(uint256,address)")
+TopicTakerFunded        = keccak256("TakerFunded(uint256,address)")
+TopicTradeStatusChanged = keccak256("TradeStatusChanged(uint256,address,uint8)")
+TopicFeesProcessed      = keccak256("FeesProcessed(uint256,uint256,uint256)")
 ```
 
 ---
 
 ## REST API
 
-Versioned under `/api/v1`. Default pagination: `limit=50&offset=0`, max `limit=500`. OpenAPI spec auto-generated at startup.
+Versioned under `/api/v1`. Default pagination: `limit=50&offset=0`, max `limit=500`. OpenAPI spec auto-generated at startup (public Swagger UI enabled).
+
+### Core Endpoints
 
 | Method | Path | Description |
 |---|---|---|
 | `GET` | `/api/v1/stats` | Latest block stats + rolling 10-block avg TPS |
-| `GET` | `/api/v1/blocks` | Recent blocks |
+| `GET` | `/api/v1/block_stats` | Historical block stats for time-series charts — `?window=1h\|6h\|24h\|7d\|30d` |
+| `GET` | `/api/v1/blocks` | Recent blocks — `?limit=N` |
+| `GET` | `/api/v1/block/{number}` | Single block detail |
 | `GET` | `/api/v1/transactions` | Recent transactions — `?block=N`, `?from=addr` |
+| `GET` | `/api/v1/tx/{hash}` | Single transaction detail |
+| `GET` | `/api/v1/traces` | Internal traces — `?tx_hash=hash` |
 | `GET` | `/api/v1/transfers` | Token transfers — `?token=USDC\|EURC\|USYC`, `?from=addr`, `?to=addr` |
 | `GET` | `/api/v1/wallet/{address}` | Wallet profile: sent/received transfers + graph edges + agent status |
 | `GET` | `/api/v1/crosschain` | CCTP + Gateway events — `?protocol=cctp\|gateway` |
@@ -411,6 +513,19 @@ Versioned under `/api/v1`. Default pagination: `limit=50&offset=0`, max `limit=5
 | `GET` | `/api/v1/agents/{address}` | Single agent profile + job history |
 | `GET` | `/api/v1/jobs` | Agent job marketplace — `?status=created\|settled\|…` |
 | `GET` | `/api/v1/edges` | Wallet graph edges — `?wallet=addr` |
+| `GET` | `/api/v1/health` | Indexer health: last block, chain tip, lag, sync status, error count, avg batch time |
+| `GET` | `/api/v1/search` | Unified search — `?q=txHash\|address\|blockNumber` |
+
+### Analytics Endpoints
+
+Pre-aggregated, window-scoped analytics for dashboards.
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/v1/analytics/fees` | Fee analytics — `?window=1h\|6h\|24h\|7d\|30d` |
+| `GET` | `/api/v1/analytics/volume` | Transfer volume per token — `?window=…`, whale threshold $10k+ |
+| `GET` | `/api/v1/analytics/bridge_flow` | CCTP + Gateway inflow/outflow per chain — `?window=…` |
+| `GET` | `/api/v1/analytics/agent_leaderboard` | Top agents by job count, fees, volume — `?window=…` |
 
 Everything is also available via PocketBase REST + real-time websockets directly on the collections.
 
@@ -420,7 +535,7 @@ Everything is also available via PocketBase REST + real-time websockets directly
 
 | Job | Schedule | Description |
 |---|---|---|
-| `indexerHealth` | Every minute (`* * * * *`) | Logs indexer cursor and row counts for all collections |
+| `indexerHealth` | Every hour (`0 * * * *`) | Logs indexer cursor and row counts for all collections |
 | `indexerEventsCleanup` | Every hour (`0 * * * *`) | Deletes `indexer_events` records older than 2 hours |
 
 ---
@@ -439,26 +554,30 @@ Everything is also available via PocketBase REST + real-time websockets directly
 9. **Fee heatmap** — per-block USDC fee burn (in real dollars), proving Arc's $0.01 tx cost claim
 10. **Job economy** — ERC-8183 job arcs between employer and worker agent wallets
 
-**Time-series charts (from `block_stats`):**
+**Time-series charts (from `block_stats` + analytics endpoints):**
 - TPS over time
 - Avg USDC fee per tx over time (real USD, unique to Arc)
 - Total USDC / EURC / USYC transferred per block
 - StableFX swap volume and implied USDC/EURC rate over time
 - Active wallets per block
 - Block time distribution (sub-second finality histogram)
-- Cross-chain inflow volume (CCTP + Gateway)
+- Cross-chain inflow/outflow volume per chain (CCTP + Gateway)
 - New contract deployments over time
 - Agent job settlement rate
+- Agent leaderboard (top agents by activity)
 
 ---
 
 ## Stack
 
-- **Indexer**: Go + `github.com/enviodev/hypersync-client-go`
-- **Server framework**: `github.com/magooney-loon/pb-ext` (PocketBase extension with versioned API, job manager, OpenAPI spec gen)
-- **Database + API + Websockets**: PocketBase v0.38 (SQLite under the hood)
-- **Chain**: Arc Testnet — `https://arc-testnet.hypersync.xyz`
-- **Frontend**: 3D visualizer (separate repo)
+| Component | Technology |
+|---|---|
+| **Language** | Go 1.25 |
+| **Indexer** | `github.com/enviodev/hypersync-client-go` |
+| **Server framework** | `github.com/magooney-loon/pb-ext` (PocketBase extension with versioned API, job manager, OpenAPI spec gen) |
+| **Database + API + Websockets** | PocketBase v0.38 (SQLite under the hood) |
+| **Chain** | Arc Testnet — `https://arc-testnet.hypersync.xyz` |
+| **Frontend** | SvelteKit dashboard (`frontend/`) |
 
 ---
 
@@ -471,7 +590,10 @@ Everything is also available via PocketBase REST + real-time websockets directly
   - `https://rpc.blockdaemon.testnet.arc.network`
   - `https://rpc.drpc.testnet.arc.network`
   - `https://rpc.quicknode.testnet.arc.network`
-- WebSocket: `wss://rpc.testnet.arc.network`
+- WebSocket endpoints:
+  - `wss://rpc.testnet.arc.network`
+  - `wss://rpc.drpc.testnet.arc.network`
+  - `wss://rpc.quicknode.testnet.arc.network`
 - Block explorer: `https://testnet.arcscan.app`
 - Contract addresses: `https://docs.arc.network/arc/references/contract-addresses.md`
 - Faucet (USDC + EURC): `https://faucet.circle.com`
@@ -479,11 +601,10 @@ Everything is also available via PocketBase REST + real-time websockets directly
 - ABI lookup: `https://testnet.arcscan.app/address/<contract>` → Contract tab → ABI
 - Envio API token: `https://envio.dev` (set as `ENVIO_API_TOKEN` env var)
 
+---
+
 ## Outstanding TODOs
 
-- [ ] Verify `DepositForBurnTopic` and `MessageReceivedTopic` hashes against live CCTP v2 ABI
-- [ ] Pull StableFX FxEscrow event signatures from ABI via arcscan and implement full ABI decode
-- [ ] Verify Gateway event signatures from ABI via arcscan and refine `event_type` routing
 - [ ] Add trace fetching to HyperSync query (`TraceSelection`) once needed
 - [ ] Aggregate `usdc_spent_fees` and `usdc_transferred` onto `agents` records
 - [ ] Index job `accepted`, `delivered`, `settled`, `disputed` state transitions
