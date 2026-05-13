@@ -63,11 +63,19 @@
 				</thead>
 				<tbody>
 					{#if analyticsAgentLeaderboard.loading}
-						<tr><td colspan="9" style="text-align:center;color:var(--fg-4);padding:32px" class="mono">loading…</td></tr>
+						<tr
+							><td colspan="9" style="text-align:center;color:var(--fg-4);padding:32px" class="mono"
+								>loading…</td
+							></tr
+						>
 					{:else if analyticsAgentLeaderboard.error}
-						<tr><td colspan="9" style="text-align:center;color:var(--err);padding:16px" class="mono">{analyticsAgentLeaderboard.error}</td></tr>
+						<tr
+							><td colspan="9" style="text-align:center;color:var(--err);padding:16px" class="mono"
+								>{analyticsAgentLeaderboard.error}</td
+							></tr
+						>
 					{:else if board.length}
-						{#each board as a, i}
+						{#each board as a, i (a.agent_address)}
 							<tr>
 								<td class="muted">{i + 1}</td>
 								<td>
@@ -81,12 +89,18 @@
 								<td class="num muted">{fmt.usdc(a.usdc_spent_fees, 4)}</td>
 								<td class="num">{a.job_count}</td>
 								<td class="num" style="color:var(--ok)">{a.settled_jobs}</td>
-								<td class="num" style="color:{a.disputed_jobs > 0 ? 'var(--err)' : 'var(--fg-4)'}">{a.disputed_jobs}</td>
+								<td class="num" style="color:{a.disputed_jobs > 0 ? 'var(--err)' : 'var(--fg-4)'}"
+									>{a.disputed_jobs}</td
+								>
 								<td class="num">{fmt.usdc(a.total_escrow)}</td>
 							</tr>
 						{/each}
 					{:else}
-						<tr><td colspan="9" style="text-align:center;color:var(--fg-4);padding:32px" class="mono">no agents found</td></tr>
+						<tr
+							><td colspan="9" style="text-align:center;color:var(--fg-4);padding:32px" class="mono"
+								>no agents found</td
+							></tr
+						>
 					{/if}
 				</tbody>
 			</table>

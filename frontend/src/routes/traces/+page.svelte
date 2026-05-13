@@ -14,7 +14,7 @@
 		fetchTraces({
 			tx: txFilter.trim() || undefined,
 			limit,
-			offset,
+			offset
 		});
 	}
 
@@ -38,7 +38,14 @@
 		/>
 		<button class="btn acc" onclick={load}>fetch</button>
 		{#if txFilter}
-			<button class="btn ghost" onclick={() => { txFilter = ''; offset = 0; load(); }}>clear</button>
+			<button
+				class="btn ghost"
+				onclick={() => {
+					txFilter = '';
+					offset = 0;
+					load();
+				}}>clear</button
+			>
 		{/if}
 	</div>
 
@@ -57,11 +64,19 @@
 				</thead>
 				<tbody>
 					{#if traces.loading}
-						<tr><td colspan="6" style="text-align:center;color:var(--fg-4);padding:32px" class="mono">loading…</td></tr>
+						<tr
+							><td colspan="6" style="text-align:center;color:var(--fg-4);padding:32px" class="mono"
+								>loading…</td
+							></tr
+						>
 					{:else if traces.error}
-						<tr><td colspan="6" style="text-align:center;color:var(--err);padding:16px" class="mono">{traces.error}</td></tr>
+						<tr
+							><td colspan="6" style="text-align:center;color:var(--err);padding:16px" class="mono"
+								>{traces.error}</td
+							></tr
+						>
 					{:else if traces.data?.traces.length}
-						{#each traces.data.traces as t}
+						{#each traces.data.traces as t (t.tx_hash + '_' + t.block_number)}
 							<tr>
 								<td><span class="hash mono">{fmt.hash(t.tx_hash)}</span></td>
 								<td><span class="badge muted">{t.call_type ?? t.trace_type ?? '—'}</span></td>
@@ -72,7 +87,11 @@
 							</tr>
 						{/each}
 					{:else}
-						<tr><td colspan="6" style="text-align:center;color:var(--fg-4);padding:32px" class="mono">no results</td></tr>
+						<tr
+							><td colspan="6" style="text-align:center;color:var(--fg-4);padding:32px" class="mono"
+								>no results</td
+							></tr
+						>
 					{/if}
 				</tbody>
 			</table>
@@ -81,9 +100,22 @@
 
 	{#if !txFilter}
 		<div class="filter-bar" style="margin-top:10px;justify-content:flex-end">
-			<button class="btn ghost" disabled={offset === 0} onclick={() => { offset = Math.max(0, offset - limit); load(); }}>← prev</button>
+			<button
+				class="btn ghost"
+				disabled={offset === 0}
+				onclick={() => {
+					offset = Math.max(0, offset - limit);
+					load();
+				}}>← prev</button
+			>
 			<span class="mono dim" style="font-size:11px">offset {offset}</span>
-			<button class="btn ghost" onclick={() => { offset += limit; load(); }}>next →</button>
+			<button
+				class="btn ghost"
+				onclick={() => {
+					offset += limit;
+					load();
+				}}>next →</button
+			>
 		</div>
 	{/if}
 </div>

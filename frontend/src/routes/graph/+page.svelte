@@ -13,7 +13,7 @@
 		fetchEdges({
 			wallet: walletInput.trim() || undefined,
 			limit,
-			offset,
+			offset
 		});
 	}
 
@@ -28,7 +28,14 @@
 			<div class="view-sub">Address relationship network · directional edges</div>
 		</div>
 		<div class="view-actions">
-			<button class="btn ghost" onclick={() => { walletInput = ''; offset = 0; load(); }}>Reset</button>
+			<button
+				class="btn ghost"
+				onclick={() => {
+					walletInput = '';
+					offset = 0;
+					load();
+				}}>Reset</button
+			>
 		</div>
 	</div>
 
@@ -37,17 +44,27 @@
 			bind:value={walletInput}
 			placeholder="filter by wallet address (0x…)"
 			style="width:380px;background:var(--bg-2);border:1px solid var(--border-2);color:var(--fg-1);padding:4px 10px;font-family:var(--mono);font-size:11px;border-radius:4px;outline:none"
-			onkeydown={(e) => e.key === 'Enter' && (offset = 0, load())}
+			onkeydown={(e) => e.key === 'Enter' && ((offset = 0), load())}
 		/>
-		<button class="btn acc" onclick={() => { offset = 0; load(); }}>search</button>
+		<button
+			class="btn acc"
+			onclick={() => {
+				offset = 0;
+				load();
+			}}>search</button
+		>
 	</div>
 
 	<!-- 3D graph placeholder -->
 	<div class="graph-stage" style="margin-bottom:12px">
-		<div style="position:absolute;inset:0;display:grid;place-items:center;flex-direction:column;gap:8px">
+		<div
+			style="position:absolute;inset:0;display:grid;place-items:center;flex-direction:column;gap:8px"
+		>
 			<span class="mono dim" style="font-size:11px">3D force graph · coming soon</span>
 			{#if edges.length}
-				<span class="mono" style="font-size:11px;color:var(--accent);margin-top:4px">{edges.length} edges loaded · {fmt.usdc(totalVol)} total vol</span>
+				<span class="mono" style="font-size:11px;color:var(--accent);margin-top:4px"
+					>{edges.length} edges loaded · {fmt.usdc(totalVol)} total vol</span
+				>
 			{/if}
 		</div>
 	</div>
@@ -73,11 +90,19 @@
 				</thead>
 				<tbody>
 					{#if graph.loading}
-						<tr><td colspan="7" style="text-align:center;color:var(--fg-4);padding:32px" class="mono">loading…</td></tr>
+						<tr
+							><td colspan="7" style="text-align:center;color:var(--fg-4);padding:32px" class="mono"
+								>loading…</td
+							></tr
+						>
 					{:else if graph.error}
-						<tr><td colspan="7" style="text-align:center;color:var(--err);padding:16px" class="mono">{graph.error}</td></tr>
+						<tr
+							><td colspan="7" style="text-align:center;color:var(--err);padding:16px" class="mono"
+								>{graph.error}</td
+							></tr
+						>
 					{:else if edges.length}
-						{#each edges as e}
+						{#each edges as e (e.from_wallet + e.to_wallet)}
 							<tr>
 								<td class="addr">{fmt.addr(e.from_wallet)}</td>
 								<td class="acc">→</td>
@@ -89,7 +114,11 @@
 							</tr>
 						{/each}
 					{:else}
-						<tr><td colspan="7" style="text-align:center;color:var(--fg-4);padding:32px" class="mono">no edges found</td></tr>
+						<tr
+							><td colspan="7" style="text-align:center;color:var(--fg-4);padding:32px" class="mono"
+								>no edges found</td
+							></tr
+						>
 					{/if}
 				</tbody>
 			</table>
@@ -97,8 +126,21 @@
 	</div>
 
 	<div class="filter-bar" style="margin-top:10px;justify-content:flex-end">
-		<button class="btn ghost" disabled={offset === 0} onclick={() => { offset = Math.max(0, offset - limit); load(); }}>← prev</button>
+		<button
+			class="btn ghost"
+			disabled={offset === 0}
+			onclick={() => {
+				offset = Math.max(0, offset - limit);
+				load();
+			}}>← prev</button
+		>
 		<span class="mono dim" style="font-size:11px">offset {offset}</span>
-		<button class="btn ghost" onclick={() => { offset += limit; load(); }}>next →</button>
+		<button
+			class="btn ghost"
+			onclick={() => {
+				offset += limit;
+				load();
+			}}>next →</button
+		>
 	</div>
 </div>

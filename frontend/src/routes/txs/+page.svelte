@@ -38,8 +38,10 @@
 	</div>
 
 	<div class="filter-bar">
-		{#each METHODS as m}
-			<button class="chip {methodFilter === m ? 'on' : ''}" onclick={() => (methodFilter = m)}>{m}</button>
+		{#each METHODS as m (m)}
+			<button class="chip {methodFilter === m ? 'on' : ''}" onclick={() => (methodFilter = m)}
+				>{m}</button
+			>
 		{/each}
 	</div>
 
@@ -60,11 +62,19 @@
 				</thead>
 				<tbody>
 					{#if transactions.loading}
-						<tr><td colspan="8" style="text-align:center;color:var(--fg-4);padding:32px" class="mono">loading…</td></tr>
+						<tr
+							><td colspan="8" style="text-align:center;color:var(--fg-4);padding:32px" class="mono"
+								>loading…</td
+							></tr
+						>
 					{:else if transactions.error}
-						<tr><td colspan="8" style="text-align:center;color:var(--err);padding:16px" class="mono">{transactions.error}</td></tr>
+						<tr
+							><td colspan="8" style="text-align:center;color:var(--err);padding:16px" class="mono"
+								>{transactions.error}</td
+							></tr
+						>
 					{:else if filtered().length}
-						{#each filtered() as t}
+						{#each filtered() as t (t.hash)}
 							<tr>
 								<td><span class="hash mono">{fmt.hash(t.hash)}</span></td>
 								<td><span class="badge info">{fmt.methodName(t.sighash)}</span></td>
@@ -83,7 +93,11 @@
 							</tr>
 						{/each}
 					{:else}
-						<tr><td colspan="8" style="text-align:center;color:var(--fg-4);padding:32px" class="mono">no results</td></tr>
+						<tr
+							><td colspan="8" style="text-align:center;color:var(--fg-4);padding:32px" class="mono"
+								>no results</td
+							></tr
+						>
 					{/if}
 				</tbody>
 			</table>
@@ -91,8 +105,21 @@
 	</div>
 
 	<div class="filter-bar" style="margin-top:10px;justify-content:flex-end">
-		<button class="btn ghost" disabled={offset === 0} onclick={() => { offset = Math.max(0, offset - limit); loadPage(); }}>← prev</button>
+		<button
+			class="btn ghost"
+			disabled={offset === 0}
+			onclick={() => {
+				offset = Math.max(0, offset - limit);
+				loadPage();
+			}}>← prev</button
+		>
 		<span class="mono dim" style="font-size:11px">offset {offset}</span>
-		<button class="btn ghost" onclick={() => { offset += limit; loadPage(); }}>next →</button>
+		<button
+			class="btn ghost"
+			onclick={() => {
+				offset += limit;
+				loadPage();
+			}}>next →</button
+		>
 	</div>
 </div>

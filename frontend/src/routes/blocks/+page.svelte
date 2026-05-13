@@ -17,9 +17,7 @@
 		fetchBlockStats(limit, offset);
 	}
 
-	const feesMap = $derived(
-		new Map((blockStats.data?.stats ?? []).map((s) => [s.block_number, s]))
-	);
+	const feesMap = $derived(new Map((blockStats.data?.stats ?? []).map((s) => [s.block_number, s])));
 </script>
 
 <div class="view">
@@ -48,11 +46,19 @@
 				</thead>
 				<tbody>
 					{#if blocks.loading}
-						<tr><td colspan="6" style="text-align:center;color:var(--fg-4);padding:32px" class="mono">loading…</td></tr>
+						<tr
+							><td colspan="6" style="text-align:center;color:var(--fg-4);padding:32px" class="mono"
+								>loading…</td
+							></tr
+						>
 					{:else if blocks.error}
-						<tr><td colspan="6" style="text-align:center;color:var(--err);padding:16px" class="mono">{blocks.error}</td></tr>
+						<tr
+							><td colspan="6" style="text-align:center;color:var(--err);padding:16px" class="mono"
+								>{blocks.error}</td
+							></tr
+						>
 					{:else if blocks.data?.blocks.length}
-						{#each blocks.data.blocks as b}
+						{#each blocks.data.blocks as b (b.number)}
 							{@const stat = feesMap.get(b.number)}
 							<tr>
 								<td><span class="acc mono">#{b.number}</span></td>
@@ -64,7 +70,11 @@
 							</tr>
 						{/each}
 					{:else}
-						<tr><td colspan="6" style="text-align:center;color:var(--fg-4);padding:32px" class="mono">no data</td></tr>
+						<tr
+							><td colspan="6" style="text-align:center;color:var(--fg-4);padding:32px" class="mono"
+								>no data</td
+							></tr
+						>
 					{/if}
 				</tbody>
 			</table>
@@ -72,8 +82,21 @@
 	</div>
 
 	<div class="filter-bar" style="margin-top:10px;justify-content:flex-end">
-		<button class="btn ghost" disabled={offset === 0} onclick={() => { offset = Math.max(0, offset - limit); load(); }}>← prev</button>
+		<button
+			class="btn ghost"
+			disabled={offset === 0}
+			onclick={() => {
+				offset = Math.max(0, offset - limit);
+				load();
+			}}>← prev</button
+		>
 		<span class="mono dim" style="font-size:11px">offset {offset}</span>
-		<button class="btn ghost" onclick={() => { offset += limit; load(); }}>next →</button>
+		<button
+			class="btn ghost"
+			onclick={() => {
+				offset += limit;
+				load();
+			}}>next →</button
+		>
 	</div>
 </div>

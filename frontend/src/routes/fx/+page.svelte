@@ -16,7 +16,7 @@
 		fetchFx({
 			status: statusFilter === 'all' ? undefined : statusFilter,
 			limit,
-			offset,
+			offset
 		});
 	}
 
@@ -35,8 +35,15 @@
 	</div>
 
 	<div class="filter-bar">
-		{#each STATUSES as s}
-			<button class="chip {statusFilter === s ? 'on' : ''}" onclick={() => { statusFilter = s; offset = 0; load(); }}>{s}</button>
+		{#each STATUSES as s (s)}
+			<button
+				class="chip {statusFilter === s ? 'on' : ''}"
+				onclick={() => {
+					statusFilter = s;
+					offset = 0;
+					load();
+				}}>{s}</button
+			>
 		{/each}
 	</div>
 
@@ -56,17 +63,29 @@
 				</thead>
 				<tbody>
 					{#if fx.loading}
-						<tr><td colspan="7" style="text-align:center;color:var(--fg-4);padding:32px" class="mono">loading…</td></tr>
+						<tr
+							><td colspan="7" style="text-align:center;color:var(--fg-4);padding:32px" class="mono"
+								>loading…</td
+							></tr
+						>
 					{:else if fx.error}
-						<tr><td colspan="7" style="text-align:center;color:var(--err);padding:16px" class="mono">{fx.error}</td></tr>
+						<tr
+							><td colspan="7" style="text-align:center;color:var(--err);padding:16px" class="mono"
+								>{fx.error}</td
+							></tr
+						>
 					{:else if fx.data?.trades.length}
-						{#each fx.data.trades as t}
+						{#each fx.data.trades as t, i (i)}
 							{@const inputTok = t.input_token as string}
 							{@const outputTok = t.output_token as string}
 							<tr>
 								<td class="mono">{inputTok ?? '?'}/{outputTok ?? '?'}</td>
 								<td class="num">{fmt.usdc(t.input_amount as string)}</td>
-								<td class="num muted">{typeof t.implied_rate === 'number' ? (t.implied_rate as number).toFixed(4) : '—'}</td>
+								<td class="num muted"
+									>{typeof t.implied_rate === 'number'
+										? (t.implied_rate as number).toFixed(4)
+										: '—'}</td
+								>
 								<td class="addr">{fmt.addr(t.maker)}</td>
 								<td class="addr">{fmt.addr(t.taker)}</td>
 								<td><span class="badge {fmt.fxBadge(t.status)}">{t.status}</span></td>
@@ -74,7 +93,11 @@
 							</tr>
 						{/each}
 					{:else}
-						<tr><td colspan="7" style="text-align:center;color:var(--fg-4);padding:32px" class="mono">no results</td></tr>
+						<tr
+							><td colspan="7" style="text-align:center;color:var(--fg-4);padding:32px" class="mono"
+								>no results</td
+							></tr
+						>
 					{/if}
 				</tbody>
 			</table>
@@ -82,8 +105,21 @@
 	</div>
 
 	<div class="filter-bar" style="margin-top:10px;justify-content:flex-end">
-		<button class="btn ghost" disabled={offset === 0} onclick={() => { offset = Math.max(0, offset - limit); load(); }}>← prev</button>
+		<button
+			class="btn ghost"
+			disabled={offset === 0}
+			onclick={() => {
+				offset = Math.max(0, offset - limit);
+				load();
+			}}>← prev</button
+		>
 		<span class="mono dim" style="font-size:11px">offset {offset}</span>
-		<button class="btn ghost" onclick={() => { offset += limit; load(); }}>next →</button>
+		<button
+			class="btn ghost"
+			onclick={() => {
+				offset += limit;
+				load();
+			}}>next →</button
+		>
 	</div>
 </div>

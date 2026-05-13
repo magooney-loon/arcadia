@@ -20,10 +20,10 @@
 
 	function load() {
 		fetchCrosschain({
-			direction: direction === 'all' ? undefined : (direction as any),
-			protocol: protocol === 'all' ? undefined : (protocol as any),
+			direction: direction === 'all' ? undefined : (direction as 'inbound' | 'outbound'),
+			protocol: protocol === 'all' ? undefined : (protocol as 'cctp' | 'gateway'),
 			limit,
-			offset,
+			offset
 		});
 	}
 
@@ -31,7 +31,10 @@
 	const bf = $derived(analyticsBridgeFlow.data);
 
 	const EVENT_BADGE: Record<string, string> = {
-		burn: 'err', mint: 'ok', deposit: 'info', withdraw: 'warn',
+		burn: 'err',
+		mint: 'ok',
+		deposit: 'info',
+		withdraw: 'warn'
 	};
 </script>
 
@@ -66,12 +69,26 @@
 	</div>
 
 	<div class="filter-bar">
-		{#each DIRECTIONS as d}
-			<button class="chip {direction === d ? 'on' : ''}" onclick={() => { direction = d; offset = 0; load(); }}>{d}</button>
+		{#each DIRECTIONS as d (d)}
+			<button
+				class="chip {direction === d ? 'on' : ''}"
+				onclick={() => {
+					direction = d;
+					offset = 0;
+					load();
+				}}>{d}</button
+			>
 		{/each}
 		<span class="mono dim" style="font-size:10px;margin-left:8px">protocol</span>
-		{#each PROTOCOLS as p}
-			<button class="chip {protocol === p ? 'on' : ''}" onclick={() => { protocol = p; offset = 0; load(); }}>{p}</button>
+		{#each PROTOCOLS as p (p)}
+			<button
+				class="chip {protocol === p ? 'on' : ''}"
+				onclick={() => {
+					protocol = p;
+					offset = 0;
+					load();
+				}}>{p}</button
+			>
 		{/each}
 	</div>
 
@@ -96,16 +113,27 @@
 				</thead>
 				<tbody>
 					{#if crosschain.loading}
-						<tr><td colspan="8" style="text-align:center;color:var(--fg-4);padding:32px" class="mono">loading…</td></tr>
+						<tr
+							><td colspan="8" style="text-align:center;color:var(--fg-4);padding:32px" class="mono"
+								>loading…</td
+							></tr
+						>
 					{:else if crosschain.error}
-						<tr><td colspan="8" style="text-align:center;color:var(--err);padding:16px" class="mono">{crosschain.error}</td></tr>
+						<tr
+							><td colspan="8" style="text-align:center;color:var(--err);padding:16px" class="mono"
+								>{crosschain.error}</td
+							></tr
+						>
 					{:else if crosschain.data?.events.length}
-						{#each crosschain.data.events as e}
+						{#each crosschain.data.events as e (e.id)}
 							<tr>
 								<td><span class="chain">{fmt.domainName(e.source_domain)}</span></td>
 								<td class="acc">→</td>
 								<td><span class="chain">{fmt.domainName(e.destination_domain)}</span></td>
-								<td><span class="badge {EVENT_BADGE[e.event_type] ?? 'muted'}">{e.event_type}</span></td>
+								<td
+									><span class="badge {EVENT_BADGE[e.event_type] ?? 'muted'}">{e.event_type}</span
+									></td
+								>
 								<td class="muted">{e.protocol}</td>
 								<td class="num">{fmt.usdc(e.amount_usdc)}</td>
 								<td class="addr">{fmt.addr(e.sender)}</td>
@@ -113,7 +141,11 @@
 							</tr>
 						{/each}
 					{:else}
-						<tr><td colspan="8" style="text-align:center;color:var(--fg-4);padding:32px" class="mono">no results</td></tr>
+						<tr
+							><td colspan="8" style="text-align:center;color:var(--fg-4);padding:32px" class="mono"
+								>no results</td
+							></tr
+						>
 					{/if}
 				</tbody>
 			</table>
@@ -121,8 +153,21 @@
 	</div>
 
 	<div class="filter-bar" style="margin-top:10px;justify-content:flex-end">
-		<button class="btn ghost" disabled={offset === 0} onclick={() => { offset = Math.max(0, offset - limit); load(); }}>← prev</button>
+		<button
+			class="btn ghost"
+			disabled={offset === 0}
+			onclick={() => {
+				offset = Math.max(0, offset - limit);
+				load();
+			}}>← prev</button
+		>
 		<span class="mono dim" style="font-size:11px">offset {offset}</span>
-		<button class="btn ghost" onclick={() => { offset += limit; load(); }}>next →</button>
+		<button
+			class="btn ghost"
+			onclick={() => {
+				offset += limit;
+				load();
+			}}>next →</button
+		>
 	</div>
 </div>

@@ -10,7 +10,7 @@
 		{ label: 'Accepted', status: 'accepted' },
 		{ label: 'Delivered', status: 'delivered' },
 		{ label: 'Settled', status: 'settled' },
-		{ label: 'Disputed', status: 'disputed' },
+		{ label: 'Disputed', status: 'disputed' }
 	];
 
 	let activeStatus = $state('');
@@ -23,7 +23,7 @@
 		fetchAgentJobs({
 			status: activeStatus || undefined,
 			limit,
-			offset,
+			offset
 		});
 	}
 
@@ -68,8 +68,11 @@
 	{/if}
 
 	<div class="tabs">
-		{#each TABS as tab}
-			<button class="tab {activeStatus === tab.status ? 'active' : ''}" onclick={() => setTab(tab.status)}>
+		{#each TABS as tab (tab.status)}
+			<button
+				class="tab {activeStatus === tab.status ? 'active' : ''}"
+				onclick={() => setTab(tab.status)}
+			>
 				{tab.label}
 			</button>
 		{/each}
@@ -91,11 +94,19 @@
 				</thead>
 				<tbody>
 					{#if agentJobs.loading}
-						<tr><td colspan="7" style="text-align:center;color:var(--fg-4);padding:32px" class="mono">loading…</td></tr>
+						<tr
+							><td colspan="7" style="text-align:center;color:var(--fg-4);padding:32px" class="mono"
+								>loading…</td
+							></tr
+						>
 					{:else if agentJobs.error}
-						<tr><td colspan="7" style="text-align:center;color:var(--err);padding:16px" class="mono">{agentJobs.error}</td></tr>
+						<tr
+							><td colspan="7" style="text-align:center;color:var(--err);padding:16px" class="mono"
+								>{agentJobs.error}</td
+							></tr
+						>
 					{:else if jobs.length}
-						{#each jobs as j}
+						{#each jobs as j (j.job_id)}
 							<tr>
 								<td><span class="hash mono">{fmt.hash(j.job_id)}</span></td>
 								<td class="addr">{fmt.addr(j.employer_address)}</td>
@@ -103,11 +114,17 @@
 								<td><span class="badge {fmt.jobBadge(j.status)}">{j.status}</span></td>
 								<td class="num">{fmt.usdc(j.payment_usdc)}</td>
 								<td class="num muted">{fmt.blockAge(j.created_at_block, latestBlock)}</td>
-								<td class="num muted">{j.settled_at_block ? fmt.blockAge(j.settled_at_block, latestBlock) : '—'}</td>
+								<td class="num muted"
+									>{j.settled_at_block ? fmt.blockAge(j.settled_at_block, latestBlock) : '—'}</td
+								>
 							</tr>
 						{/each}
 					{:else}
-						<tr><td colspan="7" style="text-align:center;color:var(--fg-4);padding:32px" class="mono">no jobs found</td></tr>
+						<tr
+							><td colspan="7" style="text-align:center;color:var(--fg-4);padding:32px" class="mono"
+								>no jobs found</td
+							></tr
+						>
 					{/if}
 				</tbody>
 			</table>
@@ -115,8 +132,21 @@
 	</div>
 
 	<div class="filter-bar" style="margin-top:10px;justify-content:flex-end">
-		<button class="btn ghost" disabled={offset === 0} onclick={() => { offset = Math.max(0, offset - limit); load(); }}>← prev</button>
+		<button
+			class="btn ghost"
+			disabled={offset === 0}
+			onclick={() => {
+				offset = Math.max(0, offset - limit);
+				load();
+			}}>← prev</button
+		>
 		<span class="mono dim" style="font-size:11px">offset {offset}</span>
-		<button class="btn ghost" onclick={() => { offset += limit; load(); }}>next →</button>
+		<button
+			class="btn ghost"
+			onclick={() => {
+				offset += limit;
+				load();
+			}}>next →</button
+		>
 	</div>
 </div>

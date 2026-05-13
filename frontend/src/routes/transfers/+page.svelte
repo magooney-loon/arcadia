@@ -6,7 +6,10 @@
 
 	const TOKENS = ['all', 'USDC', 'EURC', 'USYC', 'OTHER'];
 	const TOKEN_COLORS: Record<string, string> = {
-		USDC: 'ok', EURC: 'info', USYC: 'warn', OTHER: 'muted',
+		USDC: 'ok',
+		EURC: 'info',
+		USYC: 'warn',
+		OTHER: 'muted'
 	};
 
 	let tokenFilter = $state('all');
@@ -17,9 +20,10 @@
 
 	function load() {
 		fetchTransfers({
-			token: tokenFilter === 'all' ? undefined : (tokenFilter as any),
+			token:
+				tokenFilter === 'all' ? undefined : (tokenFilter as 'USDC' | 'EURC' | 'USYC' | 'OTHER'),
 			limit,
-			offset,
+			offset
 		});
 	}
 
@@ -38,11 +42,15 @@
 	</div>
 
 	<div class="filter-bar">
-		{#each TOKENS as tok}
+		{#each TOKENS as tok (tok)}
 			<button
 				class="chip {tokenFilter === tok ? 'on' : ''}"
-				onclick={() => { tokenFilter = tok; offset = 0; load(); }}
-			>{tok}</button>
+				onclick={() => {
+					tokenFilter = tok;
+					offset = 0;
+					load();
+				}}>{tok}</button
+			>
 		{/each}
 	</div>
 
@@ -62,14 +70,26 @@
 				</thead>
 				<tbody>
 					{#if transfers.loading}
-						<tr><td colspan="7" style="text-align:center;color:var(--fg-4);padding:32px" class="mono">loading…</td></tr>
+						<tr
+							><td colspan="7" style="text-align:center;color:var(--fg-4);padding:32px" class="mono"
+								>loading…</td
+							></tr
+						>
 					{:else if transfers.error}
-						<tr><td colspan="7" style="text-align:center;color:var(--err);padding:16px" class="mono">{transfers.error}</td></tr>
+						<tr
+							><td colspan="7" style="text-align:center;color:var(--err);padding:16px" class="mono"
+								>{transfers.error}</td
+							></tr
+						>
 					{:else if transfers.data?.transfers.length}
-						{#each transfers.data.transfers as t}
+						{#each transfers.data.transfers as t (t.id)}
 							<tr>
 								<td><span class="hash mono">{fmt.hash(t.tx_hash)}</span></td>
-								<td><span class="badge {TOKEN_COLORS[t.token_symbol] ?? 'muted'}">{t.token_symbol}</span></td>
+								<td
+									><span class="badge {TOKEN_COLORS[t.token_symbol] ?? 'muted'}"
+										>{t.token_symbol}</span
+									></td
+								>
 								<td class="addr">{fmt.addr(t.from_addr)}</td>
 								<td class="muted">→</td>
 								<td class="addr">{fmt.addr(t.to_addr)}</td>
@@ -78,7 +98,11 @@
 							</tr>
 						{/each}
 					{:else}
-						<tr><td colspan="7" style="text-align:center;color:var(--fg-4);padding:32px" class="mono">no results</td></tr>
+						<tr
+							><td colspan="7" style="text-align:center;color:var(--fg-4);padding:32px" class="mono"
+								>no results</td
+							></tr
+						>
 					{/if}
 				</tbody>
 			</table>
@@ -86,8 +110,21 @@
 	</div>
 
 	<div class="filter-bar" style="margin-top:10px;justify-content:flex-end">
-		<button class="btn ghost" disabled={offset === 0} onclick={() => { offset = Math.max(0, offset - limit); load(); }}>← prev</button>
+		<button
+			class="btn ghost"
+			disabled={offset === 0}
+			onclick={() => {
+				offset = Math.max(0, offset - limit);
+				load();
+			}}>← prev</button
+		>
 		<span class="mono dim" style="font-size:11px">offset {offset}</span>
-		<button class="btn ghost" onclick={() => { offset += limit; load(); }}>next →</button>
+		<button
+			class="btn ghost"
+			onclick={() => {
+				offset += limit;
+				load();
+			}}>next →</button
+		>
 	</div>
 </div>
