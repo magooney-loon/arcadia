@@ -588,7 +588,8 @@ a {
 	vertical-align: middle;
 	white-space: nowrap;
 }
-.tbl td.num {
+.tbl td.num,
+.tbl thead th.num {
 	text-align: right;
 }
 .tbl td .muted {
