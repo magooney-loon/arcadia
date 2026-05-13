@@ -61,10 +61,25 @@
 						{#each blocks.data.blocks as b (b.number)}
 							{@const stat = feesMap.get(b.number)}
 							<tr>
-								<td><span class="acc mono">#{b.number}</span></td>
+								<td
+									><a
+										class="acc mono"
+										href={fmt.explorerBlock(b.number)}
+										target="_blank"
+										rel="noopener noreferrer"
+										style="text-decoration:none">#{b.number}</a
+									></td
+								>
 								<td class="muted">{fmt.tsAge(b.timestamp)}</td>
 								<td>{b.tx_count ?? 0}</td>
-								<td class="addr">{fmt.addr(b.miner)}</td>
+								<td class="addr"
+									><a
+										href={fmt.explorerAddr(b.miner ?? '')}
+										target="_blank"
+										rel="noopener noreferrer"
+										style="text-decoration:none">{fmt.addr(b.miner)}</a
+									></td
+								>
 								<td class="num">{fmt.pct(b.utilization_pct)}</td>
 								<td class="num">{stat ? fmt.usdc(stat.total_fee_usdc, 4) : '—'}</td>
 							</tr>

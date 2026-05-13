@@ -79,7 +79,13 @@
 							<tr>
 								<td class="muted">{i + 1}</td>
 								<td>
-									<span class="addr">{fmt.addr(a.agent_address)}</span>
+									<a
+										class="addr"
+										href={fmt.explorerAddr(a.agent_address)}
+										target="_blank"
+										rel="noopener noreferrer"
+										style="text-decoration:none">{fmt.addr(a.agent_address)}</a
+									>
 									{#if a.job_count > 0}
 										<span class="badge acc" style="margin-left:6px">agent</span>
 									{/if}

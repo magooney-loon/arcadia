@@ -86,8 +86,22 @@
 										? (t.implied_rate as number).toFixed(4)
 										: '—'}</td
 								>
-								<td class="addr">{fmt.addr(t.maker)}</td>
-								<td class="addr">{fmt.addr(t.taker)}</td>
+								<td class="addr"
+									><a
+										href={fmt.explorerAddr(t.maker)}
+										target="_blank"
+										rel="noopener noreferrer"
+										style="text-decoration:none">{fmt.addr(t.maker)}</a
+									></td
+								>
+								<td class="addr"
+									><a
+										href={fmt.explorerAddr(t.taker)}
+										target="_blank"
+										rel="noopener noreferrer"
+										style="text-decoration:none">{fmt.addr(t.taker)}</a
+									></td
+								>
 								<td><span class="badge {fmt.fxBadge(t.status)}">{t.status}</span></td>
 								<td class="num muted">{fmt.blockAge(t.block_number, latestBlock)}</td>
 							</tr>

@@ -76,11 +76,33 @@
 					{:else if filtered().length}
 						{#each filtered() as t (t.hash)}
 							<tr>
-								<td><span class="hash mono">{fmt.hash(t.hash)}</span></td>
+								<td
+									><a
+										class="hash mono"
+										href={fmt.explorerTx(t.hash)}
+										target="_blank"
+										rel="noopener noreferrer"
+										style="text-decoration:none">{fmt.hash(t.hash)}</a
+									></td
+								>
 								<td><span class="badge info">{fmt.methodName(t.sighash)}</span></td>
-								<td class="addr">{fmt.addr(t.from_addr)}</td>
+								<td class="addr"
+									><a
+										href={fmt.explorerAddr(t.from_addr)}
+										target="_blank"
+										rel="noopener noreferrer"
+										style="text-decoration:none">{fmt.addr(t.from_addr)}</a
+									></td
+								>
 								<td class="muted">→</td>
-								<td class="addr">{t.is_contract_deploy ? '(new)' : fmt.addr(t.to_addr)}</td>
+								<td class="addr"
+									>{#if t.is_contract_deploy}(new){:else}<a
+											href={fmt.explorerAddr(t.to_addr)}
+											target="_blank"
+											rel="noopener noreferrer"
+											style="text-decoration:none">{fmt.addr(t.to_addr)}</a
+										>{/if}</td
+								>
 								<td class="num muted">{fmt.usdc(t.fee_usdc, 5)}</td>
 								<td class="num">
 									{#if t.status === 1}

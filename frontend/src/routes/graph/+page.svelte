@@ -104,9 +104,23 @@
 					{:else if edges.length}
 						{#each edges as e (e.from_wallet + e.to_wallet)}
 							<tr>
-								<td class="addr">{fmt.addr(e.from_wallet)}</td>
+								<td class="addr"
+									><a
+										href={fmt.explorerAddr(e.from_wallet)}
+										target="_blank"
+										rel="noopener noreferrer"
+										style="text-decoration:none">{fmt.addr(e.from_wallet)}</a
+									></td
+								>
 								<td class="acc">→</td>
-								<td class="addr">{fmt.addr(e.to_wallet)}</td>
+								<td class="addr"
+									><a
+										href={fmt.explorerAddr(e.to_wallet)}
+										target="_blank"
+										rel="noopener noreferrer"
+										style="text-decoration:none">{fmt.addr(e.to_wallet)}</a
+									></td
+								>
 								<td class="num">{fmt.num(e.tx_count)}</td>
 								<td class="num">{fmt.usdc(e.total_usdc)}</td>
 								<td>{e.from_is_agent ? '<span class="badge acc">agent</span>' : ''}</td>

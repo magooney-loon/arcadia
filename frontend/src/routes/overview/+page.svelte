@@ -170,7 +170,13 @@
 				{#if blocks.data?.blocks.length}
 					{#each blocks.data.blocks as b (b.number)}
 						<div class="live-row">
-							<span class="num">#{b.number}</span>
+							<a
+								class="num"
+								href={fmt.explorerBlock(b.number)}
+								target="_blank"
+								rel="noopener noreferrer"
+								style="text-decoration:none">#{b.number}</a
+							>
 							<span class="age">{fmt.tsAge(b.timestamp)}</span>
 							<span class="txs">{b.tx_count ?? 0} txs</span>
 							<span class="fees">{fmt.pct(b.utilization_pct)}</span>
@@ -194,12 +200,28 @@
 			<div class="card-body" style="padding:0">
 				{#if transactions.data?.transactions.length}
 					{#each transactions.data.transactions as t (t.hash)}
-						<div class="live-row">
-							<span class="hash mono" style="font-size:11px;width:100px">{fmt.hash(t.hash)}</span>
-							<span class="mono" style="font-size:10px;color:var(--info);width:80px"
+						<div class="live-row" style="white-space:nowrap;overflow:hidden">
+							<a
+								class="hash mono"
+								href={fmt.explorerTx(t.hash)}
+								target="_blank"
+								rel="noopener noreferrer"
+								style="font-size:11px;min-width:130px;overflow:hidden;text-overflow:ellipsis;text-decoration:none"
+								>{fmt.hash(t.hash)}</a
+							>
+							<span
+								class="mono"
+								style="font-size:10px;color:var(--info);width:80px;overflow:hidden;text-overflow:ellipsis"
 								>{fmt.methodName(t.sighash)}</span
 							>
-							<span class="addr mono" style="font-size:11px">{fmt.addr(t.from_addr)}</span>
+							<a
+								class="addr mono"
+								href={fmt.explorerAddr(t.from_addr)}
+								target="_blank"
+								rel="noopener noreferrer"
+								style="font-size:11px;overflow:hidden;text-overflow:ellipsis;text-decoration:none"
+								>{fmt.addr(t.from_addr)}</a
+							>
 							<span class="arrow mono muted" style="margin-left:auto;font-size:10px"
 								>{t.status === 1 ? '✓' : '✗'}</span
 							>
@@ -228,7 +250,13 @@
 						<div class="agent-row">
 							<div class="agent-avatar">{i + 1}</div>
 							<div class="agent-meta">
-								<div class="agent-name addr">{fmt.addr(a.agent_address)}</div>
+								<a
+									class="agent-name addr"
+									href={fmt.explorerAddr(a.agent_address)}
+									target="_blank"
+									rel="noopener noreferrer"
+									style="text-decoration:none">{fmt.addr(a.agent_address)}</a
+								>
 								<div class="agent-sub">{a.tx_count ?? 0} txs · {a.job_count ?? 0} jobs</div>
 							</div>
 							<div class="agent-stats">

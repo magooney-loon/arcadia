@@ -108,9 +108,31 @@
 					{:else if jobs.length}
 						{#each jobs as j (j.job_id)}
 							<tr>
-								<td><span class="hash mono">{fmt.hash(j.job_id)}</span></td>
-								<td class="addr">{fmt.addr(j.employer_address)}</td>
-								<td class="addr">{fmt.addr(j.worker_address)}</td>
+								<td
+									><a
+										class="hash mono"
+										href={fmt.explorerTx(j.job_id)}
+										target="_blank"
+										rel="noopener noreferrer"
+										style="text-decoration:none">{fmt.hash(j.job_id)}</a
+									></td
+								>
+								<td class="addr"
+									><a
+										href={fmt.explorerAddr(j.employer_address)}
+										target="_blank"
+										rel="noopener noreferrer"
+										style="text-decoration:none">{fmt.addr(j.employer_address)}</a
+									></td
+								>
+								<td class="addr"
+									><a
+										href={fmt.explorerAddr(j.worker_address)}
+										target="_blank"
+										rel="noopener noreferrer"
+										style="text-decoration:none">{fmt.addr(j.worker_address)}</a
+									></td
+								>
 								<td><span class="badge {fmt.jobBadge(j.status)}">{j.status}</span></td>
 								<td class="num">{fmt.usdc(j.payment_usdc)}</td>
 								<td class="num muted">{fmt.blockAge(j.created_at_block, latestBlock)}</td>

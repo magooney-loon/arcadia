@@ -136,7 +136,14 @@
 								>
 								<td class="muted">{e.protocol}</td>
 								<td class="num">{fmt.usdc(e.amount_usdc)}</td>
-								<td class="addr">{fmt.addr(e.sender)}</td>
+								<td class="addr"
+									><a
+										href={fmt.explorerAddr(e.sender ?? '')}
+										target="_blank"
+										rel="noopener noreferrer"
+										style="text-decoration:none">{fmt.addr(e.sender)}</a
+									></td
+								>
 								<td class="num muted">{fmt.blockAge(e.block_number, latestBlock)}</td>
 							</tr>
 						{/each}

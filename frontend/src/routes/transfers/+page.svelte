@@ -84,15 +84,37 @@
 					{:else if transfers.data?.transfers.length}
 						{#each transfers.data.transfers as t (t.id)}
 							<tr>
-								<td><span class="hash mono">{fmt.hash(t.tx_hash)}</span></td>
+								<td
+									><a
+										class="hash mono"
+										href={fmt.explorerTx(t.tx_hash)}
+										target="_blank"
+										rel="noopener noreferrer"
+										style="text-decoration:none">{fmt.hash(t.tx_hash)}</a
+									></td
+								>
 								<td
 									><span class="badge {TOKEN_COLORS[t.token_symbol] ?? 'muted'}"
 										>{t.token_symbol}</span
 									></td
 								>
-								<td class="addr">{fmt.addr(t.from_addr)}</td>
+								<td class="addr"
+									><a
+										href={fmt.explorerAddr(t.from_addr)}
+										target="_blank"
+										rel="noopener noreferrer"
+										style="text-decoration:none">{fmt.addr(t.from_addr)}</a
+									></td
+								>
 								<td class="muted">→</td>
-								<td class="addr">{fmt.addr(t.to_addr)}</td>
+								<td class="addr"
+									><a
+										href={fmt.explorerAddr(t.to_addr)}
+										target="_blank"
+										rel="noopener noreferrer"
+										style="text-decoration:none">{fmt.addr(t.to_addr)}</a
+									></td
+								>
 								<td class="num">{fmt.usdc(t.amount_human)}</td>
 								<td class="num muted">{fmt.blockAge(t.block_number, latestBlock)}</td>
 							</tr>

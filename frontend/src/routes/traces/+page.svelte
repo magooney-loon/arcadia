@@ -78,10 +78,32 @@
 					{:else if traces.data?.traces.length}
 						{#each traces.data.traces as t (t.tx_hash + '_' + t.block_number)}
 							<tr>
-								<td><span class="hash mono">{fmt.hash(t.tx_hash)}</span></td>
+								<td
+									><a
+										class="hash mono"
+										href={fmt.explorerTx(t.tx_hash)}
+										target="_blank"
+										rel="noopener noreferrer"
+										style="text-decoration:none">{fmt.hash(t.tx_hash)}</a
+									></td
+								>
 								<td><span class="badge muted">{t.call_type ?? t.trace_type ?? '—'}</span></td>
-								<td class="addr">{fmt.addr(t.from_addr)}</td>
-								<td class="addr">{fmt.addr(t.to_addr)}</td>
+								<td class="addr"
+									><a
+										href={fmt.explorerAddr(t.from_addr)}
+										target="_blank"
+										rel="noopener noreferrer"
+										style="text-decoration:none">{fmt.addr(t.from_addr)}</a
+									></td
+								>
+								<td class="addr"
+									><a
+										href={fmt.explorerAddr(t.to_addr)}
+										target="_blank"
+										rel="noopener noreferrer"
+										style="text-decoration:none">{fmt.addr(t.to_addr)}</a
+									></td
+								>
 								<td class="num muted">{fmt.num(t.gas_used)}</td>
 								<td class="num muted">{fmt.blockAge(t.block_number, latestBlock)}</td>
 							</tr>

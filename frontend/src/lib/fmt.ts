@@ -1,6 +1,26 @@
+export const EXPLORER = 'https://testnet.arcscan.app';
+
+export function explorerAddr(a?: string | null): string {
+	return `${EXPLORER}/address/${a ?? ''}`;
+}
+
+export function explorerTx(h?: string | null): string {
+	return `${EXPLORER}/tx/${h ?? ''}`;
+}
+
+export function explorerBlock(n: number): string {
+	return `${EXPLORER}/block/${n}`;
+}
+
 export const DOMAIN_NAMES: Record<number, string> = {
-	0: 'Ethereum', 1: 'Avalanche', 2: 'Optimism', 6: 'Polygon',
-	10: 'Arbitrum', 12: 'Solana', 23: 'Base', 26: 'Arc',
+	0: 'Ethereum',
+	1: 'Avalanche',
+	2: 'Optimism',
+	6: 'Polygon',
+	10: 'Arbitrum',
+	12: 'Solana',
+	23: 'Base',
+	26: 'Arc'
 };
 
 export const SIGHASH: Record<string, string> = {
@@ -10,7 +30,7 @@ export const SIGHASH: Record<string, string> = {
 	'0x38ed1739': 'swap',
 	'0x7ff36ab5': 'swapETH',
 	'0x3593564c': 'execute',
-	'0x5ae401dc': 'multicall',
+	'0x5ae401dc': 'multicall'
 };
 
 export function addr(a?: string | null): string {
@@ -66,7 +86,11 @@ export function tsAge(timestamp?: number | null): string {
 }
 
 // Age from block number (approximate, Arc L1 ~380ms/block)
-export function blockAge(blockNum?: number | null, latestBlock?: number | null, avgMs = 380): string {
+export function blockAge(
+	blockNum?: number | null,
+	latestBlock?: number | null,
+	avgMs = 380
+): string {
 	if (blockNum == null) return '—';
 	if (!latestBlock) return `#${blockNum}`;
 	const s = Math.round(((latestBlock - blockNum) * avgMs) / 1000);
@@ -89,16 +113,22 @@ export function methodName(sig?: string | null): string {
 
 export function fxBadge(status: string): string {
 	const m: Record<string, string> = {
-		created: 'muted', taker_funded: 'warn', maker_funded: 'warn',
-		settled: 'ok', cancelled: 'err',
+		created: 'muted',
+		taker_funded: 'warn',
+		maker_funded: 'warn',
+		settled: 'ok',
+		cancelled: 'err'
 	};
 	return m[status] ?? 'muted';
 }
 
 export function jobBadge(status: string): string {
 	const m: Record<string, string> = {
-		created: 'muted', accepted: 'info', delivered: 'warn',
-		settled: 'ok', disputed: 'err',
+		created: 'muted',
+		accepted: 'info',
+		delivered: 'warn',
+		settled: 'ok',
+		disputed: 'err'
 	};
 	return m[status] ?? 'muted';
 }
