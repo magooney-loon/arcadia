@@ -7,15 +7,46 @@
 	import { stats, fetchStats } from '$lib/stores/stats.svelte';
 	import { health, fetchHealth } from '$lib/stores/health.svelte';
 	import * as fmt from '$lib/fmt.js';
+	import { search, runSearch, clearSearch } from '$lib/stores/search.svelte';
 
 	let { children } = $props();
-
 	let drawerOpen = $state(false);
+	let searchQuery = $state('');
+	let searchFocused = $state(false);
+	let searchInput: HTMLInputElement | undefined = $state();
+
+	function handleSearch() {
+		const q = searchQuery.trim();
+		if (q) runSearch(q);
+	}
+
+	function handleKeydown(e: KeyboardEvent) {
+		if (e.key === 'Enter') handleSearch();
+		if (e.key === 'Escape') {
+			searchFocused = false;
+			searchInput?.blur();
+		}
+	}
+
+	onMount(() => {
+		function globalShortcut(e: KeyboardEvent) {
+			if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+				e.preventDefault();
+				searchInput?.focus();
+				searchFocused = true;
+			}
+		}
+		window.addEventListener('keydown', globalShortcut);
+		return () => window.removeEventListener('keydown', globalShortcut);
+	});
 
 	onMount(() => {
 		fetchStats();
 		fetchHealth();
-		const id = setInterval(() => { fetchStats(); fetchHealth(); }, 8000);
+		const id = setInterval(() => {
+			fetchStats();
+			fetchHealth();
+		}, 8000);
 		return () => clearInterval(id);
 	});
 
@@ -76,7 +107,7 @@
 			<span class="logo-text" style="font-size:12px">ARCADIA</span>
 		</a>
 
-		<div class="search">
+		<div class="search" class:open={searchFocused || search.data}>
 			<svg
 				viewBox="0 0 14 14"
 				fill="none"
@@ -87,8 +118,80 @@
 			>
 				<circle cx="6" cy="6" r="4" /><path d="M9 9 L12 12" />
 			</svg>
-			<input placeholder="Search address, tx, block, agent…" />
-			<span class="kbd" aria-hidden="true">⌘K</span>
+			<input
+				bind:this={searchInput}
+				bind:value={searchQuery}
+				placeholder="Search address, tx, block, agent…"
+				onfocus={() => (searchFocused = true)}
+				onblur={() => setTimeout(() => (searchFocused = false), 200)}
+				onkeydown={handleKeydown}
+			/>
+			{#if searchQuery}
+				<button
+					class="search-clear"
+					onclick={() => {
+						searchQuery = '';
+						clearSearch();
+					}}>✕</button
+				>
+			{:else}
+				<span class="kbd" aria-hidden="true">⌘K</span>
+			{/if}
+
+			<!-- Search results dropdown -->
+			{#if searchFocused && (search.loading || search.error || search.data)}
+				<div class="search-results">
+					{#if search.loading}
+						<div class="search-result-item muted">searching…</div>
+					{:else if search.error}
+						<div class="search-result-item err-text">{search.error}</div>
+					{:else if search.data?.type === 'not_found'}
+						<div class="search-result-item muted">no results found</div>
+					{:else if search.data?.type === 'tx' && search.data.result}
+						<a
+							class="search-result-item"
+							href={fmt.explorerTx(search.data.result.hash as string)}
+							target="_blank"
+							rel="noopener noreferrer"
+						>
+							<span class="badge info">tx</span>
+							<span class="mono">{fmt.hash(search.data.result.hash as string)}</span>
+						</a>
+					{:else if search.data?.type === 'block' && search.data.result}
+						<a
+							class="search-result-item"
+							href={fmt.explorerBlock(search.data.result.number as number)}
+							target="_blank"
+							rel="noopener noreferrer"
+						>
+							<span class="badge ok">block</span>
+							<span class="mono">#{search.data.result.number}</span>
+						</a>
+					{:else if search.data?.type === 'wallet' && search.data.result}
+						<a
+							class="search-result-item"
+							href={fmt.explorerAddr(search.data.result.address as string)}
+							target="_blank"
+							rel="noopener noreferrer"
+						>
+							<span class="badge warn">wallet</span>
+							<span class="mono">{fmt.addr(search.data.result.address as string)}</span>
+						</a>
+					{:else if search.data?.type === 'agent' && search.data.result}
+						<a
+							class="search-result-item"
+							href={fmt.explorerAddr(search.data.result.address as string)}
+							target="_blank"
+							rel="noopener noreferrer"
+						>
+							<span class="badge acc">agent</span>
+							<span class="mono">{fmt.addr(search.data.result.address as string)}</span>
+						</a>
+					{:else}
+						<div class="search-result-item muted">unknown result</div>
+					{/if}
+				</div>
+			{/if}
 		</div>
 
 		<div class="topbar-meta">
@@ -96,7 +199,11 @@
 			<span class="pill">head <span class="val">#{stats.data?.indexed_block ?? '—'}</span></span>
 			<span class="pill">tps <span class="val">{fmt.tps(stats.data?.tps)}</span></span>
 			<span class="pill">block <span class="val">{fmt.ms(stats.data?.block_time_ms)}</span></span>
-			<span class="pill">lag <span class="val {(health.data?.lag_blocks ?? 0) > 50 ? 'warn' : 'acc'}">{health.data?.lag_blocks ?? '—'}</span></span>
+			<span class="pill"
+				>lag <span class="val {(health.data?.lag_blocks ?? 0) > 50 ? 'warn' : 'acc'}"
+					>{health.data?.lag_blocks ?? '—'}</span
+				></span
+			>
 		</div>
 
 		<button class="hamburger" onclick={() => (drawerOpen = true)} aria-label="Open navigation">
@@ -131,10 +238,17 @@
 	<footer class="statusbar">
 		<span class="seg">
 			<span class="dot {health.data?.syncing ? 'warn' : 'acc'}"></span>
-			indexer <span class="v {health.data?.syncing ? '' : 'ok'}">{health.data?.syncing ? 'syncing' : 'live'}</span>
+			indexer
+			<span class="v {health.data?.syncing ? '' : 'ok'}"
+				>{health.data?.syncing ? 'syncing' : 'live'}</span
+			>
 		</span>
 		<span class="seg">errors/h <span class="v">{health.data?.errors_1h ?? '—'}</span></span>
-		<span class="seg">batch <span class="v">{health.data?.avg_batch_ms ? Math.round(health.data.avg_batch_ms) + 'ms' : '—'}</span></span>
+		<span class="seg"
+			>batch <span class="v"
+				>{health.data?.avg_batch_ms ? Math.round(health.data.avg_batch_ms) + 'ms' : '—'}</span
+			></span
+		>
 		<span class="seg right">v0.4.2-rc1</span>
 		<span class="seg">fees p50 <span class="v">{fmt.usdc(stats.data?.avg_fee_usdc)}</span></span>
 	</footer>
