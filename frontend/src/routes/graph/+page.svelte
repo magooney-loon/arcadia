@@ -6,7 +6,7 @@
 
 	let walletInput = $state('');
 	let offset = $state(0);
-	const limit = 100;
+	const limit = 500;
 
 	onMount(() => load());
 

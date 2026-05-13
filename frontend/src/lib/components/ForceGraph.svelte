@@ -44,7 +44,7 @@
 	let links: SimLink[] = [];
 	let sim: ReturnType<typeof forceSimulation<SimNode>> | null = null;
 
-	let hoveredNode: SimNode | null = $state(null);
+	let hoveredNode: SimNode | null = null;
 	let mouseX = 0;
 	let mouseY = 0;
 
@@ -124,10 +124,10 @@
 
 	function volColor(vol: number, minVol: number, volRange: number): string {
 		const norm = Math.min(1, (vol - minVol) / volRange);
-		const r = Math.round(30 + norm * 79); // 30 → 109
-		const g = Math.round(40 + norm * 173); // 40 → 213
-		const b = Math.round(60 + norm * 190); // 60 → 250
-		return `rgba(${r},${g},${b},${0.12 + norm * 0.35})`;
+		const r = Math.round(60 + norm * 49); // 60 → 109
+		const g = Math.round(100 + norm * 113); // 100 → 213
+		const b = Math.round(140 + norm * 110); // 140 → 250
+		return `rgba(${r},${g},${b},${0.3 + norm * 0.45})`;
 	}
 
 	function draw() {
@@ -159,7 +159,7 @@
 			ctx.moveTo(s.x, s.y);
 			ctx.lineTo(t.x, t.y);
 			ctx.strokeStyle = volColor(link.volume, minVol, volRange);
-			ctx.lineWidth = 0.5 + Math.min(2, (link.volume / maxVol) * 2);
+			ctx.lineWidth = 0.8 + Math.min(2.5, (link.volume / maxVol) * 2.5);
 			ctx.stroke();
 		}
 
