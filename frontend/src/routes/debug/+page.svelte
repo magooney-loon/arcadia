@@ -416,8 +416,6 @@
 	{#if agent.data}<pre>{JSON.stringify(agent.data, null, 2)}</pre>{/if}
 </section>
 
-<div style="height:3rem"></div>
-
 <style>
 	:global(body) {
 		font-family: monospace;
