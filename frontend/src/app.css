@@ -650,6 +650,28 @@ a {
 	position: sticky;
 	top: 0;
 }
+.tbl thead th.sortable {
+	cursor: pointer;
+	user-select: none;
+	transition: color 0.15s;
+}
+.tbl thead th.sortable:hover {
+	color: var(--fg-2);
+}
+.tbl thead th.sortable::after {
+	content: '↕';
+	margin-left: 4px;
+	opacity: 0.3;
+	font-size: 9px;
+}
+.tbl thead th.sortable.asc::after {
+	content: '↑';
+	opacity: 0.7;
+}
+.tbl thead th.sortable.desc::after {
+	content: '↓';
+	opacity: 0.7;
+}
 .tbl tbody tr {
 	border-bottom: 1px solid var(--border-1);
 }
@@ -1120,6 +1142,10 @@ a {
 	.tbl td,
 	.tbl thead th {
 		padding: 8px 10px;
+	}
+
+	.hide-mobile {
+		display: none !important;
 	}
 }
 

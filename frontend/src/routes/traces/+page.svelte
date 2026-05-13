@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { traces, fetchTraces } from '$lib/stores/chain.svelte';
 	import { stats } from '$lib/stores/stats.svelte';
+	import { createSort } from '$lib/sort.svelte';
 	import * as fmt from '$lib/fmt.js';
 
 	let txFilter = $state('');
@@ -19,6 +20,18 @@
 	}
 
 	const latestBlock = $derived(stats.data?.block_number ?? 0);
+
+	const sort = createSort('age', 'desc');
+	const sortedTraces = $derived(
+		sort.apply(traces.data?.traces ?? [], {
+			tx: (t) => t.tx_hash ?? '',
+			type: (t) => t.call_type ?? t.trace_type ?? '',
+			from: (t) => t.from_addr ?? '',
+			to: (t) => t.to_addr ?? '',
+			gas_used: (t) => t.gas_used ?? 0,
+			age: (t) => t.block_number ?? 0
+		})
+	);
 </script>
 
 <div class="view">
@@ -54,12 +67,26 @@
 			<table class="tbl">
 				<thead>
 					<tr>
-						<th>tx</th>
-						<th>type</th>
-						<th>from</th>
-						<th>to</th>
-						<th class="num">gas used</th>
-						<th class="num">age</th>
+						<th class="sortable {sort.indicator('tx') || ''}" onclick={() => sort.toggle('tx')}
+							>tx</th
+						>
+						<th class="sortable {sort.indicator('type') || ''}" onclick={() => sort.toggle('type')}
+							>type</th
+						>
+						<th class="sortable {sort.indicator('from') || ''}" onclick={() => sort.toggle('from')}
+							>from</th
+						>
+						<th class="sortable {sort.indicator('to') || ''}" onclick={() => sort.toggle('to')}
+							>to</th
+						>
+						<th
+							class="num sortable {sort.indicator('gas_used') || ''}"
+							onclick={() => sort.toggle('gas_used')}>gas used</th
+						>
+						<th
+							class="num sortable {sort.indicator('age') || ''}"
+							onclick={() => sort.toggle('age')}>age</th
+						>
 					</tr>
 				</thead>
 				<tbody>
@@ -76,7 +103,7 @@
 							></tr
 						>
 					{:else if traces.data?.traces.length}
-						{#each traces.data.traces as t (t.tx_hash + '_' + t.block_number)}
+						{#each sortedTraces as t (t.tx_hash + '_' + t.block_number)}
 							<tr>
 								<td
 									><a

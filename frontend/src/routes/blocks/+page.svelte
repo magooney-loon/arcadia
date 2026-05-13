@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { blocks, fetchBlocks } from '$lib/stores/chain.svelte';
 	import { blockStats, fetchBlockStats } from '$lib/stores/blockStats.svelte';
+	import { createSort } from '$lib/sort.svelte';
 	import * as fmt from '$lib/fmt.js';
 
 	let limit = $state(50);
@@ -18,6 +19,19 @@
 	}
 
 	const feesMap = $derived(new Map((blockStats.data?.stats ?? []).map((s) => [s.block_number, s])));
+
+	const sort = createSort('number', 'desc');
+
+	const sortedBlocks = $derived(
+		sort.apply(blocks.data?.blocks ?? [], {
+			number: (b) => b.number,
+			age: (b) => b.timestamp ?? 0,
+			txs: (b) => b.tx_count ?? 0,
+			miner: (b) => b.miner ?? '',
+			gas_util: (b) => b.utilization_pct ?? 0,
+			fees: (b) => feesMap.get(b.number)?.total_fee_usdc ?? 0
+		})
+	);
 </script>
 
 <div class="view">
@@ -36,12 +50,28 @@
 			<table class="tbl">
 				<thead>
 					<tr>
-						<th>block</th>
-						<th>age</th>
-						<th>txs</th>
-						<th>miner</th>
-						<th class="num">gas util</th>
-						<th class="num">fees</th>
+						<th
+							class="sortable {sort.indicator('number') || ''}"
+							onclick={() => sort.toggle('number')}>block</th
+						>
+						<th class="sortable {sort.indicator('age') || ''}" onclick={() => sort.toggle('age')}
+							>age</th
+						>
+						<th class="sortable {sort.indicator('txs') || ''}" onclick={() => sort.toggle('txs')}
+							>txs</th
+						>
+						<th
+							class="sortable {sort.indicator('miner') || ''}"
+							onclick={() => sort.toggle('miner')}>miner</th
+						>
+						<th
+							class="num sortable {sort.indicator('gas_util') || ''}"
+							onclick={() => sort.toggle('gas_util')}>gas util</th
+						>
+						<th
+							class="num sortable {sort.indicator('fees') || ''}"
+							onclick={() => sort.toggle('fees')}>fees</th
+						>
 					</tr>
 				</thead>
 				<tbody>
@@ -58,7 +88,7 @@
 							></tr
 						>
 					{:else if blocks.data?.blocks.length}
-						{#each blocks.data.blocks as b (b.number)}
+						{#each sortedBlocks as b (b.number)}
 							{@const stat = feesMap.get(b.number)}
 							<tr>
 								<td

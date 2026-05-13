@@ -117,15 +117,24 @@
 		<div class="grid" style="grid-template-columns:repeat(3,1fr);margin-top:12px">
 			<div class="stat">
 				<div class="label">Fee p50</div>
-				<div class="value" style="color:var(--info)">{fmt.usdc(analyticsOverview.data.fee_p50, 6)}</div>
+				<div class="value" style="color:var(--info)">
+					{fmt.usdc(analyticsOverview.data.fee_p50, 6)}
+				</div>
 			</div>
 			<div class="stat">
 				<div class="label">Fee p95</div>
-				<div class="value" style="color:var(--warn)">{fmt.usdc(analyticsOverview.data.fee_p95, 6)}</div>
+				<div class="value" style="color:var(--warn)">
+					{fmt.usdc(analyticsOverview.data.fee_p95, 6)}
+				</div>
 			</div>
-			<div class="stat">
+			<div class="stat hide-mobile">
 				<div class="label">Failed tx ratio</div>
-				<div class="value" style="color:{analyticsOverview.data.failed_tx_ratio > 0.05 ? 'var(--err)' : 'var(--ok)'}">{(analyticsOverview.data.failed_tx_ratio * 100).toFixed(2)}%</div>
+				<div
+					class="value"
+					style="color:{analyticsOverview.data.failed_tx_ratio > 0.05 ? 'var(--err)' : 'var(--ok)'}"
+				>
+					{(analyticsOverview.data.failed_tx_ratio * 100).toFixed(2)}%
+				</div>
 			</div>
 		</div>
 	{/if}

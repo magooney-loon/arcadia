@@ -1,9 +1,12 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { createSort } from '$lib/sort.svelte';
 	import { crosschain, fetchCrosschain } from '$lib/stores/crosschain.svelte';
 	import { analyticsBridgeFlow, fetchAnalyticsBridgeFlow } from '$lib/stores/analytics.svelte';
 	import { stats } from '$lib/stores/stats.svelte';
 	import * as fmt from '$lib/fmt.js';
+
+	const sort = createSort('age', 'desc');
 
 	const DIRECTIONS = ['all', 'inbound', 'outbound'];
 	const PROTOCOLS = ['all', 'cctp', 'gateway'];
@@ -29,6 +32,18 @@
 
 	const latestBlock = $derived(stats.data?.block_number ?? 0);
 	const bf = $derived(analyticsBridgeFlow.data);
+
+	const sortedEvents = $derived(
+		sort.apply(crosschain.data?.events ?? [], {
+			from_chain: (e) => fmt.domainName(e.source_domain) ?? '',
+			to_chain: (e) => fmt.domainName(e.destination_domain) ?? '',
+			event: (e) => e.event_type ?? '',
+			protocol: (e) => e.protocol ?? '',
+			amount: (e) => parseFloat(e.amount_usdc ?? '0') || 0,
+			sender: (e) => e.sender ?? '',
+			age: (e) => e.block_number ?? 0
+		})
+	);
 
 	const EVENT_BADGE: Record<string, string> = {
 		burn: 'err',
@@ -101,14 +116,35 @@
 			<table class="tbl">
 				<thead>
 					<tr>
-						<th>from chain</th>
+						<th
+							class="sortable {sort.indicator('from_chain') || ''}"
+							onclick={() => sort.toggle('from_chain')}>from chain</th
+						>
 						<th></th>
-						<th>to chain</th>
-						<th>event</th>
-						<th>protocol</th>
-						<th class="num">amount</th>
-						<th>sender</th>
-						<th class="num">age</th>
+						<th
+							class="sortable {sort.indicator('to_chain') || ''}"
+							onclick={() => sort.toggle('to_chain')}>to chain</th
+						>
+						<th
+							class="sortable {sort.indicator('event') || ''}"
+							onclick={() => sort.toggle('event')}>event</th
+						>
+						<th
+							class="sortable {sort.indicator('protocol') || ''}"
+							onclick={() => sort.toggle('protocol')}>protocol</th
+						>
+						<th
+							class="num sortable {sort.indicator('amount') || ''}"
+							onclick={() => sort.toggle('amount')}>amount</th
+						>
+						<th
+							class="sortable {sort.indicator('sender') || ''}"
+							onclick={() => sort.toggle('sender')}>sender</th
+						>
+						<th
+							class="num sortable {sort.indicator('age') || ''}"
+							onclick={() => sort.toggle('age')}>age</th
+						>
 					</tr>
 				</thead>
 				<tbody>
@@ -125,7 +161,7 @@
 							></tr
 						>
 					{:else if crosschain.data?.events.length}
-						{#each crosschain.data.events as e (e.id)}
+						{#each sortedEvents as e (e.id)}
 							<tr>
 								<td><span class="chain">{fmt.domainName(e.source_domain)}</span></td>
 								<td class="acc">→</td>

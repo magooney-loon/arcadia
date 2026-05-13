@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { createSort } from '$lib/sort.svelte';
 	import { transfers, fetchTransfers } from '$lib/stores/transfers.svelte';
 	import { stats } from '$lib/stores/stats.svelte';
 	import * as fmt from '$lib/fmt.js';
@@ -26,6 +27,19 @@
 			offset
 		});
 	}
+
+	const sort = createSort('age', 'desc');
+
+	const sortedTransfers = $derived(
+		sort.apply(transfers.data?.transfers ?? [], {
+			tx: (t) => t.tx_hash ?? '',
+			token: (t) => t.token_symbol ?? '',
+			from: (t) => t.from_addr ?? '',
+			to: (t) => t.to_addr ?? '',
+			amount: (t) => parseFloat(t.amount_human ?? '0') || 0,
+			age: (t) => t.block_number ?? 0
+		})
+	);
 
 	const latestBlock = $derived(stats.data?.block_number ?? 0);
 </script>
@@ -59,13 +73,28 @@
 			<table class="tbl">
 				<thead>
 					<tr>
-						<th>tx</th>
-						<th>token</th>
-						<th>from</th>
+						<th class="sortable {sort.indicator('tx') || ''}" onclick={() => sort.toggle('tx')}
+							>tx</th
+						>
+						<th
+							class="sortable {sort.indicator('token') || ''}"
+							onclick={() => sort.toggle('token')}>token</th
+						>
+						<th class="sortable {sort.indicator('from') || ''}" onclick={() => sort.toggle('from')}
+							>from</th
+						>
 						<th></th>
-						<th>to</th>
-						<th class="num">amount</th>
-						<th class="num">age</th>
+						<th class="sortable {sort.indicator('to') || ''}" onclick={() => sort.toggle('to')}
+							>to</th
+						>
+						<th
+							class="sortable num {sort.indicator('amount') || ''}"
+							onclick={() => sort.toggle('amount')}>amount</th
+						>
+						<th
+							class="sortable num {sort.indicator('age') || ''}"
+							onclick={() => sort.toggle('age')}>age</th
+						>
 					</tr>
 				</thead>
 				<tbody>
@@ -82,7 +111,7 @@
 							></tr
 						>
 					{:else if transfers.data?.transfers.length}
-						{#each transfers.data.transfers as t (t.id)}
+						{#each sortedTransfers as t (t.id)}
 							<tr>
 								<td
 									><a

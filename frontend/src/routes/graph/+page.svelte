@@ -3,6 +3,7 @@
 	import { graph, fetchEdges } from '$lib/stores/graph.svelte';
 	import ForceGraph from '$lib/components/ForceGraph.svelte';
 	import * as fmt from '$lib/fmt.js';
+	import { createSort } from '$lib/sort.svelte';
 
 	let walletInput = $state('');
 	let offset = $state(0);
@@ -19,6 +20,18 @@
 	}
 
 	const edges = $derived(graph.data?.edges ?? []);
+
+	const sort = createSort('total_vol', 'desc');
+	const sortedEdges = $derived(
+		sort.apply(edges, {
+			from: (e) => e.from_wallet ?? '',
+			to: (e) => e.to_wallet ?? '',
+			tx_count: (e) => e.tx_count ?? 0,
+			total_vol: (e) => parseFloat(e.total_usdc_human ?? '0') || 0,
+			from_agent: (e) => (e.from_is_agent ? '1' : '0'),
+			to_agent: (e) => (e.to_is_agent ? '1' : '0')
+		})
+	);
 </script>
 
 <div class="view">
@@ -80,13 +93,29 @@
 			<table class="tbl">
 				<thead>
 					<tr>
-						<th>from</th>
+						<th class="sortable {sort.indicator('from') || ''}" onclick={() => sort.toggle('from')}
+							>from</th
+						>
 						<th></th>
-						<th>to</th>
-						<th class="num">tx count</th>
-						<th class="num">total vol</th>
-						<th>from agent</th>
-						<th>to agent</th>
+						<th class="sortable {sort.indicator('to') || ''}" onclick={() => sort.toggle('to')}
+							>to</th
+						>
+						<th
+							class="num sortable {sort.indicator('tx_count') || ''}"
+							onclick={() => sort.toggle('tx_count')}>tx count</th
+						>
+						<th
+							class="num sortable {sort.indicator('total_vol') || ''}"
+							onclick={() => sort.toggle('total_vol')}>total vol</th
+						>
+						<th
+							class="sortable {sort.indicator('from_agent') || ''}"
+							onclick={() => sort.toggle('from_agent')}>from agent</th
+						>
+						<th
+							class="sortable {sort.indicator('to_agent') || ''}"
+							onclick={() => sort.toggle('to_agent')}>to agent</th
+						>
 					</tr>
 				</thead>
 				<tbody>
@@ -103,7 +132,7 @@
 							></tr
 						>
 					{:else if edges.length}
-						{#each edges as e (e.from_wallet + e.to_wallet)}
+						{#each sortedEdges as e (e.from_wallet + e.to_wallet)}
 							<tr>
 								<td class="addr"
 									><a

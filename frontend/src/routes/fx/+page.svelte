@@ -3,6 +3,7 @@
 	import { fx, fetchFx } from '$lib/stores/fx.svelte';
 	import { stats } from '$lib/stores/stats.svelte';
 	import * as fmt from '$lib/fmt.js';
+	import { createSort } from '$lib/sort.svelte';
 
 	const STATUSES = ['all', 'created', 'taker_funded', 'maker_funded', 'settled', 'cancelled'];
 
@@ -21,6 +22,20 @@
 	}
 
 	const latestBlock = $derived(stats.data?.block_number ?? 0);
+
+	const sort = createSort('age', 'desc');
+
+	const sortedTrades = $derived(
+		sort.apply(fx.data?.trades ?? [], {
+			pair: (t) => String(t.input_token ?? '') + '/' + String(t.output_token ?? ''),
+			size: (t) => parseFloat(String(t.input_amount ?? '0')) || 0,
+			rate: (t) => (typeof t.implied_rate === 'number' ? t.implied_rate : 0),
+			maker: (t) => t.maker ?? '',
+			taker: (t) => t.taker ?? '',
+			status: (t) => t.status ?? '',
+			age: (t) => t.block_number ?? 0
+		})
+	);
 </script>
 
 <div class="view">
@@ -52,13 +67,33 @@
 			<table class="tbl">
 				<thead>
 					<tr>
-						<th>pair</th>
-						<th class="num">size</th>
-						<th class="num">rate</th>
-						<th>maker</th>
-						<th>taker</th>
-						<th>status</th>
-						<th class="num">age</th>
+						<th class="sortable {sort.indicator('pair') || ''}" onclick={() => sort.toggle('pair')}
+							>pair</th
+						>
+						<th
+							class="sortable num {sort.indicator('size') || ''}"
+							onclick={() => sort.toggle('size')}>size</th
+						>
+						<th
+							class="sortable num {sort.indicator('rate') || ''}"
+							onclick={() => sort.toggle('rate')}>rate</th
+						>
+						<th
+							class="sortable {sort.indicator('maker') || ''}"
+							onclick={() => sort.toggle('maker')}>maker</th
+						>
+						<th
+							class="sortable {sort.indicator('taker') || ''}"
+							onclick={() => sort.toggle('taker')}>taker</th
+						>
+						<th
+							class="sortable {sort.indicator('status') || ''}"
+							onclick={() => sort.toggle('status')}>status</th
+						>
+						<th
+							class="sortable num {sort.indicator('age') || ''}"
+							onclick={() => sort.toggle('age')}>age</th
+						>
 					</tr>
 				</thead>
 				<tbody>
@@ -75,7 +110,7 @@
 							></tr
 						>
 					{:else if fx.data?.trades.length}
-						{#each fx.data.trades as t, i (i)}
+						{#each sortedTrades as t, i (i)}
 							{@const inputTok = t.input_token as string}
 							{@const outputTok = t.output_token as string}
 							<tr>

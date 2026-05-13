@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { agentJobs, fetchAgentJobs } from '$lib/stores/agents.svelte';
 	import { stats } from '$lib/stores/stats.svelte';
+	import { createSort } from '$lib/sort.svelte';
 	import * as fmt from '$lib/fmt.js';
 
 	const TABS = [
@@ -37,6 +38,20 @@
 
 	const latestBlock = $derived(stats.data?.block_number ?? 0);
 	const jobs = $derived(agentJobs.data?.jobs ?? []);
+
+	const sort = createSort('created', 'desc');
+
+	const sortedJobs = $derived(
+		sort.apply(jobs, {
+			job_id: (j) => j.job_id ?? '',
+			employer: (j) => j.employer_address ?? '',
+			worker: (j) => j.worker_address ?? '',
+			status: (j) => j.status ?? '',
+			reward: (j) => parseFloat(j.payment_usdc ?? '0') || 0,
+			created: (j) => j.created_at_block ?? 0,
+			settled: (j) => j.settled_at_block ?? 0
+		})
+	);
 
 	const totalEscrow = $derived(jobs.reduce((s, j) => s + parseFloat(j.payment_usdc ?? '0'), 0));
 </script>
@@ -85,13 +100,34 @@
 			<table class="tbl">
 				<thead>
 					<tr>
-						<th>job id</th>
-						<th>employer</th>
-						<th>worker</th>
-						<th>status</th>
-						<th class="num">reward</th>
-						<th class="num">created</th>
-						<th class="num">settled</th>
+						<th
+							class="sortable {sort.indicator('job_id') || ''}"
+							onclick={() => sort.toggle('job_id')}>job id</th
+						>
+						<th
+							class="sortable {sort.indicator('employer') || ''}"
+							onclick={() => sort.toggle('employer')}>employer</th
+						>
+						<th
+							class="sortable {sort.indicator('worker') || ''}"
+							onclick={() => sort.toggle('worker')}>worker</th
+						>
+						<th
+							class="sortable {sort.indicator('status') || ''}"
+							onclick={() => sort.toggle('status')}>status</th
+						>
+						<th
+							class="num sortable {sort.indicator('reward') || ''}"
+							onclick={() => sort.toggle('reward')}>reward</th
+						>
+						<th
+							class="num sortable {sort.indicator('created') || ''}"
+							onclick={() => sort.toggle('created')}>created</th
+						>
+						<th
+							class="num sortable {sort.indicator('settled') || ''}"
+							onclick={() => sort.toggle('settled')}>settled</th
+						>
 					</tr>
 				</thead>
 				<tbody>
@@ -108,7 +144,7 @@
 							></tr
 						>
 					{:else if jobs.length}
-						{#each jobs as j (j.job_id)}
+						{#each sortedJobs as j (j.job_id)}
 							<tr>
 								<td
 									><a

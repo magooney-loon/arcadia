@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { createSort } from '$lib/sort.svelte';
 	import { analyticsAgentLeaderboard, fetchAgentLeaderboard } from '$lib/stores/analytics.svelte';
 	import * as fmt from '$lib/fmt.js';
 
@@ -8,6 +9,20 @@
 	onMount(() => fetchAgentLeaderboard(limit));
 
 	const board = $derived(analyticsAgentLeaderboard.data?.leaderboard ?? []);
+
+	const sort = createSort('volume', 'desc');
+	const sortedBoard = $derived(
+		sort.apply(board, {
+			address: (a) => a.agent_address ?? '',
+			txs: (a) => a.tx_count ?? 0,
+			volume: (a) => parseFloat(a.usdc_transferred_human ?? '0') || 0,
+			fees_spent: (a) => parseFloat(a.usdc_spent_fees_human ?? '0') || 0,
+			jobs: (a) => a.job_count ?? 0,
+			paid: (a) => a.paid_jobs ?? 0,
+			rejected: (a) => a.rejected_jobs ?? 0,
+			escrow: (a) => a.total_escrow ?? 0
+		})
+	);
 
 	const totalEscrow = $derived(board.reduce((s, a) => s + (a.total_escrow ?? 0), 0));
 	const inFlightJobs = $derived(
@@ -51,14 +66,38 @@
 				<thead>
 					<tr>
 						<th>#</th>
-						<th>address</th>
-						<th class="num">txs</th>
-						<th class="num">volume</th>
-						<th class="num">fees spent</th>
-						<th class="num">jobs</th>
-						<th class="num">paid</th>
-						<th class="num">rejected</th>
-						<th class="num">escrow</th>
+						<th
+							class="sortable {sort.indicator('address') || ''}"
+							onclick={() => sort.toggle('address')}>address</th
+						>
+						<th
+							class="num sortable {sort.indicator('txs') || ''}"
+							onclick={() => sort.toggle('txs')}>txs</th
+						>
+						<th
+							class="num sortable {sort.indicator('volume') || ''}"
+							onclick={() => sort.toggle('volume')}>volume</th
+						>
+						<th
+							class="num sortable {sort.indicator('fees_spent') || ''}"
+							onclick={() => sort.toggle('fees_spent')}>fees spent</th
+						>
+						<th
+							class="num sortable {sort.indicator('jobs') || ''}"
+							onclick={() => sort.toggle('jobs')}>jobs</th
+						>
+						<th
+							class="num sortable {sort.indicator('paid') || ''}"
+							onclick={() => sort.toggle('paid')}>paid</th
+						>
+						<th
+							class="num sortable {sort.indicator('rejected') || ''}"
+							onclick={() => sort.toggle('rejected')}>rejected</th
+						>
+						<th
+							class="num sortable {sort.indicator('escrow') || ''}"
+							onclick={() => sort.toggle('escrow')}>escrow</th
+						>
 					</tr>
 				</thead>
 				<tbody>
@@ -75,7 +114,7 @@
 							></tr
 						>
 					{:else if board.length}
-						{#each board as a, i (a.agent_address)}
+						{#each sortedBoard as a, i (a.agent_address)}
 							<tr>
 								<td class="muted">{i + 1}</td>
 								<td>

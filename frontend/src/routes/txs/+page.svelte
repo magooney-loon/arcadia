@@ -3,6 +3,7 @@
 	import { transactions, fetchTransactions } from '$lib/stores/chain.svelte';
 	import { stats } from '$lib/stores/stats.svelte';
 	import * as fmt from '$lib/fmt.js';
+	import { createSort } from '$lib/sort.svelte';
 
 	const METHODS = ['all', 'transfer', 'approve', 'swap', 'execute', 'multicall', 'deploy'];
 
@@ -24,6 +25,20 @@
 		if (methodFilter === 'deploy') return txs.filter((t) => t.is_contract_deploy === true);
 		return txs.filter((t) => fmt.methodName(t.sighash) === methodFilter);
 	});
+
+	const sort = createSort('age', 'desc');
+
+	const sortedTxs = $derived(
+		sort.apply(filtered(), {
+			hash: (t) => t.hash ?? '',
+			method: (t) => fmt.methodName(t.sighash) ?? '',
+			from: (t) => t.from_addr ?? '',
+			to: (t) => t.to_addr ?? '',
+			fee: (t) => parseFloat(t.fee_usdc ?? '0') || 0,
+			status: (t) => t.status ?? 0,
+			age: (t) => t.block_number ?? 0
+		})
+	);
 </script>
 
 <div class="view">
@@ -50,14 +65,32 @@
 			<table class="tbl">
 				<thead>
 					<tr>
-						<th>hash</th>
-						<th>method</th>
-						<th>from</th>
+						<th class="sortable {sort.indicator('hash') || ''}" onclick={() => sort.toggle('hash')}
+							>hash</th
+						>
+						<th
+							class="sortable {sort.indicator('method') || ''}"
+							onclick={() => sort.toggle('method')}>method</th
+						>
+						<th class="sortable {sort.indicator('from') || ''}" onclick={() => sort.toggle('from')}
+							>from</th
+						>
 						<th></th>
-						<th>to</th>
-						<th class="num">fee</th>
-						<th class="num">status</th>
-						<th class="num">age</th>
+						<th class="sortable {sort.indicator('to') || ''}" onclick={() => sort.toggle('to')}
+							>to</th
+						>
+						<th
+							class="num sortable {sort.indicator('fee') || ''}"
+							onclick={() => sort.toggle('fee')}>fee</th
+						>
+						<th
+							class="num sortable {sort.indicator('status') || ''}"
+							onclick={() => sort.toggle('status')}>status</th
+						>
+						<th
+							class="num sortable {sort.indicator('age') || ''}"
+							onclick={() => sort.toggle('age')}>age</th
+						>
 					</tr>
 				</thead>
 				<tbody>
@@ -74,7 +107,7 @@
 							></tr
 						>
 					{:else if filtered().length}
-						{#each filtered() as t (t.hash)}
+						{#each sortedTxs as t (t.hash)}
 							<tr>
 								<td
 									><a
