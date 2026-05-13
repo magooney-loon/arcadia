@@ -143,10 +143,12 @@ export function fxBadge(status: string): string {
 export function jobBadge(status: string): string {
 	const m: Record<string, string> = {
 		created: 'muted',
-		accepted: 'info',
-		delivered: 'warn',
-		settled: 'ok',
-		disputed: 'err'
+		funded: 'info',
+		submitted: 'warn',
+		completed: 'ok',
+		paid: 'ok',
+		rejected: 'err',
+		expired: 'err'
 	};
 	return m[status] ?? 'muted';
 }

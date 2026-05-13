@@ -877,7 +877,7 @@ func analyticsBridgeFlowHandler(c *core.RequestEvent) error {
 	})
 }
 
-// API_DESC Agent leaderboard ranked by job_count with job stats attached
+// API_DESC Agent leaderboard ranked by stablecoin volume transferred
 // API_TAGS Agents
 func analyticsAgentLeaderboardHandler(c *core.RequestEvent) error {
 	limit, _ := limitOffset(c)
@@ -885,7 +885,8 @@ func analyticsAgentLeaderboardHandler(c *core.RequestEvent) error {
 		limit = 100
 	}
 
-	agents, err := c.App.FindRecordsByFilter("agents", "", "-tx_count", limit, 0)
+	// Fetch all agents so high-volume low-tx agents aren't excluded before sort.
+	agents, err := c.App.FindRecordsByFilter("agents", "", "", 500, 0)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error()})
 	}
@@ -918,11 +919,16 @@ func analyticsAgentLeaderboardHandler(c *core.RequestEvent) error {
 		result = append(result, entry)
 	}
 
-	// Sort by job_count descending
+	// Sort by usdc_transferred_human (stablecoin volume) descending.
+	getVol := func(e map[string]any) float64 {
+		if s, ok := e["usdc_transferred_human"].(string); ok {
+			v, _ := strconv.ParseFloat(s, 64)
+			return v
+		}
+		return 0
+	}
 	sort.Slice(result, func(i, j int) bool {
-		ic, _ := result[i]["job_count"].(int)
-		jc, _ := result[j]["job_count"].(int)
-		return ic > jc
+		return getVol(result[i]) > getVol(result[j])
 	})
 
 	if len(result) > limit {

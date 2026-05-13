@@ -7,10 +7,12 @@
 	const TABS = [
 		{ label: 'All', status: '' },
 		{ label: 'Created', status: 'created' },
-		{ label: 'Accepted', status: 'accepted' },
-		{ label: 'Delivered', status: 'delivered' },
-		{ label: 'Settled', status: 'settled' },
-		{ label: 'Disputed', status: 'disputed' }
+		{ label: 'Funded', status: 'funded' },
+		{ label: 'Submitted', status: 'submitted' },
+		{ label: 'Completed', status: 'completed' },
+		{ label: 'Paid', status: 'paid' },
+		{ label: 'Rejected', status: 'rejected' },
+		{ label: 'Expired', status: 'expired' }
 	];
 
 	let activeStatus = $state('');

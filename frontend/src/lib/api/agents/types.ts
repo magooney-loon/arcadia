@@ -6,7 +6,9 @@ export interface Agent {
 	tx_hash?: string;
 	tx_count?: number;
 	usdc_spent_fees?: string;
+	usdc_spent_fees_human?: string;
 	usdc_transferred?: string;
+	usdc_transferred_human?: string;
 	[key: string]: unknown;
 }
 
@@ -21,7 +23,7 @@ export interface AgentJob {
 	employer_address?: string;
 	worker_address?: string;
 	payment_usdc?: string;
-	status: 'created' | 'accepted' | 'delivered' | 'settled' | 'disputed';
+	status: 'created' | 'funded' | 'submitted' | 'completed' | 'rejected' | 'expired' | 'paid';
 	created_at_block: number;
 	settled_at_block?: number;
 	create_tx_hash?: string;

@@ -851,12 +851,15 @@ func processBatch(app core.App, res *types.QueryResponse) error {
 				case AddrUSYC:
 					acc.totalUSYC.Add(acc.totalUSYC, amount)
 				}
-				// accumulate USDC sent by from_addr for agent aggregation
+				// accumulate stablecoin volume sent by from_addr for agent aggregation.
+				// Restricted to KnownTokens (USDC/EURC/USYC) — custom tokens with
+				// non-standard decimals would produce nonsense values via stablecoinHuman.
 				if log.Topic0 != nil && *log.Topic0 == TopicTransfer &&
-					log.Address != nil && *log.Address != AddrAgentRegistry &&
-					log.Topic1 != nil {
-					fromAddr := common.BytesToAddress(log.Topic1.Bytes()[12:]).Hex()
-					getAgentDelta(fromAddr).transferred.Add(getAgentDelta(fromAddr).transferred, amount)
+					log.Address != nil && log.Topic1 != nil {
+					if _, isStable := KnownTokens[*log.Address]; isStable {
+						fromAddr := common.BytesToAddress(log.Topic1.Bytes()[12:]).Hex()
+						getAgentDelta(fromAddr).transferred.Add(getAgentDelta(fromAddr).transferred, amount)
+					}
 				}
 			}
 		}
@@ -1274,9 +1277,12 @@ func saveTransfer(app core.App, log *types.Log) (*big.Int, error) {
 		return nil, fmt.Errorf("save transfer %s/%d: %w", txHash, logIdx, err)
 	}
 
-	// update wallet graph edge
-	if err := upsertWalletEdge(app, from.Hex(), to.Hex(), amountRaw, log.BlockNumber); err != nil {
-		return nil, err
+	// update wallet graph edge only for known stablecoins — total_usdc on edges
+	// assumes 6-decimal ERC-20 amounts; unknown tokens have arbitrary decimals.
+	if _, isStable := KnownTokens[*log.Address]; isStable {
+		if err := upsertWalletEdge(app, from.Hex(), to.Hex(), amountRaw, log.BlockNumber); err != nil {
+			return nil, err
+		}
 	}
 
 	return amountRaw, nil

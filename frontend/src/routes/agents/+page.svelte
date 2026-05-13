@@ -11,7 +11,7 @@
 
 	const totalEscrow = $derived(board.reduce((s, a) => s + (a.total_escrow ?? 0), 0));
 	const inFlightJobs = $derived(
-		board.reduce((s, a) => s + (a.job_count - a.settled_jobs - a.disputed_jobs), 0)
+		board.reduce((s, a) => s + (a.job_count - a.paid_jobs - a.rejected_jobs), 0)
 	);
 </script>
 
@@ -56,8 +56,8 @@
 						<th class="num">volume</th>
 						<th class="num">fees spent</th>
 						<th class="num">jobs</th>
-						<th class="num">settled</th>
-						<th class="num">disputed</th>
+						<th class="num">paid</th>
+						<th class="num">rejected</th>
 						<th class="num">escrow</th>
 					</tr>
 				</thead>
@@ -91,12 +91,12 @@
 									{/if}
 								</td>
 								<td class="num">{fmt.num(a.tx_count)}</td>
-								<td class="num">{fmt.usdc(a.usdc_transferred)}</td>
-								<td class="num muted">{fmt.usdc(a.usdc_spent_fees, 4)}</td>
+								<td class="num">{fmt.usdc(a.usdc_transferred_human)}</td>
+								<td class="num muted">{fmt.usdc(a.usdc_spent_fees_human, 4)}</td>
 								<td class="num">{a.job_count}</td>
-								<td class="num" style="color:var(--ok)">{a.settled_jobs}</td>
-								<td class="num" style="color:{a.disputed_jobs > 0 ? 'var(--err)' : 'var(--fg-4)'}"
-									>{a.disputed_jobs}</td
+								<td class="num" style="color:var(--ok)">{a.paid_jobs}</td>
+								<td class="num" style="color:{a.rejected_jobs > 0 ? 'var(--err)' : 'var(--fg-4)'}"
+									>{a.rejected_jobs}</td
 								>
 								<td class="num">{fmt.usdc(a.total_escrow)}</td>
 							</tr>

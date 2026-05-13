@@ -71,12 +71,14 @@ export interface AgentLeaderboardEntry {
 	agent_address: string;
 	tx_count: number;
 	usdc_transferred: string;
+	usdc_transferred_human?: string;
 	usdc_spent_fees: string;
+	usdc_spent_fees_human?: string;
 	registered_at_block: number;
 	job_count: number;
 	total_escrow: number;
-	settled_jobs: number;
-	disputed_jobs: number;
+	paid_jobs: number;
+	rejected_jobs: number;
 	[key: string]: unknown;
 }
 

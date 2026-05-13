@@ -270,7 +270,7 @@
 		<div class="card">
 			<div class="card-head">
 				<div class="card-title">Top agents · 24h</div>
-				<div class="card-sub">ERC-8004 · by job count</div>
+				<div class="card-sub">ERC-8004 · by volume</div>
 				<div class="card-actions">
 					<a class="mono dim" style="font-size:10px" href={resolve('/agents/')}>REGISTRY →</a>
 				</div>
@@ -293,7 +293,7 @@
 							<div class="agent-stats">
 								<div>
 									<span class="s-lbl">volume</span>
-									{fmt.usdc(a.usdc_transferred)}
+									{fmt.usdc(a.usdc_transferred_human)}
 								</div>
 							</div>
 						</div>
