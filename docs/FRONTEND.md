@@ -1,215 +1,226 @@
-# Arcadia Frontend Plan
+# Arcadia — City of Chains
 
-## Vision
+## The City
 
-A fullscreen 3D visualizer for the Arc L1 chain. The centrepiece is a **living neural graph** — wallet nodes positioned by force-directed layout form a brain-like 3D structure, connected by transfer edges that trace the network's synaptic pathways. There are no static decorative meshes. Every sphere, line, and particle represents real on-chain data: blocks, transfers, agents, jobs, FX swaps. The only non-data element is the ARCADIA logotype as a brand anchor. Capital flows in from outside (cross-chain), circulates inside (transfers, agent jobs, FX swaps), and the chain spine runs through the Z axis as time. Everything is live via PocketBase websockets. No dashboards, no tables — just the chain breathing.
+Arcadia is a city you can fly through. Each chain block is a **city block** — a literal parcel of land in the urban grid. Inside every city block live the wallets that were active in it, connected by the transfers that moved between them during that block. The city extends in one direction through time: newest block at the front, history receding.
 
-**Design principle:** If a mesh doesn't represent data, it doesn't belong in the scene.
+From the air you see the skyline — blocks raised to different heights by activity, glowing hot or cold by utilization. Fly down into any block and it opens up: buildings (wallet addresses) rise from the parcel floor, streets (transfer edges) connect them, agents tower above the rest in green.
+
+The city is alive. New blocks land at the front every second. Couriers (particles) race between buildings. Cross-chain capital arrives at the city border as port traffic.
+
+**No decorative structures. Every building, street, and courier is data.**
 
 ---
 
-## Stack
+## Blueprint
 
 | Layer | Choice | Reason |
 |---|---|---|
 | Framework | SvelteKit | SSR shell, file-based routing |
-| 3D renderer | **Threlte** (`@threlte/core`, `@threlte/extras`) | Svelte-native Three.js; scene graph = component tree; Svelte 5 runes-compatible |
+| 3D renderer | **Threlte** (`@threlte/core`, `@threlte/extras`) | Svelte-native Three.js; scene graph = component tree; Svelte 5 runes |
 | Underlying 3D | Three.js (via Threlte) | Full access when needed |
-| Graph layout | `d3-force-3d` | Force-directed wallet node placement in 3D space |
-| Real-time | PocketBase websockets (on the `pb` instance) | Subscribe to collection changes, push to stores |
-| Charts (HUD) | Raw SVG `$derived` | Lightweight time-series for the 2D overlay |
-| Types / state | `$lib/api/` + `$lib/stores/` | Done — all 12 endpoints typed and stored |
+| Block-level layout | `d3-force-3d` | Per-block mini force sim → positions wallets within a parcel's bounds |
+| Real-time | PocketBase websockets | Subscribe to collection changes, push to stores |
+| Dashboard charts | Raw SVG `$derived` | Lightweight time-series for the 2D overlay |
+| Types / state | `$lib/api/` + `$lib/stores/` | Done — all endpoints typed and stored |
 
 **Installed:**
 ```
-@threlte/core  @threlte/extras  three  @types/three
-```
-**Still needed:**
-```
-d3-force-3d
+@threlte/core  @threlte/extras  three  @types/three  d3-force-3d
 ```
 
 ---
 
-## Routes
+## The Map (Routes)
 
 ```
-/          → main 3D scene (Scene.svelte as full viewport canvas)   ✅
-/debug     → API explorer with filter controls for every endpoint   ✅
+/          → The City   (Scene.svelte as full viewport canvas)   ✅
+/debug     → Control Room  (API explorer with filter controls)   ✅
 ```
-
-The root page is a full-viewport Threlte `<Canvas>` with a 2D HUD overlay rendered in a Svelte layer on top via CSS `position: absolute`.
 
 ---
 
-## Visual Design Language
-
-Derived from the wireframe SVG (`docs/Arcadia_Wireframe.html`).
+## Urban Palette
 
 | Element | Value |
 |---|---|
-| Background | `#0a0a0f` |
-| Wallet nodes | `#ffffff` — form the neural graph structure via force layout |
-| Transfer edges | `#9aa0b4` at 25–40% opacity — the "wireframe" IS the transfer graph |
-| Agent nodes | `#7ee5a8` (green) — glow + pulse, sized by `usdc_spent_fees` |
-| Cross-chain inflows | `#6be3ff` (cyan) |
-| USDC flow | `#2775ca` (Circle blue) |
-| EURC flow | `#e8b84b` (EUR gold) |
-| USYC flow | `#7b61ff` (purple, yield) |
-| FX swap arcs | gradient USDC→EURC |
-| Block heat (cold) | hsl(210°, blue) |
-| Block heat (hot) | hsl(25°, orange) |
-| Job arcs | `#f0a500` (amber) |
+| Night sky (background) | `#0a0a0f` |
+| City block parcel (ground) | `#111118` — the floor of each block |
+| Buildings (wallet nodes) | `#ffffff` — occupants of a block |
+| Streets (transfer edges within block) | `#9aa0b4` at 30% opacity |
+| Agent towers | `#7ee5a8` (green) — glow + pulse, taller by `usdc_spent_fees` |
+| Resident paths (cross-block edges) | `#9aa0b4` at 10% opacity — faint lines connecting same wallet across blocks |
+| Harbor traffic (cross-chain) | `#6be3ff` (cyan) |
+| USDC couriers | `#2775ca` (Circle blue) |
+| EURC couriers | `#e8b84b` (EUR gold) |
+| USYC couriers | `#7b61ff` (purple, yield) |
+| FX bridges | gradient USDC→EURC |
+| Block heat (cold, low utilization) | hsl(210°, blue) |
+| Block heat (hot, high utilization) | hsl(25°, orange) |
+| Job arcs (work orders between agents) | `#f0a500` (amber) |
 
 ---
 
-## API & Stores
+## City Data Lines (API & Stores)
 
-All 12 REST endpoints are implemented, typed, and stored. Types match `collections.go` exactly.
-
-| Endpoint | Store | Notes |
+| Endpoint | Store | What it feeds |
 |---|---|---|
-| `GET /api/v1/stats` | `stats` | Latest block_stats row + rolling 10-block TPS avg |
-| `GET /api/v1/block_stats` | `blockStats` | History for time-series charts ✅ added to backend |
-| `GET /api/v1/blocks` | `blocks` | Full Block type inc. `utilization_pct`, `miner`, `size` |
-| `GET /api/v1/transactions` | `transactions` | All 22 fields inc. `fee_usdc`, `sighash`, `is_contract_deploy` |
-| `GET /api/v1/transfers` | `transfers` | `amount_raw` + `amount_human`, token union type |
-| `GET /api/v1/traces` | `traces` | `trace_type`, `gas_used`, `error_msg` |
-| `GET /api/v1/crosschain` | `crosschain` | `amount_usdc`, `nonce_val`, protocol/event union types |
-| `GET /api/v1/fx` | `fx` | `trade_id`, `taker_fee`, `maker_fee`, `status_code` |
-| `GET /api/v1/agents` | `agents` | `metadata_uri`, `tx_count`, `usdc_spent_fees` |
-| `GET /api/v1/agents/{address}` | `agent` | Single agent + job history |
-| `GET /api/v1/jobs` | `agentJobs` | Full job lifecycle fields |
-| `GET /api/v1/edges` | `graph` | `total_usdc`, `last_seen_block`, `from_is_agent`, `to_is_agent` |
-| `GET /api/v1/wallet/{address}` | `wallet` | Typed txs/transfers/edges/agent |
+| `GET /api/v1/stats` | `stats` | City pulse: latest block_stats + rolling TPS avg |
+| `GET /api/v1/block_stats` | `blockStats` | Block history for dashboard sparklines |
+| `GET /api/v1/blocks` | `blocks` | City block parcels: `tx_count`, `utilization_pct`, `gas_used`, `timestamp` |
+| `GET /api/v1/transactions?block=N` | `blockTxs` | All transactions inside one city block |
+| `GET /api/v1/transfers?block=N` | `blockTransfers` | All transfers inside one block — **needs backend filter** (see below) |
+| `GET /api/v1/transfers` | `transfers` | Global transfer feed for particle spawning |
+| `GET /api/v1/traces` | `traces` | Internal call traces |
+| `GET /api/v1/crosschain` | `crosschain` | Harbor arrivals: CCTP/Gateway events |
+| `GET /api/v1/fx` | `fx` | Exchange floor: StableFX trades |
+| `GET /api/v1/agents` | `agents` | Agent tower registry |
+| `GET /api/v1/agents/{address}` | `agent` | Single tower profile + job history |
+| `GET /api/v1/jobs` | `agentJobs` | Work orders: full job lifecycle |
+| `GET /api/v1/edges` | `graph` | Resident paths: cumulative cross-block wallet connections |
+| `GET /api/v1/wallet/{address}` | `wallet` | Wallet profile: history, edges, agent status |
+
+**Needed backend addition:** `GET /api/v1/transfers?block=N` — `transfers` table has `block_number` field; the handler just needs a `block` query param filter added (same pattern as `transactionsHandler`).
 
 ---
 
-## Scene Architecture
+## City Layout (Scene Architecture)
 
 ```
-<Canvas> (full viewport, #0a0a0f background)
+<Canvas>  — THE CITY  (#0a0a0f night sky)
 │
-├── <SceneCamera>          ✅  PerspectiveCamera at (0,6,18), OrbitControls, pan enabled
-├── <SceneLighting>        ✅  Ambient + cyan point light + green point light
+├── <SceneCamera>          The Drone — two modes: CityView (high, wide) + BlockView (low, focused)
+├── <SceneLighting>        City Lights — ambient glow + accent points
 │
-├── <ChainSpine>           ✅  Fetches 50 blocks on mount
-│   └── <BlockNodes>       ✅  InstancedMesh, Z-axis spine, utilization heat colour
+├── <CityGrid>             THE CITY GRID — sequence of chain blocks laid flat on the XZ plane
+│   ├── <BlockParcel>      One per block — raised platform, heat-colored, sized by tx_count
+│   ├── <BlockBuildings>   Shown when block is focused — wallet nodes inside the parcel bounds
+│   ├── <BlockStreets>     Shown when block is focused — transfer edges between wallets in this block
+│   └── <AgentTowers>      Agent wallets as taller green structures, visible in both modes
 │
-├── <WalletGraph>          ✅  THE CENTRAL VISUAL — force-directed neural graph of all wallet activity
-│   ├── <TransferEdges>    ✅  LineSegments — the "wireframe" of the brain, brightness ∝ total_usdc
-│   ├── <WalletNodes>      ✅  InstancedMesh — all active wallets, force-laid in 3D spherical cluster
-│   └── <AgentNodes>       ✅  Green emissive subset, pulse animation, stronger repulsion → surface
+├── <ResidentPaths>        Cross-block wallet connections from wallet_edges — faint overlay on the grid
 │
-├── <CrosschainArrows>         Bezier arcs entering the graph from outside (CCTP/Gateway)
+├── <CrosschainArrows>         Harbor — Bezier arcs arriving at the city border
 │
-├── <TokenParticles>         ✅  Ring buffer particles traveling along transfer edges, color by token
+├── <TokenParticles>         ✅  Couriers — racing between wallets along transfer routes, color by token
 │
-├── <FXSwapArcs>               Bidirectional USDC↔EURC arcs (StableFX)
-│
-└── <FeeHeatmap>               Fee burn encoded into block node colour intensity
+└── <FXSwapArcs>               Exchange bridges — bidirectional USDC↔EURC arcs
 ```
+
+### Camera modes
+
+**CityView (default):** Camera is high and angled, showing the full block strip. You orbit and pan over the grid. Block heights, heat, and scale make the skyline legible at a glance.
+
+**BlockView (on click):** Camera glides down into the selected block. The parcel expands slightly, `BlockBuildings` and `BlockStreets` fade in. You see exactly who was in this block and what moved between them. Click away or press Escape → camera lifts back to CityView.
 
 ---
 
-## 2D HUD (Svelte overlay, `position: absolute` over the canvas)
+## City Operations Dashboard (2D HUD)
 
 ```
 +page.svelte
 │
-├── <Scene>  (Threlte Canvas, z-index 0)
+├── <Scene>  (The City, z-index 0)
 │
-└── <HUD>    (absolute overlay, pointer-events: none except interactive bits)
-    ├── <StatsBar>          Top-left: TPS · Block time · Indexed block · Fee avg
-    ├── <TokenFlowPanel>    Top-right: USDC / EURC / USYC volume this block
-    ├── <AgentCounter>      Top-right below: Active agents · Open jobs
-    ├── <LayerToggles>      Bottom-right: toggle each visual layer on/off
-    ├── <MiniCharts>        Bottom-left: sparklines for TPS + USDC volume (last 50 blocks)
-    └── <WalletInspector>   Right panel, slides in on wallet node click
+└── <HUD>    City Ops Dashboard (absolute overlay)
+    ├── <StatsBar>          TPS · Block time · Indexed block · Avg fee
+    ├── <TokenFlowPanel>    USDC / EURC / USYC volume this block
+    ├── <AgentCounter>      Active agents · Open jobs
+    ├── <LayerToggles>      Toggle: parcels / buildings / resident paths / couriers / harbor
+    ├── <MiniCharts>        Sparklines: TPS + USDC volume (last 50 blocks)
+    └── <BlockInspector>    Right panel — slides in when a block is focused
+                            Shows: block number, timestamp, tx_count, utilization, fee total
+                            + list of wallets + transfers that happened inside it
 ```
 
 ---
 
-## Data Flow
+## City Logistics (Data Flow)
 
-### Initial load
+### City wakes up
 ```
 onMount
-  → fetchStats() + fetchBlockStats() + fetchBlocks() + fetchAgents() + fetchEdges() (parallel)
-  → stores populate
-  → scene reads stores via $derived / reactive props
-  → d3-force-3d runs on wallet edges → produces x/y/z positions with spherical boundary
-  → WalletNodes + TransferEdges placed — THIS IS THE CENTRAL VISUAL (the "brain")
-  → BlockNodes placed on Z spine through the graph
+  → Fetch last 50 blocks → lay out CityGrid parcels on XZ plane
+  → Fetch wallet_edges (500) → draw ResidentPaths across the grid
+  → Fetch agents → mark agent tower locations on parcels
+  → Fetch transfers (200) → seed courier ring buffer
+  → Scene is live
 ```
 
-### Real-time (PocketBase websockets)
+### City breathes (PocketBase websockets)
 ```
 pb.collection('block_stats').subscribe('*', handler)
-  → updates stats store → StatsBar + MiniCharts re-derive
+  → New block arrives → new parcel added at front of grid, oldest slides back
 
 pb.collection('transfers').subscribe('*', handler)
-  → pushes to ring buffer (last 200 transfers)
-  → spawns new particles in TokenParticles
+  → New transfer → courier dispatched in ring buffer
 
 pb.collection('crosschain_events').subscribe('*', handler)
-  → triggers new CrosschainArrow animation
+  → Capital arrives at Harbor → arc animation fires
 
 pb.collection('fx_swaps').subscribe('*', handler)
-  → triggers new FXSwapArc animation
+  → Trade executed → FX bridge arc fires
 
 pb.collection('agent_jobs').subscribe('*', handler)
-  → updates job arcs, pulses employer/worker nodes
+  → Job posted/filled → work order arc fires between agent towers
 
 pb.collection('agents').subscribe('*', handler)
-  → adds new agent node to WalletGraph with green glow
+  → New agent registered → tower marked on its parcel
 ```
 
-### Interaction
+### Exploring the city (Interaction)
 ```
-click wallet node
-  → raycast hit → get wallet address
+click city block (BlockParcel)
+  → camera glides to BlockView
+  → fetch transactions?block=N + transfers?block=N (parallel)
+  → d3-force-3d mini sim positions wallets within parcel bounds
+  → BlockBuildings + BlockStreets fade in
+  → BlockInspector panel opens with block detail + wallet list
+
+click wallet node (inside BlockView)
   → fetchWallet(address)
-  → WalletInspector slides in with sent/received/edges/agent status
+  → BlockInspector switches to wallet profile: history, cross-block edges, agent status
 
-scroll / drag → OrbitControls handles it natively
-double-click → focus camera on node (Threlte useTween)
+click away / Escape → camera lifts to CityView, parcel contents fade out
+
+drag / scroll → Drone orbits in current mode
+double-click parcel → same as click (focus)
 ```
 
 ---
 
-## Component File Structure
+## City Blueprints (Component File Structure)
 
 ```
 src/
 ├── routes/
-│   ├── +page.svelte              ✅ full-viewport shell: <Scene> + <HUD> placeholder
+│   ├── +page.svelte              ✅ full-viewport shell: <Scene> + <HUD>
 │   └── debug/
-│       └── +page.svelte          ✅ API explorer — all 12 endpoints, full filter controls
+│       └── +page.svelte          ✅ Control Room — all endpoints, full filter controls
 │
 └── lib/
     ├── scene/
-    │   ├── Scene.svelte           ✅ Threlte <Canvas> entry point
-    │   ├── SceneCamera.svelte     ✅ PerspectiveCamera + OrbitControls (pan, no auto-rotate)
-    │   ├── SceneLighting.svelte   ✅ Ambient + point lights (cyan + green)
+    │   ├── Scene.svelte           ✅ Threlte <Canvas>
+    │   ├── SceneCamera.svelte     ✅ Drone — CityView + BlockView modes
+    │   ├── SceneLighting.svelte   ✅ Ambient + accent lights
     │   │
-    │   ├── chain/
-    │   │   ├── ChainSpine.svelte  ✅ Fetches blocks, mounts BlockNodes
-    │   │   └── BlockNodes.svelte  ✅ Helix on X axis, heat colour, chain links, head pulse
+    │   ├── city/                     ← THE CITY GRID
+    │   │   ├── CityGrid.svelte       Lays out BlockParcels in a strip, manages focused block state
+    │   │   ├── BlockParcel.svelte    One chain block: raised platform, heat color, tx_count height
+    │   │   ├── BlockBuildings.svelte Wallets active in focused block — InstancedMesh, mini force layout
+    │   │   ├── BlockStreets.svelte   Transfer edges within focused block — LineSegments
+    │   │   └── AgentTowers.svelte    Agent wallet markers — green emissive, taller, always visible
     │   │
-    │   ├── graph/                    ← THE CENTRAL VISUAL
-    │   │   ├── WalletGraph.svelte    ✅ Fetches edges + agents + transfers, runs simulation
-    │   │   ├── WalletNodes.svelte    ✅ Non-agent wallet InstancedMesh
-    │   │   ├── AgentNodes.svelte     ✅ Green emissive agent InstancedMesh + pulse
-    │   │   ├── TransferEdges.svelte  ✅ LineSegments, brightness ∝ total_usdc
-    │   │   └── JobArcs.svelte
+    │   ├── global/
+    │   │   └── ResidentPaths.svelte  Cross-block wallet edges — faint LineSegments over the grid
     │   │
     │   ├── particles/
-    │   │   ├── TokenParticles.svelte   ✅ InstancedMesh, color-coded by token, travel along edges
-    │   │   └── ParticleSpawner.svelte   ✅ Watches transfers + layout, spawns on load
+    │   │   ├── TokenParticles.svelte   ✅ Couriers — InstancedMesh, color by token, lerp along routes
+    │   │   └── ParticleSpawner.svelte  ✅ Watches transfers + layout, dispatches couriers
     │   │
     │   └── fx/
-    │       └── FXSwapArcs.svelte
+    │       ├── CrosschainArrows.svelte   Harbor traffic — Bezier arcs from city border
+    │       └── FXSwapArcs.svelte         Exchange bridges
     │
     ├── hud/
     │   ├── HUD.svelte
@@ -218,17 +229,18 @@ src/
     │   ├── AgentCounter.svelte
     │   ├── LayerToggles.svelte
     │   ├── MiniCharts.svelte
-    │   └── WalletInspector.svelte
+    │   └── BlockInspector.svelte      (was WalletInspector — now shows block + wallet detail)
     │
     ├── scene-state/
-    │   ├── layout.svelte.ts       ✅ d3-force-3d simulation → node x/y/z positions (spherical boundary)
-    │   ├── particles.svelte.ts    ✅ ring buffer of live transfers for particle spawning
-    │   ├── layers.svelte.ts       boolean toggles for each visual layer
-    │   └── selection.svelte.ts    currently selected wallet node
+    │   ├── city.svelte.ts         Block strip state: parcel positions, focused block, camera mode
+    │   ├── layout.svelte.ts       ✅ d3-force-3d mini sim for wallets within a focused block
+    │   ├── particles.svelte.ts    ✅ Courier ring buffer
+    │   ├── layers.svelte.ts           Layer visibility toggles
+    │   └── selection.svelte.ts        Currently focused block + selected wallet
     │
-    ├── api/                       ✅ all 12 endpoints — types match collections.go exactly
+    ├── api/                       ✅ all endpoints typed — add block filter to transfers
     │   ├── stats/
-    │   ├── block_stats/           ✅ added (new backend endpoint)
+    │   ├── block_stats/
     │   ├── chain/
     │   ├── transfers/
     │   ├── wallet/
@@ -236,122 +248,117 @@ src/
     │   ├── fx/
     │   ├── agents/
     │   ├── graph/
-    │   └── auth/                  (scaffolded, not used)
+    │   └── auth/
     │
     └── stores/                    ✅ one $state store per domain, all fetch functions
 ```
 
 ---
 
-## Key Technical Decisions
+## Engineering Codes (Key Technical Decisions)
 
-### InstancedMesh for nodes
-Wallet nodes will number in the thousands as the chain grows. `THREE.InstancedMesh` renders all of them in a single draw call. Each instance gets a matrix (position/scale) and a colour attribute updated per frame from the stores. Already used for BlockNodes.
+### City block grid layout
+50 blocks laid flat on the XZ plane. Each parcel is a fixed-width square (e.g. 3×3 units) with a 0.5-unit street gap. Block height (Y) = `utilization_pct` scaled to 0.1–1.5 units. Block color = `utilization_pct` mapped through HSL (210° blue → 25° orange). Newest block at Z=0, history at Z=-N. New blocks shift everything back by one slot on websocket event.
 
-### Ring buffer for particles
-Live transfers come in continuously. A fixed-size ring buffer (500 slots) holds active particles. Each frame `useTask` advances particle `t` from 0→1 along its edge curve, then frees the slot. This bounds GPU memory regardless of chain activity.
+### Per-block mini force layout
+When a block is focused, fetch its transactions and transfers, collect the unique wallet addresses, run a constrained d3-force-3d sim with the parcel footprint as bounds (radial force keeps nodes within the parcel's XZ square). 50–100 nodes max per block, sim settles in <200ms. Tear down the sim on block unfocus.
 
-### useTask not useFrame
-Threlte v8 renamed `useFrame` → `useTask`. All animation loops use `useTask((delta: number) => {...})`.
+### Two-mode camera
+Camera has a `mode` reactive variable: `city` or `block`. In `city` mode: PerspectiveCamera at (0, 20, 10), OrbitControls for free orbit. In `block` mode: camera tweens to (parcel.x, 4, parcel.z + 6), OrbitControls constrained. Transition via Threlte `useTween`. Escape or outside-click returns to `city`.
 
-### Suspense + Align avoided
-Threlte's `Suspense` and `Align` components mutate internal `$state` from inside Promise callbacks, which Svelte 5 runes mode forbids. Text3DGeometry is used without Suspense; centering is done manually via `oncreate` callback + bounding box computation directly on the Three.js mesh.
+### InstancedMesh for buildings
+Wallets inside a focused block use InstancedMesh (pool 200 per block). Position and scale updated from the force sim result. Agent towers use a separate InstancedMesh with taller geometry, always visible across both camera modes.
 
-### d3-force-3d for wallet layout — the neural graph
-The `wallet_edges` data has `tx_count` as edge strength and `from_is_agent`/`to_is_agent` flags. A force simulation positions wallets in 3D with a **spherical boundary constraint** — nodes naturally cluster into a brain-like shape without any static sphere mesh. Transfer edges between nodes create the "wireframe" organically. Agent nodes get a separate charge modifier (stronger repulsion → they sit on the surface). Re-run debounced 5s when new edges arrive.
+### Bounded courier fleet
+Ring buffer (500 slots) for live couriers. Each frame `useTask` advances courier `t` from 0→1 along its edge, frees the slot at completion. Couriers route between their source wallet's parcel position and destination wallet's parcel position — cross-block couriers travel visibly across the grid.
 
-### Separate geometry per token type
-USDC, EURC, and USYC particles use different `THREE.BufferGeometry` instances so each can have its own colour without shader branching.
+### Frame ticker
+All animation loops use `useTask((delta: number) => {...})` — Threlte v8 convention.
 
-### No static decorative meshes
-Every mesh in the scene represents on-chain data. The old `SphereGrid` (static wireframe globe) and hex core (decorative cylinder) have been removed. The "globe" shape now emerges from the force-directed wallet layout itself. The only exception is the ARCADIA logotype, kept as a brand anchor.
+### No scaffolding tricks
+Threlte's `Suspense` and `Align` mutate internal `$state` from Promise callbacks, which Svelte 5 runes forbids. Text3DGeometry centering done manually via `oncreate` + bounding box on the Three.js mesh.
 
-### Raycasting for interaction
-On click, cast a ray against the WalletNodes InstancedMesh, get the instance index, look up the wallet address from the layout store, trigger `fetchWallet`.
+### Resident paths (cross-block edges)
+`wallet_edges` records are cumulative — they represent the total relationship between two wallets across all blocks. Rendered as faint LineSegments connecting the parcel positions of their last-seen blocks. Not per-block, just a city-wide network overlay.
 
-### PocketBase subscription cleanup
-All `pb.collection(...).subscribe(...)` calls return an unsubscribe function. Clean up in `onDestroy` on Scene to prevent leaks on HMR.
+### Block filter for transfers
+`transfers` has `block_number` in the DB schema but the handler doesn't expose a `?block=N` filter yet. Add it to `transfersHandler` — same pattern as the existing `?block=` param in `transactionsHandler`. Required for BlockStreets to work.
+
+### Clean eviction
+All `pb.collection(...).subscribe(...)` calls return an unsubscribe function. Cleaned up in `onDestroy` on Scene. Per-block force sim torn down when block is unfocused.
 
 ---
 
-## Performance Budget
+## City Capacity Plan (Performance Budget)
 
 | Component | Strategy |
 |---|---|
-| Wallet nodes (up to ~10k) | InstancedMesh, single draw call |
-| Block nodes (50 max) | InstancedMesh, sliding window |
-| Transfer edges | BufferGeometry LineSegments, rebuild debounced |
-| Particles | Ring buffer, max 500 alive at once |
-| Cross-chain arrows | Max 20 animated at once |
-| FX arcs | Max 20 animated, fade out after 3s |
-| HUD charts | Raw SVG `$derived` from blockStats store |
+| City block parcels (50) | InstancedMesh, one draw call for all parcel platforms |
+| Block buildings (≤200 wallets per focused block) | InstancedMesh, pool per block, torn down on unfocus |
+| Block streets (transfer edges within block) | BufferGeometry LineSegments, rebuilt on focus |
+| Resident paths (cross-block edges, ~500) | BufferGeometry LineSegments, built once on load |
+| Agent towers | InstancedMesh, always rendered, small pool |
+| Couriers (particles) | Ring buffer, max 500 alive at once |
+| Harbor arcs | Max 20 animated at once |
+| FX bridges | Max 20 animated, fade after 3s |
+| Dashboard sparklines | Raw SVG `$derived` from blockStats store |
 
-Target: 60fps on mid-range hardware with all layers active.
+Target: 60fps on mid-range hardware in CityView; 60fps in BlockView with full block content.
 
 ---
 
-## Implementation Phases
+## Construction Timeline (Implementation Phases)
 
-### Phase 1 — Scene shell ✅ (updated — static meshes removed)
-- Threlte + Three.js installed
-- Full-viewport `<Canvas>` in `+page.svelte`
-- `SceneCamera` — PerspectiveCamera + OrbitControls autoRotate
-- `SceneLighting` — ambient + cyan + green point lights
-- ~~`ArcSphere` — wireframe globe, hex core~~ → **Removed.** Replaced by data-driven `WalletGraph` (Phase 3)
-- ~~`ArcLogotype` — Text3DGeometry~~ → **Removed.** No static meshes at all.
+### Phase 1 — Foundation ✅
+- Threlte + Three.js installed, full-viewport `<Canvas>`
+- `SceneCamera` — PerspectiveCamera + OrbitControls
+- `SceneLighting` — ambient + accent lights
 
-### Phase 2 — Chain spine ✅ (upgraded — helix layout + chain links)
-- `ChainSpine` fetches 50 blocks on mount
-- `BlockNodes` InstancedMesh in DNA **helix layout** (2 turns over Z +4 → -4, radius 0.65)
-- IcosahedronGeometry (detail 1) with MeshStandardMaterial — lit by scene lights
-- Utilization heat colour (blue→orange via HSL) with age-based dimming (newest bright, oldest dim)
-- Node scale 0.08–0.26 proportional to tx_count
-- **Chain links** — LineSegments connecting consecutive blocks, vertex-colored by heat
-- Head block pulses ±15% ("heartbeat") via useTask
-- ~~Faint axle cylinder~~ → **Removed.** Chain links ARE the spine now.
+### Phase 2 — City Grid (replaces helix)
+- `CityGrid.svelte` — lays 50 `BlockParcel` instances in a strip on XZ plane
+- `BlockParcel.svelte` — InstancedMesh platform, height = `utilization_pct`, heat color
+- Street gaps between parcels
+- Newest block pulses ("city heartbeat")
+- Live: new block arrives → grid shifts, new parcel added at front
 
-### Phase 3 — Wallet graph ✅ THE CENTRAL VISUAL — the "brain"
-- `d3-force-3d` installed
-- `scene-state/layout.svelte.ts` — force simulation on wallet edges with spherical boundary constraint (radius 3.0, radial force at 2.1)
-- `WalletGraph` container — fetches 500 edges + 200 agents on mount, runs simulation
-- `WalletNodes` InstancedMesh (pool 5000) — white IcosahedronGeometry, scale by txCount
-- `TransferEdges` LineSegments — the "wireframe" of the brain, brightness ∝ total_usdc (HSL lightness 0.15–0.50)
-- `AgentNodes` InstancedMesh (pool 500) — green emissive, scale by txCount, pulse ±12% at 1.8 rad/s
-- Agent nodes get stronger repulsion (charge -20 vs -6) → float to graph surface
-- Link strength ∝ tx_count (more active connections pull nodes closer)
+### Phase 3 — Block Drill-Down (replaces global wallet graph)
+- Add `?block=N` filter to `transfersHandler` in `handlers.go`
+- `BlockBuildings.svelte` — fetches txs + transfers for focused block, runs mini force sim, renders wallets as InstancedMesh within parcel bounds
+- `BlockStreets.svelte` — LineSegments between wallets for transfers within the block
+- `AgentTowers.svelte` — agent wallets marked on their parcels, always visible
+- Camera tween between CityView and BlockView
+- `BlockInspector` HUD panel
 
-### Phase 4 — Particles ✅
-- `scene-state/particles.svelte.ts` ring buffer (max 500 live particles)
-- `TokenParticles.svelte` — single InstancedMesh, particles lerp along edges, swell mid-journey
-- Color-coded by token type: USDC `#2775ca`, EURC `#e8b84b`, USYC `#7b61ff`
-- `ParticleSpawner.svelte` — watches transfers + layout, spawns on initial load
-- Particles auto-die when `t >= 1`, ticked every frame via `useTask`
-- WalletGraph fetches 200 transfers on mount as particle source data
+### Phase 4 — City Traffic ✅
+- `scene-state/particles.svelte.ts` ring buffer (max 500 live couriers)
+- `TokenParticles.svelte` — couriers lerp between wallet parcel positions, color by token
+- `ParticleSpawner.svelte` — watches transfers + layout, dispatches couriers
+- Cross-block couriers travel visibly across the grid
 
-### Phase 5 — Live data
-- PocketBase websocket subscriptions (block_stats, transfers, agents, jobs, crosschain, fx)
-- New blocks animate into spine
-- New transfers spawn particles
-- New agents add glowing node
-- New jobs draw arc
+### Phase 5 — Resident Paths
+- `ResidentPaths.svelte` — renders `wallet_edges` as faint cross-block LineSegments
+- Connects wallets' last-known parcel positions
+- Fades with distance from newest block
 
-### Phase 6 — Cross-chain + FX
-- `CrosschainArrows` — Bezier arcs entering the sphere from outside
-- `FXSwapArcs` — bidirectional USDC↔EURC curves
+### Phase 6 — Live City
+- PocketBase websocket subscriptions
+- New block → parcel added at grid front
+- New transfer → courier dispatched
+- New agent → tower marked
+- New job → work order arc fired
 
-### Phase 7 — HUD
-- `StatsBar` — TPS, block time, avg fee
-- `TokenFlowPanel` — per-block USDC/EURC/USYC volumes
-- `MiniCharts` — sparklines from `blockStats` store (last 50 blocks)
-- `LayerToggles` — `scene-state/layers.svelte.ts`
+### Phase 7 — Harbor + Exchange
+- `CrosschainArrows` — Bezier arcs arriving at the city border (from outside the grid)
+- `FXSwapArcs` — bidirectional USDC↔EURC exchange bridge arcs
 
-### Phase 8 — Interaction
-- Raycast on click → `WalletInspector` panel slides in
-- Camera focus animation on selected node
-- Double-click to zoom/reset
+### Phase 8 — City Ops Dashboard
+- `StatsBar`, `TokenFlowPanel`, `MiniCharts`, `AgentCounter`
+- `LayerToggles` — toggle parcels / buildings / paths / couriers / harbor
+- `BlockInspector` — block detail + wallet list + transfer list
 
-### Phase 9 — Polish
-- Bloom on agent nodes + hot blocks (`@threlte/extras` EffectComposer)
-- Fog for depth cueing
-- Smooth idle auto-orbit
-- Mobile fallback (no particles, simplified geometry)
+### Phase 9 — Exploration Polish
+- Bloom on agent towers + hot parcels (`@threlte/extras` EffectComposer)
+- Fog for depth — city recedes into haze
+- Smooth idle auto-orbit in CityView
+- Double-click parcel to focus, Escape to return
+- Mobile fallback (no couriers, simplified geometry, orthographic camera)

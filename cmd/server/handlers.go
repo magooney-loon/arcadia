@@ -128,7 +128,7 @@ func transactionsHandler(c *core.RequestEvent) error {
 	})
 }
 
-// API_DESC Token transfers — filterable by token symbol, sender, or receiver
+// API_DESC Token transfers — filterable by block, token symbol, sender, or receiver
 // API_TAGS Transfers
 func transfersHandler(c *core.RequestEvent) error {
 	limit, offset := limitOffset(c)
@@ -136,8 +136,15 @@ func transfersHandler(c *core.RequestEvent) error {
 	filter := ""
 	params := map[string]any{}
 
+	if block := qp(c, "block", ""); block != "" {
+		filter = "block_number = {:b}"
+		params["b"] = block
+	}
 	if token := qp(c, "token", ""); token != "" {
-		filter = "token_symbol = {:sym}"
+		if filter != "" {
+			filter += " && "
+		}
+		filter += "token_symbol = {:sym}"
 		params["sym"] = token
 	}
 	if from := qp(c, "from", ""); from != "" {

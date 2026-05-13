@@ -78,7 +78,7 @@ func initApp(devMode bool) {
 
 	srv.App().OnServe().BindFunc(func(e *core.ServeEvent) error {
 		app.SetupRecovery(srv.App(), e)
-		StartIndexer(srv.App())
+		// StartIndexer(srv.App())
 		return e.Next()
 	})
 
