@@ -345,6 +345,7 @@ func agentsCollection(app core.App) error {
 }
 
 // agentJobsCollection — Layer 5b: ERC-8183 job lifecycle events.
+// Status lifecycle: created → funded → submitted → completed|rejected|expired → paid
 func agentJobsCollection(app core.App) error {
 	if collectionExists(app, "agent_jobs") {
 		return nil
@@ -356,7 +357,7 @@ func agentJobsCollection(app core.App) error {
 	c.Fields.Add(&core.TextField{Name: "payment_usdc", Required: false, Max: 40})
 	c.Fields.Add(&core.SelectField{
 		Name:   "status",
-		Values: []string{"created", "accepted", "delivered", "settled", "disputed"},
+		Values: []string{"created", "funded", "submitted", "completed", "rejected", "expired", "paid"},
 	})
 	c.Fields.Add(&core.NumberField{Name: "created_at_block"})
 	c.Fields.Add(&core.NumberField{Name: "settled_at_block"})

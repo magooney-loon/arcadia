@@ -193,7 +193,7 @@ Traces capture contract-to-contract calls invisible in the transaction list.
 | `gas_used` | TraceField.GAS_USED | Internal gas cost |
 | `error_msg` | TraceField.ERROR | Failure reason |
 
-> Note: Traces are not currently fetched in the HyperSync query (no `TraceSelection` in `newIndexerQuery`). The collection exists for future use.
+> Note: `TraceSelection{{}}` is included in `newIndexerQuery` — all internal calls are fetched and stored. The traces collection is populated by the indexer alongside blocks, transactions, and logs.
 
 ---
 
@@ -211,25 +211,37 @@ Agent registration is detected via ERC-721 `Transfer` mints (topic1 = zero addre
 | `agent_address` | Wallet identity (from topic2) |
 | `registered_at_block` | Onboarding timeline |
 | `tx_hash` | Registration transaction |
-| `tx_count` | Activity metric (future aggregation) |
-| `usdc_spent_fees` | Total fees paid (future aggregation) |
-| `usdc_transferred` | Total economic throughput (future aggregation) |
+| `tx_count` | Transactions sent by this agent (aggregated each batch) |
+| `usdc_spent_fees` | Cumulative gas fees paid, stored as raw wei string |
+| `usdc_transferred` | Cumulative USDC sent, stored as raw ERC-20 units string (6 decimals) |
 
 **`agent_jobs` — ERC-8183 AgenticCommerce**
 
-Job lifecycle events from `AddrAgenticCommerce`. Currently indexes `JobCreated` events.
+Job lifecycle events from `AddrAgenticCommerce` (proxy `0x0747…`, impl `0xA316…`). Indexes all seven state-changing events. Each record is upserted by `job_id` as events arrive.
 
 | Field | Why |
 |---|---|
 | `job_id` | uint256 job ID (string) |
-| `employer_address` | Client (topic2) |
-| `worker_address` | Provider (topic3) |
-| `payment_usdc` | Escrow amount (future) |
-| `status` | `created` / `accepted` / `delivered` / `settled` / `disputed` |
-| `created_at_block` | Timeline |
-| `settled_at_block` | Time-to-settlement metric |
-| `create_tx_hash` | Creation transaction |
-| `settle_tx_hash` | Settlement transaction |
+| `employer_address` | Client — topic2 of `JobCreated` |
+| `worker_address` | Provider — topic3 of `JobCreated` |
+| `payment_usdc` | Human-readable escrow amount set by `JobFunded` |
+| `status` | `created` → `funded` → `submitted` → `completed`/`rejected`/`expired` → `paid` |
+| `created_at_block` | Block of `JobCreated` |
+| `settled_at_block` | Block of `PaymentReleased` |
+| `create_tx_hash` | Tx of `JobCreated` |
+| `settle_tx_hash` | Tx of `PaymentReleased` |
+
+Indexed events (verified from impl ABI):
+
+| Event | Signature | Status transition |
+|---|---|---|
+| `JobCreated` | `JobCreated(uint256,address,address,address,uint256,address)` | → `created` |
+| `JobFunded` | `JobFunded(uint256,address,uint256)` | → `funded`, sets `payment_usdc` |
+| `JobSubmitted` | `JobSubmitted(uint256,address,bytes32)` | → `submitted` |
+| `JobCompleted` | `JobCompleted(uint256,address,bytes32)` | → `completed` |
+| `JobRejected` | `JobRejected(uint256,address,bytes32)` | → `rejected` |
+| `PaymentReleased` | `PaymentReleased(uint256,address,uint256)` | → `paid`, sets `settled_at_block` + `settle_tx_hash` |
+| `JobExpired` | `JobExpired(uint256)` | → `expired` |
 
 ---
 
@@ -370,25 +382,48 @@ query := &types.Query{
             "block_number", "transaction_hash", "log_index",
             "address", "topic0", "topic1", "topic2", "topic3", "data",
         },
+        Trace: []string{
+            "block_number", "transaction_hash",
+            "from", "to", "value", "call_type", "type", "gas_used", "error",
+        },
     },
     Transactions: []types.TransactionSelection{{}}, // all transactions
+    Traces:       []types.TraceSelection{{}},        // all internal calls
     Logs: []types.LogSelection{
         // All ERC-20 Transfer events (USDC, EURC, USYC, any token)
         {Topics: [][]common.Hash{{TopicTransfer}}},
-        // CCTP DepositForBurn — USDC exits a chain
-        {Address: []common.Address{AddrCCTPTokenMessenger}, Topics: [][]common.Hash{{TopicDepositForBurn}}},
-        // CCTP MintAndWithdraw — USDC minted on Arc
-        {Address: []common.Address{AddrCCTPTokenMessenger}, Topics: [][]common.Hash{{TopicMintAndWithdraw}}},
-        // CCTP MessageReceived — cross-chain message arrives on Arc
-        {Address: []common.Address{AddrCCTPMessageTransmitter}, Topics: [][]common.Hash{{TopicMessageReceived}}},
-        // Gateway deposits, burns, attestations
-        {Address: []common.Address{AddrGatewayWallet, AddrGatewayMinter}},
+        // CCTP: DepositForBurn + MintAndWithdraw on TokenMessengerV2
+        {
+            Address: []common.Address{AddrCCTPTokenMessenger},
+            Topics:  [][]common.Hash{{TopicDepositForBurn, TopicMintAndWithdraw}},
+        },
+        // CCTP: MessageReceived on MessageTransmitterV2
+        {
+            Address: []common.Address{AddrCCTPMessageTransmitter},
+            Topics:  [][]common.Hash{{TopicMessageReceived}},
+        },
+        // Gateway: Deposited + GatewayBurned on GatewayWallet
+        {
+            Address: []common.Address{AddrGatewayWallet},
+            Topics:  [][]common.Hash{{TopicGatewayDeposited, TopicGatewayBurned}},
+        },
+        // Gateway: AttestationUsed on GatewayMinter
+        {
+            Address: []common.Address{AddrGatewayMinter},
+            Topics:  [][]common.Hash{{TopicAttestationUsed}},
+        },
         // StableFX swap lifecycle
         {Address: []common.Address{AddrFxEscrow}},
         // ERC-8004 agent registration mints (Transfer from zero address)
         {Address: []common.Address{AddrAgentRegistry}, Topics: [][]common.Hash{{TopicAgentRegistered}}},
-        // ERC-8183 job created
-        {Address: []common.Address{AddrAgenticCommerce}, Topics: [][]common.Hash{{TopicJobCreated}}},
+        // ERC-8183 job lifecycle: all seven state-changing events
+        {
+            Address: []common.Address{AddrAgenticCommerce},
+            Topics: [][]common.Hash{{
+                TopicJobCreated, TopicJobFunded, TopicJobSubmitted,
+                TopicJobCompleted, TopicJobRejected, TopicPaymentReleased, TopicJobExpired,
+            }},
+        },
     },
 }
 ```
@@ -476,9 +511,21 @@ TopicAttestationUsed = keccak256("AttestationUsed(address,address,bytes32,uint32
 // ERC-8004 — agent registration = ERC-721 mint from AddrAgentRegistry (reuses TopicTransfer, topic1 = zero)
 TopicAgentRegistered = TopicTransfer
 
-// ERC-8183 — AgenticCommerce
-// JobCreated(uint256,address,address,address,uint256,address)
+// ERC-8183 — AgenticCommerce (impl 0xA316fd02827242D537F84730F8a37D0BA5fd351a)
+// JobCreated(uint256 indexed jobId, address indexed client, address indexed provider, address evaluator, uint256 expiredAt, address hook)
 TopicJobCreated = keccak256("JobCreated(uint256,address,address,address,uint256,address)")
+// JobFunded(uint256 indexed jobId, address indexed client, uint256 amount)
+TopicJobFunded = keccak256("JobFunded(uint256,address,uint256)")
+// JobSubmitted(uint256 indexed jobId, address indexed provider, bytes32 deliverable)
+TopicJobSubmitted = keccak256("JobSubmitted(uint256,address,bytes32)")
+// JobCompleted(uint256 indexed jobId, address indexed evaluator, bytes32 reason)
+TopicJobCompleted = keccak256("JobCompleted(uint256,address,bytes32)")
+// JobRejected(uint256 indexed jobId, address indexed rejector, bytes32 reason)
+TopicJobRejected = keccak256("JobRejected(uint256,address,bytes32)")
+// PaymentReleased(uint256 indexed jobId, address indexed provider, uint256 amount)
+TopicPaymentReleased = keccak256("PaymentReleased(uint256,address,uint256)")
+// JobExpired(uint256 indexed jobId)
+TopicJobExpired = keccak256("JobExpired(uint256)")
 
 // FxEscrow (StableFX) — verified from implementation ABI
 TopicTradeRecorded      = keccak256("TradeRecorded(uint256,bytes32)")
@@ -605,6 +652,6 @@ Everything is also available via PocketBase REST + real-time websockets directly
 
 ## Outstanding TODOs
 
-- [ ] Add trace fetching to HyperSync query (`TraceSelection`) once needed
-- [ ] Aggregate `usdc_spent_fees` and `usdc_transferred` onto `agents` records
-- [ ] Index job `accepted`, `delivered`, `settled`, `disputed` state transitions
+- [x] Add trace fetching to HyperSync query (`TraceSelection`)
+- [x] Aggregate `usdc_spent_fees` and `usdc_transferred` onto `agents` records
+- [x] Index job state transitions — implemented `JobFunded`, `JobSubmitted`, `JobCompleted`, `JobRejected`, `PaymentReleased`, `JobExpired` per actual impl ABI

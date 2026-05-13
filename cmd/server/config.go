@@ -145,6 +145,20 @@ var (
 	TopicTakerFunded        = crypto.Keccak256Hash([]byte("TakerFunded(uint256,address)"))
 	TopicTradeStatusChanged = crypto.Keccak256Hash([]byte("TradeStatusChanged(uint256,address,uint8)"))
 	TopicFeesProcessed      = crypto.Keccak256Hash([]byte("FeesProcessed(uint256,uint256,uint256)"))
+
+	// ERC-8183 AgenticCommerce job lifecycle — verified from impl 0xA316fd02827242D537F84730F8a37D0BA5fd351a
+	// JobFunded(uint256 indexed jobId, address indexed client, uint256 amount)
+	TopicJobFunded = crypto.Keccak256Hash([]byte("JobFunded(uint256,address,uint256)"))
+	// JobSubmitted(uint256 indexed jobId, address indexed provider, bytes32 deliverable)
+	TopicJobSubmitted = crypto.Keccak256Hash([]byte("JobSubmitted(uint256,address,bytes32)"))
+	// JobCompleted(uint256 indexed jobId, address indexed evaluator, bytes32 reason)
+	TopicJobCompleted = crypto.Keccak256Hash([]byte("JobCompleted(uint256,address,bytes32)"))
+	// JobRejected(uint256 indexed jobId, address indexed rejector, bytes32 reason)
+	TopicJobRejected = crypto.Keccak256Hash([]byte("JobRejected(uint256,address,bytes32)"))
+	// PaymentReleased(uint256 indexed jobId, address indexed provider, uint256 amount)
+	TopicPaymentReleased = crypto.Keccak256Hash([]byte("PaymentReleased(uint256,address,uint256)"))
+	// JobExpired(uint256 indexed jobId)
+	TopicJobExpired = crypto.Keccak256Hash([]byte("JobExpired(uint256)"))
 )
 
 // ── Environment variables ─────────────────────────────────────────────────────

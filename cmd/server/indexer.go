@@ -152,8 +152,13 @@ func newIndexerQuery(fromBlock, toBlock uint64) *types.Query {
 				"block_number", "transaction_hash", "log_index",
 				"address", "topic0", "topic1", "topic2", "topic3", "data",
 			},
+			Trace: []string{
+				"block_number", "transaction_hash",
+				"from", "to", "value", "call_type", "type", "gas_used", "error",
+			},
 		},
 		Transactions: []types.TransactionSelection{{}},
+		Traces:       []types.TraceSelection{{}},
 		Logs: []types.LogSelection{
 			{Topics: [][]common.Hash{{TopicTransfer}}},
 			// CCTP: DepositForBurn (USDC exits Arc) + MintAndWithdraw (USDC arrives on Arc)
@@ -177,7 +182,19 @@ func newIndexerQuery(fromBlock, toBlock uint64) *types.Query {
 			},
 			{Address: []common.Address{AddrFxEscrow}},
 			{Address: []common.Address{AddrAgentRegistry}, Topics: [][]common.Hash{{TopicAgentRegistered}}},
-			{Address: []common.Address{AddrAgenticCommerce}, Topics: [][]common.Hash{{TopicJobCreated}}},
+			// ERC-8183 job lifecycle: creation + all state transitions
+			{
+				Address: []common.Address{AddrAgenticCommerce},
+				Topics: [][]common.Hash{{
+					TopicJobCreated,
+					TopicJobFunded,
+					TopicJobSubmitted,
+					TopicJobCompleted,
+					TopicJobRejected,
+					TopicPaymentReleased,
+					TopicJobExpired,
+				}},
+			},
 		},
 	}
 }
@@ -194,6 +211,7 @@ type jsonDataChunk struct {
 	Blocks       []jsonBlock       `json:"blocks"`
 	Transactions []jsonTransaction `json:"transactions"`
 	Logs         []jsonLog         `json:"logs"`
+	Traces       []jsonTrace       `json:"traces"`
 }
 
 type jsonBlock struct {
@@ -239,6 +257,18 @@ type jsonLog struct {
 	Topic2          string          `json:"topic2"`
 	Topic3          string          `json:"topic3"`
 	Data            string          `json:"data"`
+}
+
+type jsonTrace struct {
+	BlockNumber     json.RawMessage `json:"block_number"`
+	TransactionHash string          `json:"transaction_hash"`
+	From            string          `json:"from"`
+	To              string          `json:"to"`
+	Value           json.RawMessage `json:"value"`
+	CallType        string          `json:"call_type"`
+	Kind            string          `json:"type"`
+	GasUsed         json.RawMessage `json:"gas_used"`
+	Error           string          `json:"error"`
 }
 
 func parseJSONBig(raw json.RawMessage) (*big.Int, bool, error) {
@@ -454,6 +484,39 @@ func convertJSONQueryResponse(in *jsonQueryResponse) (*types.QueryResponse, erro
 				logRow.LogIndex = n
 			}
 			out.Data.Logs = append(out.Data.Logs, logRow)
+		}
+
+		for _, t := range chunk.Traces {
+			tr := types.Trace{
+				TransactionHash: jsonHash(t.TransactionHash),
+				From:            jsonAddress(t.From),
+				To:              jsonAddress(t.To),
+			}
+			if t.CallType != "" {
+				tr.CallType = &t.CallType
+			}
+			if t.Kind != "" {
+				tr.Kind = &t.Kind
+			}
+			if t.Error != "" {
+				tr.Error = &t.Error
+			}
+			if n, ok, err := parseJSONBig(t.BlockNumber); err != nil {
+				return nil, fmt.Errorf("trace.block_number: %w", err)
+			} else if ok {
+				tr.BlockNumber = n
+			}
+			if n, ok, err := parseJSONBig(t.Value); err != nil {
+				return nil, fmt.Errorf("trace.value: %w", err)
+			} else if ok {
+				tr.Value = n
+			}
+			if n, ok, err := parseJSONUint64(t.GasUsed); err != nil {
+				return nil, fmt.Errorf("trace.gas_used: %w", err)
+			} else if ok {
+				tr.GasUsed = n
+			}
+			out.Data.Traces = append(out.Data.Traces, tr)
 		}
 	}
 	return out, nil
@@ -702,6 +765,21 @@ func processBatch(app core.App, res *types.QueryResponse) error {
 		return perBlock[blockNum]
 	}
 
+	// per-address deltas for agent aggregation (raw values: wei for fees, raw ERC-20 for transfers)
+	type agentDelta struct {
+		feeWei      *big.Int
+		transferred *big.Int
+		txCount     int
+	}
+	agentDeltas := make(map[string]*agentDelta)
+
+	getAgentDelta := func(addr string) *agentDelta {
+		if agentDeltas[addr] == nil {
+			agentDeltas[addr] = &agentDelta{feeWei: new(big.Int), transferred: new(big.Int)}
+		}
+		return agentDeltas[addr]
+	}
+
 	return app.RunInTransaction(func(txApp core.App) error {
 		baseFeeByBlock := make(map[uint64]*big.Int)
 		// 1. Blocks
@@ -732,6 +810,12 @@ func processBatch(app core.App, res *types.QueryResponse) error {
 			acc.txCount++
 			if tx.From != nil {
 				acc.uniqueSenders[tx.From.Hex()] = struct{}{}
+				// accumulate for agent aggregation
+				d := getAgentDelta(tx.From.Hex())
+				d.txCount++
+				if fee != nil {
+					d.feeWei.Add(d.feeWei, fee)
+				}
 			}
 			if tx.To != nil {
 				acc.uniqueReceivers[tx.To.Hex()] = struct{}{}
@@ -744,7 +828,7 @@ func processBatch(app core.App, res *types.QueryResponse) error {
 			}
 		}
 
-		// 3. Logs → transfers / crosschain / fx
+		// 3. Logs → transfers / crosschain / fx / agents / jobs
 		for _, log := range res.Data.Logs {
 			if log.BlockNumber == nil {
 				continue
@@ -767,6 +851,23 @@ func processBatch(app core.App, res *types.QueryResponse) error {
 				case AddrUSYC:
 					acc.totalUSYC.Add(acc.totalUSYC, amount)
 				}
+				// accumulate USDC sent by from_addr for agent aggregation
+				if log.Topic0 != nil && *log.Topic0 == TopicTransfer &&
+					log.Address != nil && *log.Address != AddrAgentRegistry &&
+					log.Topic1 != nil {
+					fromAddr := common.BytesToAddress(log.Topic1.Bytes()[12:]).Hex()
+					getAgentDelta(fromAddr).transferred.Add(getAgentDelta(fromAddr).transferred, amount)
+				}
+			}
+		}
+
+		// 3b. Traces
+		for _, trace := range res.Data.Traces {
+			if trace.TransactionHash == nil || trace.BlockNumber == nil {
+				continue
+			}
+			if err := saveTrace(txApp, &trace); err != nil {
+				return err
 			}
 		}
 
@@ -877,6 +978,40 @@ func processBatch(app core.App, res *types.QueryResponse) error {
 
 			if err := txApp.Save(stats); err != nil {
 				return fmt.Errorf("save block_stats %d: %w", bn, err)
+			}
+		}
+
+		// 5. Agent aggregation — update tx_count, usdc_spent_fees, usdc_transferred
+		//    for any agent address that had activity in this batch.
+		//    Raw storage: wei string for fees, raw ERC-20 units string for transfers.
+		for addr, delta := range agentDeltas {
+			if delta.txCount == 0 && delta.feeWei.Sign() == 0 && delta.transferred.Sign() == 0 {
+				continue
+			}
+			agentRows, err := txApp.FindRecordsByFilter("agents", "agent_address = {:a}", "", 1, 0, map[string]any{"a": addr})
+			if err != nil || len(agentRows) == 0 {
+				continue // address is not a registered agent
+			}
+			r := agentRows[0]
+			if delta.txCount > 0 {
+				r.Set("tx_count", r.GetInt("tx_count")+delta.txCount)
+			}
+			if delta.feeWei.Sign() > 0 {
+				prev, _ := new(big.Int).SetString(r.GetString("usdc_spent_fees"), 10)
+				if prev == nil {
+					prev = new(big.Int)
+				}
+				r.Set("usdc_spent_fees", new(big.Int).Add(prev, delta.feeWei).String())
+			}
+			if delta.transferred.Sign() > 0 {
+				prev, _ := new(big.Int).SetString(r.GetString("usdc_transferred"), 10)
+				if prev == nil {
+					prev = new(big.Int)
+				}
+				r.Set("usdc_transferred", new(big.Int).Add(prev, delta.transferred).String())
+			}
+			if err := txApp.Save(r); err != nil {
+				return fmt.Errorf("update agent %s stats: %w", addr, err)
 			}
 		}
 
@@ -1053,7 +1188,33 @@ func routeLog(app core.App, log *types.Log) (*big.Int, error) {
 		return nil, saveAttestationUsed(app, log)
 
 	case TopicJobCreated:
-		return nil, saveAgentJobCreated(app, log)
+		if addr == AddrAgenticCommerce {
+			return nil, saveAgentJobCreated(app, log)
+		}
+	case TopicJobFunded:
+		if addr == AddrAgenticCommerce {
+			return nil, saveAgentJobFunded(app, log)
+		}
+	case TopicJobSubmitted:
+		if addr == AddrAgenticCommerce {
+			return nil, saveAgentJobSubmitted(app, log)
+		}
+	case TopicJobCompleted:
+		if addr == AddrAgenticCommerce {
+			return nil, saveAgentJobCompleted(app, log)
+		}
+	case TopicJobRejected:
+		if addr == AddrAgenticCommerce {
+			return nil, saveAgentJobRejected(app, log)
+		}
+	case TopicPaymentReleased:
+		if addr == AddrAgenticCommerce {
+			return nil, saveAgentJobPaid(app, log)
+		}
+	case TopicJobExpired:
+		if addr == AddrAgenticCommerce {
+			return nil, saveAgentJobExpired(app, log)
+		}
 
 	case TopicTradeRecorded, TopicMakerFunded, TopicTakerFunded, TopicTradeStatusChanged, TopicFeesProcessed:
 		if addr == AddrFxEscrow {
@@ -1439,7 +1600,7 @@ func saveAgentRegistration(app core.App, log *types.Log) error {
 }
 
 func saveAgentJobCreated(app core.App, log *types.Log) error {
-	if log.Address == nil || *log.Address != AddrAgenticCommerce || log.Topic1 == nil || log.Topic2 == nil || log.Topic3 == nil || log.TransactionHash == nil {
+	if log.Topic1 == nil || log.Topic2 == nil || log.Topic3 == nil || log.TransactionHash == nil {
 		return nil
 	}
 
@@ -1452,13 +1613,11 @@ func saveAgentJobCreated(app core.App, log *types.Log) error {
 		return nil
 	}
 
-	client := addressFromTopic(log.Topic2)
-	provider := addressFromTopic(log.Topic3)
-
+	// topic2 = client (employer), topic3 = provider (worker)
 	r := core.NewRecord(mustCollection(app, "agent_jobs"))
 	r.Set("job_id", jobID)
-	r.Set("employer_address", client)
-	r.Set("worker_address", provider)
+	r.Set("employer_address", addressFromTopic(log.Topic2))
+	r.Set("worker_address", addressFromTopic(log.Topic3))
 	r.Set("status", "created")
 	if log.BlockNumber != nil {
 		r.Set("created_at_block", log.BlockNumber.Uint64())
@@ -1467,6 +1626,120 @@ func saveAgentJobCreated(app core.App, log *types.Log) error {
 
 	if err := app.Save(r); err != nil {
 		return fmt.Errorf("save agent job %s: %w", jobID, err)
+	}
+	return nil
+}
+
+// agentJobUpsert finds the agent_jobs record for jobID and calls update(r), then saves it.
+// Creates a placeholder record if none exists (events can arrive out of order).
+func agentJobUpsert(app core.App, log *types.Log, update func(*core.Record)) error {
+	if log.Topic1 == nil {
+		return nil
+	}
+	jobID := new(big.Int).SetBytes(log.Topic1.Bytes()).String()
+	existing, err := app.FindRecordsByFilter("agent_jobs", "job_id = {:j}", "", 1, 0, map[string]any{"j": jobID})
+	if err != nil {
+		return fmt.Errorf("find agent job %s: %w", jobID, err)
+	}
+	var r *core.Record
+	if len(existing) > 0 {
+		r = existing[0]
+	} else {
+		r = core.NewRecord(mustCollection(app, "agent_jobs"))
+		r.Set("job_id", jobID)
+		r.Set("status", "created")
+	}
+	update(r)
+	if err := app.Save(r); err != nil {
+		return fmt.Errorf("save agent job %s: %w", jobID, err)
+	}
+	return nil
+}
+
+// JobFunded(uint256 indexed jobId, address indexed client, uint256 amount)
+// Sets payment_usdc (raw ERC-20 6-decimal units) and advances status to "funded".
+func saveAgentJobFunded(app core.App, log *types.Log) error {
+	return agentJobUpsert(app, log, func(r *core.Record) {
+		r.Set("status", "funded")
+		if log.Data != nil && len(*log.Data) >= 32 {
+			r.Set("payment_usdc", stablecoinHuman(readBig(*log.Data, 0)))
+		}
+	})
+}
+
+// JobSubmitted(uint256 indexed jobId, address indexed provider, bytes32 deliverable)
+func saveAgentJobSubmitted(app core.App, log *types.Log) error {
+	return agentJobUpsert(app, log, func(r *core.Record) {
+		r.Set("status", "submitted")
+	})
+}
+
+// JobCompleted(uint256 indexed jobId, address indexed evaluator, bytes32 reason)
+func saveAgentJobCompleted(app core.App, log *types.Log) error {
+	return agentJobUpsert(app, log, func(r *core.Record) {
+		r.Set("status", "completed")
+	})
+}
+
+// JobRejected(uint256 indexed jobId, address indexed rejector, bytes32 reason)
+func saveAgentJobRejected(app core.App, log *types.Log) error {
+	return agentJobUpsert(app, log, func(r *core.Record) {
+		r.Set("status", "rejected")
+	})
+}
+
+// PaymentReleased(uint256 indexed jobId, address indexed provider, uint256 amount)
+// Terminal state: payment sent to provider.
+func saveAgentJobPaid(app core.App, log *types.Log) error {
+	return agentJobUpsert(app, log, func(r *core.Record) {
+		r.Set("status", "paid")
+		if log.BlockNumber != nil {
+			r.Set("settled_at_block", log.BlockNumber.Uint64())
+		}
+		if log.TransactionHash != nil {
+			r.Set("settle_tx_hash", log.TransactionHash.Hex())
+		}
+	})
+}
+
+// JobExpired(uint256 indexed jobId)
+func saveAgentJobExpired(app core.App, log *types.Log) error {
+	return agentJobUpsert(app, log, func(r *core.Record) {
+		r.Set("status", "expired")
+	})
+}
+
+func saveTrace(app core.App, trace *types.Trace) error {
+	r := core.NewRecord(mustCollection(app, "traces"))
+	if trace.TransactionHash != nil {
+		r.Set("tx_hash", trace.TransactionHash.Hex())
+	}
+	if trace.BlockNumber != nil {
+		r.Set("block_number", trace.BlockNumber.Uint64())
+	}
+	if trace.From != nil {
+		r.Set("from_addr", trace.From.Hex())
+	}
+	if trace.To != nil {
+		r.Set("to_addr", trace.To.Hex())
+	}
+	if trace.Value != nil {
+		r.Set("value", trace.Value.String())
+	}
+	if trace.CallType != nil {
+		r.Set("call_type", *trace.CallType)
+	}
+	if trace.Kind != nil {
+		r.Set("trace_type", *trace.Kind)
+	}
+	if trace.GasUsed != nil {
+		r.Set("gas_used", *trace.GasUsed)
+	}
+	if trace.Error != nil {
+		r.Set("error_msg", *trace.Error)
+	}
+	if err := app.Save(r); err != nil {
+		return fmt.Errorf("save trace: %w", err)
 	}
 	return nil
 }

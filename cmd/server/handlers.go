@@ -3,6 +3,7 @@ package main
 // API_SOURCE
 
 import (
+	"math/big"
 	"net/http"
 	"sort"
 	"strconv"
@@ -37,6 +38,24 @@ func recordsToMaps(records []*core.Record) []map[string]any {
 		out[i] = r.PublicExport()
 	}
 	return out
+}
+
+// enrichAgentRecord adds human-readable conversions for the raw big.Int fields
+// stored on agent records: usdc_spent_fees (wei, 18 dec) and usdc_transferred
+// (raw ERC-20 units, 6 dec).
+func enrichAgentRecord(r *core.Record) map[string]any {
+	m := r.PublicExport()
+	if raw := r.GetString("usdc_spent_fees"); raw != "" && raw != "0" {
+		if n, ok := new(big.Int).SetString(raw, 10); ok {
+			m["usdc_spent_fees_human"] = weiToUSDC(n)
+		}
+	}
+	if raw := r.GetString("usdc_transferred"); raw != "" && raw != "0" {
+		if n, ok := new(big.Int).SetString(raw, 10); ok {
+			m["usdc_transferred_human"] = stablecoinHuman(n)
+		}
+	}
+	return m
 }
 
 // ── handlers ──────────────────────────────────────────────────────────────────
@@ -201,7 +220,7 @@ func walletHandler(c *core.RequestEvent) error {
 	agentRecords, _ := c.App.FindRecordsByFilter("agents", "agent_address = {:a}", "", 1, 0, map[string]any{"a": address})
 	var agentData any
 	if len(agentRecords) > 0 {
-		agentData = agentRecords[0].PublicExport()
+		agentData = enrichAgentRecord(agentRecords[0])
 	}
 
 	return c.JSON(http.StatusOK, map[string]any{
@@ -319,8 +338,12 @@ func agentsHandler(c *core.RequestEvent) error {
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error()})
 	}
+	out := make([]map[string]any, len(records))
+	for i, r := range records {
+		out[i] = enrichAgentRecord(r)
+	}
 	return c.JSON(http.StatusOK, map[string]any{
-		"agents": recordsToMaps(records),
+		"agents": out,
 		"count":  len(records),
 	})
 }
@@ -343,7 +366,7 @@ func agentHandler(c *core.RequestEvent) error {
 		map[string]any{"a": address})
 
 	return c.JSON(http.StatusOK, map[string]any{
-		"agent": agentRows[0].PublicExport(),
+		"agent": enrichAgentRecord(agentRows[0]),
 		"jobs":  recordsToMaps(jobs),
 	})
 }
@@ -391,7 +414,7 @@ func tracesHandler(c *core.RequestEvent) error {
 
 	filter := ""
 	params := map[string]any{}
-	if tx := qp(c, "tx", ""); tx != "" {
+	if tx := qp(c, "tx_hash", ""); tx != "" {
 		filter = "tx_hash = {:tx}"
 		params["tx"] = tx
 	}
@@ -869,7 +892,7 @@ func analyticsAgentLeaderboardHandler(c *core.RequestEvent) error {
 
 	result := make([]map[string]any, 0, len(agents))
 	for _, a := range agents {
-		entry := a.PublicExport()
+		entry := enrichAgentRecord(a)
 		addr := a.GetString("agent_address")
 
 		jobs, _ := c.App.FindRecordsByFilter("agent_jobs",
@@ -877,21 +900,21 @@ func analyticsAgentLeaderboardHandler(c *core.RequestEvent) error {
 			map[string]any{"a": addr})
 
 		var totalEscrow float64
-		var settled, disputed int
+		var paid, rejected int
 		for _, j := range jobs {
 			totalEscrow += parseUSDC(j.GetString("payment_usdc"))
 			switch j.GetString("status") {
-			case "settled":
-				settled++
-			case "disputed":
-				disputed++
+			case "paid":
+				paid++
+			case "rejected":
+				rejected++
 			}
 		}
 
 		entry["job_count"] = len(jobs)
 		entry["total_escrow"] = totalEscrow
-		entry["settled_jobs"] = settled
-		entry["disputed_jobs"] = disputed
+		entry["paid_jobs"] = paid
+		entry["rejected_jobs"] = rejected
 		result = append(result, entry)
 	}
 
