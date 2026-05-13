@@ -8,6 +8,7 @@
 	import { health, fetchHealth } from '$lib/stores/health.svelte';
 	import * as fmt from '$lib/fmt.js';
 	import { search, runSearch, clearSearch } from '$lib/stores/search.svelte';
+	import { getApiUrl } from '$lib/stores/config.svelte';
 
 	let { children } = $props();
 	let drawerOpen = $state(false);
@@ -50,7 +51,15 @@
 		return () => clearInterval(id);
 	});
 
-	const NAV = [
+	interface NavItem {
+		id: string;
+		label: string;
+		href: string;
+		live?: boolean;
+		external?: boolean;
+	}
+
+	const NAV: { group: string; items: NavItem[] }[] = [
 		{
 			group: 'Live',
 			items: [
@@ -78,7 +87,15 @@
 		},
 		{
 			group: 'Dev',
-			items: [{ id: 'debug', label: 'Debug', href: resolve('/debug/') }]
+			items: [
+				{ id: 'debug', label: 'Debug', href: resolve('/debug/') },
+				{
+					id: 'openapi',
+					label: 'OpenAPI',
+					href: getApiUrl() + '/api/docs/v1/swagger',
+					external: true
+				}
+			]
 		}
 	];
 
@@ -217,7 +234,12 @@
 			<div class="nav-group">
 				<div class="nav-label">{group.group}</div>
 				{#each group.items as item (item.id)}
-					<a class="nav-item {isActive(item.href) ? 'active' : ''}" href={item.href}>
+					<a
+						class="nav-item {isActive(item.href) ? 'active' : ''}"
+						href={item.href}
+						target={item.external ? '_blank' : undefined}
+						rel="external noopener noreferrer"
+					>
 						{@render NavIcon({ id: item.id })}
 						<span>{item.label}</span>
 						{#if item.live}
@@ -283,6 +305,8 @@
 					class="nav-item {isActive(item.href) ? 'active' : ''}"
 					href={item.href}
 					onclick={() => (drawerOpen = false)}
+					target={item.external ? '_blank' : undefined}
+					rel="external noopener noreferrer"
 				>
 					{@render NavIcon({ id: item.id })}
 					<span>{item.label}</span>
@@ -363,6 +387,10 @@
 			><path
 				d="M5 2 H9 M4 5 H10 M4 9 H10 M7 5 V9 M3 3 L1 5 M11 3 L13 5 M1 9 L3 11 M13 9 L11 11 M4 11 Q4 13 7 13 Q10 13 10 11"
 			/></svg
+		>
+	{:else if id === 'openapi'}
+		<svg viewBox="0 0 14 14" fill="none" class="ico" stroke="currentColor" stroke-width="1.4"
+			><circle cx="7" cy="4" r="2" /><path d="M3 12 L5 6 M9 6 L11 12 M5 8 H9" /></svg
 		>
 	{/if}
 {/snippet}
