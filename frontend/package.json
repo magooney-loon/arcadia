@@ -35,6 +35,7 @@
 	},
 	"dependencies": {
 		"d3-force": "^3.0.0",
-		"pocketbase": "^0.26.9"
+		"pocketbase": "^0.26.9",
+		"uplot": "^1.6.32"
 	}
 }

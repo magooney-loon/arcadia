@@ -3,6 +3,7 @@
 	import { resolve } from '$app/paths';
 	import { stats, fetchStats } from '$lib/stores/stats.svelte';
 	import { blocks, transactions, fetchBlocks, fetchTransactions } from '$lib/stores/chain.svelte';
+	import { blockStats, fetchBlockStats } from '$lib/stores/blockStats.svelte';
 	import {
 		analyticsFees,
 		fetchAnalyticsFees,
@@ -14,6 +15,7 @@
 		fetchAgentLeaderboard
 	} from '$lib/stores/analytics.svelte';
 	import * as fmt from '$lib/fmt.js';
+	import Chart from '$lib/components/Chart.svelte';
 
 	onMount(() => {
 		const refresh = () => {
@@ -22,6 +24,7 @@
 			fetchTransactions({ limit: 10 });
 		};
 		refresh();
+		fetchBlockStats(200);
 		fetchAgentLeaderboard(5);
 		fetchAnalyticsFees();
 		fetchAnalyticsVolume();
@@ -36,6 +39,42 @@
 			.sort((a, b) => b[1].inbound_vol + b[1].outbound_vol - (a[1].inbound_vol + a[1].outbound_vol))
 			.slice(0, 7)
 	);
+
+	// Chart data from block stats (sorted oldest → newest)
+	const chartStats = $derived((blockStats.data?.stats ?? []).slice().reverse());
+	const chartLabels = $derived(chartStats.map((s) => s.timestamp ?? 0));
+	const tpsSeries = $derived([
+		{
+			label: 'TPS',
+			data: chartStats.map((s) => s.tps ?? null),
+			stroke: '#6dd5fa',
+			fill: 'rgba(109,213,250,0.1)'
+		}
+	]);
+	const feeSeries = $derived([
+		{
+			label: 'Avg fee',
+			data: chartStats.map((s) => (s.avg_fee_usdc ? parseFloat(s.avg_fee_usdc) : null)),
+			stroke: '#f0b429',
+			fill: 'rgba(240,180,41,0.08)'
+		}
+	]);
+	const txCountSeries = $derived([
+		{
+			label: 'Tx count',
+			data: chartStats.map((s) => s.tx_count ?? null),
+			stroke: '#47d16c',
+			fill: 'rgba(71,209,108,0.08)'
+		}
+	]);
+	const utilizationSeries = $derived([
+		{
+			label: 'Utilization %',
+			data: chartStats.map((s) => s.utilization_pct ?? null),
+			stroke: '#e05252',
+			fill: 'rgba(224,82,82,0.08)'
+		}
+	]);
 </script>
 
 <div class="view">
@@ -99,6 +138,50 @@
 			<div class="stat">
 				<div class="label">Failed tx ratio</div>
 				<div class="value">{(analyticsFees.data.failed_tx_ratio * 100).toFixed(2)}%</div>
+			</div>
+		</div>
+	{/if}
+
+	<!-- Charts -->
+	{#if chartStats.length > 1}
+		<div class="grid grid-2" style="margin-top:12px">
+			<div class="card">
+				<div class="card-head">
+					<div class="card-title">TPS · last 200 blocks</div>
+					<div class="card-sub">transactions per second</div>
+				</div>
+				<div class="card-body" style="padding:4px 8px 8px">
+					<Chart title="TPS" labels={chartLabels} series={tpsSeries} height={160} />
+				</div>
+			</div>
+			<div class="card">
+				<div class="card-head">
+					<div class="card-title">Avg fee · last 200 blocks</div>
+					<div class="card-sub">USDC per transaction</div>
+				</div>
+				<div class="card-body" style="padding:4px 8px 8px">
+					<Chart title="Fee" labels={chartLabels} series={feeSeries} height={160} />
+				</div>
+			</div>
+		</div>
+		<div class="grid grid-2" style="margin-top:12px">
+			<div class="card">
+				<div class="card-head">
+					<div class="card-title">Tx count · last 200 blocks</div>
+					<div class="card-sub">transactions per block</div>
+				</div>
+				<div class="card-body" style="padding:4px 8px 8px">
+					<Chart title="Tx count" labels={chartLabels} series={txCountSeries} height={160} />
+				</div>
+			</div>
+			<div class="card">
+				<div class="card-head">
+					<div class="card-title">Gas utilization · last 200 blocks</div>
+					<div class="card-sub">block capacity used</div>
+				</div>
+				<div class="card-body" style="padding:4px 8px 8px">
+					<Chart title="Utilization" labels={chartLabels} series={utilizationSeries} height={160} />
+				</div>
 			</div>
 		</div>
 	{/if}
@@ -187,7 +270,7 @@
 		<div class="card">
 			<div class="card-head">
 				<div class="card-title">Top agents · 24h</div>
-				<div class="card-sub">ERC-8004 · by tx count</div>
+				<div class="card-sub">ERC-8004 · by job count</div>
 				<div class="card-actions">
 					<a class="mono dim" style="font-size:10px" href={resolve('/agents/')}>REGISTRY →</a>
 				</div>

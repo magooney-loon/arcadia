@@ -541,6 +541,18 @@ a {
 	padding: 0;
 }
 
+/* uPlot dark theme overrides */
+.uplot {
+	font-family: var(--mono);
+	color: var(--fg-2);
+}
+.uplot .u-over {
+	box-shadow: none;
+}
+.uplot canvas {
+	display: block;
+}
+
 /* Stat card */
 .stat {
 	padding: 14px 16px;

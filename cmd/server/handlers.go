@@ -854,7 +854,7 @@ func analyticsBridgeFlowHandler(c *core.RequestEvent) error {
 	})
 }
 
-// API_DESC Agent leaderboard ranked by tx_count with job stats attached
+// API_DESC Agent leaderboard ranked by job_count with job stats attached
 // API_TAGS Agents
 func analyticsAgentLeaderboardHandler(c *core.RequestEvent) error {
 	limit, _ := limitOffset(c)
@@ -893,6 +893,17 @@ func analyticsAgentLeaderboardHandler(c *core.RequestEvent) error {
 		entry["settled_jobs"] = settled
 		entry["disputed_jobs"] = disputed
 		result = append(result, entry)
+	}
+
+	// Sort by job_count descending
+	sort.Slice(result, func(i, j int) bool {
+		ic, _ := result[i]["job_count"].(int)
+		jc, _ := result[j]["job_count"].(int)
+		return ic > jc
+	})
+
+	if len(result) > limit {
+		result = result[:limit]
 	}
 
 	return c.JSON(http.StatusOK, map[string]any{
