@@ -12,9 +12,7 @@ function qs(params: Record<string, string | number | undefined>): string {
 
 export class WalletCrudClient {
 	async get(address: string, limit = 50, offset = 0): Promise<WalletResponse> {
-		const res = await fetch(
-			`${getApiUrl()}/api/v1/wallet/${address}${qs({ limit, offset })}`
-		);
+		const res = await fetch(`${getApiUrl()}/api/v1/wallet/${address}${qs({ limit, offset })}`);
 		if (!res.ok) throw new Error(`wallet: ${res.status}`);
 		return res.json();
 	}

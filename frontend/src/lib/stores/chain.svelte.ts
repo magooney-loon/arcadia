@@ -1,5 +1,11 @@
 import { ChainCrudClient } from '../api/chain/crud.js';
-import type { BlocksResponse, TransactionsResponse, TracesResponse, TransactionFilter, TraceFilter } from '../api/chain/types.js';
+import type {
+	BlocksResponse,
+	TransactionsResponse,
+	TracesResponse,
+	TransactionFilter,
+	TraceFilter
+} from '../api/chain/types.js';
 
 const client = new ChainCrudClient();
 

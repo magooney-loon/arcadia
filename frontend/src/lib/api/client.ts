@@ -38,16 +38,38 @@ export class ApiClient {
 		this._graph = new GraphCrudClient();
 	}
 
-	getPocketBase(): PocketBase { return this.pb; }
+	getPocketBase(): PocketBase {
+		return this.pb;
+	}
 
-	get auth() { return this._auth; }
-	get stats() { return this._stats; }
-	get blockStats() { return this._blockStats; }
-	get chain() { return this._chain; }
-	get transfers() { return this._transfers; }
-	get wallet() { return this._wallet; }
-	get crosschain() { return this._crosschain; }
-	get fx() { return this._fx; }
-	get agents() { return this._agents; }
-	get graph() { return this._graph; }
+	get auth() {
+		return this._auth;
+	}
+	get stats() {
+		return this._stats;
+	}
+	get blockStats() {
+		return this._blockStats;
+	}
+	get chain() {
+		return this._chain;
+	}
+	get transfers() {
+		return this._transfers;
+	}
+	get wallet() {
+		return this._wallet;
+	}
+	get crosschain() {
+		return this._crosschain;
+	}
+	get fx() {
+		return this._fx;
+	}
+	get agents() {
+		return this._agents;
+	}
+	get graph() {
+		return this._graph;
+	}
 }

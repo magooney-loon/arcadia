@@ -1,5 +1,10 @@
 import { AgentsCrudClient } from '../api/agents/crud.js';
-import type { AgentsResponse, AgentResponse, AgentJobsResponse, AgentJobsFilter } from '../api/agents/types.js';
+import type {
+	AgentsResponse,
+	AgentResponse,
+	AgentJobsResponse,
+	AgentJobsFilter
+} from '../api/agents/types.js';
 
 const client = new AgentsCrudClient();
 

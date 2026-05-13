@@ -3,8 +3,15 @@ export { formatTimestamp } from './utils.js';
 
 // AUTH
 export type {
-	LoginRequest, RegisterRequest, AuthUser, LoginResponse, RegisterResponse,
-	PasswordResetRequest, PasswordResetResponse, EmailVerificationRequest, EmailVerificationResponse
+	LoginRequest,
+	RegisterRequest,
+	AuthUser,
+	LoginResponse,
+	RegisterResponse,
+	PasswordResetRequest,
+	PasswordResetResponse,
+	EmailVerificationRequest,
+	EmailVerificationResponse
 } from './auth/types.js';
 
 // STATS
@@ -17,9 +24,14 @@ export { BlockStatsCrudClient } from './block_stats/crud.js';
 
 // CHAIN
 export type {
-	Block, BlocksResponse,
-	Transaction, TransactionsResponse, TransactionFilter,
-	Trace, TracesResponse, TraceFilter
+	Block,
+	BlocksResponse,
+	Transaction,
+	TransactionsResponse,
+	TransactionFilter,
+	Trace,
+	TracesResponse,
+	TraceFilter
 } from './chain/types.js';
 export { ChainCrudClient } from './chain/crud.js';
 
@@ -41,7 +53,12 @@ export { FxCrudClient } from './fx/crud.js';
 
 // AGENTS
 export type {
-	Agent, AgentsResponse, AgentJob, AgentResponse, AgentJobsResponse, AgentJobsFilter
+	Agent,
+	AgentsResponse,
+	AgentJob,
+	AgentResponse,
+	AgentJobsResponse,
+	AgentJobsFilter
 } from './agents/types.js';
 export { AgentsCrudClient } from './agents/crud.js';
 
