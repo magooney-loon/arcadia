@@ -15,12 +15,30 @@ export function explorerBlock(n: number): string {
 export const DOMAIN_NAMES: Record<number, string> = {
 	0: 'Ethereum',
 	1: 'Avalanche',
-	2: 'Optimism',
-	6: 'Polygon',
-	10: 'Arbitrum',
-	12: 'Solana',
-	23: 'Base',
-	26: 'Arc'
+	2: 'OP Mainnet',
+	3: 'Arbitrum',
+	5: 'Solana',
+	6: 'Base',
+	7: 'Polygon PoS',
+	10: 'Unichain',
+	11: 'Linea',
+	12: 'Codex',
+	13: 'Sonic',
+	14: 'World Chain',
+	15: 'Monad',
+	16: 'Sei',
+	17: 'BNB Smart Chain',
+	18: 'XDC',
+	19: 'HyperEVM',
+	21: 'Ink',
+	22: 'Plume',
+	25: 'Starknet',
+	26: 'Arc Testnet',
+	27: 'Stellar',
+	28: 'EDGE',
+	29: 'Injective',
+	30: 'Morph',
+	31: 'Pharos'
 };
 
 export const SIGHASH: Record<string, string> = {

@@ -517,8 +517,32 @@ func isNumeric(s string) bool {
 }
 
 var domainNames = map[int]string{
-	0: "Ethereum", 1: "Avalanche", 2: "Optimism", 6: "Polygon",
-	10: "Arbitrum", 12: "Solana", 23: "Base", 26: "Arc",
+	0:  "Ethereum",
+	1:  "Avalanche",
+	2:  "OP Mainnet",
+	3:  "Arbitrum",
+	5:  "Solana",
+	6:  "Base",
+	7:  "Polygon PoS",
+	10: "Unichain",
+	11: "Linea",
+	12: "Codex",
+	13: "Sonic",
+	14: "World Chain",
+	15: "Monad",
+	16: "Sei",
+	17: "BNB Smart Chain",
+	18: "XDC",
+	19: "HyperEVM",
+	21: "Ink",
+	22: "Plume",
+	25: "Starknet",
+	26: "Arc Testnet",
+	27: "Stellar",
+	28: "EDGE",
+	29: "Injective",
+	30: "Morph",
+	31: "Pharos",
 }
 
 func domainName(id int) string {
@@ -703,15 +727,15 @@ func analyticsFeesHandler(c *core.RequestEvent) error {
 	}
 
 	return c.JSON(http.StatusOK, map[string]any{
-		"window":              window,
-		"block_count":         len(records),
-		"total_fees":          totalFees,
-		"avg_fee_p25":         percentileFloat(fees, 25),
-		"avg_fee_p50":         percentileFloat(fees, 50),
-		"avg_fee_p75":         percentileFloat(fees, 75),
-		"avg_fee_p95":         percentileFloat(fees, 95),
-		"avg_block_time_ms":   avgBms,
-		"failed_tx_ratio":     failedRatio,
+		"window":            window,
+		"block_count":       len(records),
+		"total_fees":        totalFees,
+		"avg_fee_p25":       percentileFloat(fees, 25),
+		"avg_fee_p50":       percentileFloat(fees, 50),
+		"avg_fee_p75":       percentileFloat(fees, 75),
+		"avg_fee_p95":       percentileFloat(fees, 95),
+		"avg_block_time_ms": avgBms,
+		"failed_tx_ratio":   failedRatio,
 	})
 }
 

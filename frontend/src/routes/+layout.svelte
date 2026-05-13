@@ -250,7 +250,14 @@
 			></span
 		>
 		<span class="seg right">v0.4.2-rc1</span>
-		<span class="seg">fees p50 <span class="v">{fmt.usdc(stats.data?.avg_fee_usdc)}</span></span>
+		<span class="seg"
+			><a
+				href="https://envio.dev/"
+				target="_blank"
+				rel="noopener noreferrer"
+				style="text-decoration:none;color:inherit">HyperSync ↗</a
+			></span
+		>
 	</footer>
 </div>
 
