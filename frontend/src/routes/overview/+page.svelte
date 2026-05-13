@@ -3,7 +3,6 @@
 	import { resolve } from '$app/paths';
 	import { stats, fetchStats } from '$lib/stores/stats.svelte';
 	import { blocks, transactions, fetchBlocks, fetchTransactions } from '$lib/stores/chain.svelte';
-	import { fx, fetchFx } from '$lib/stores/fx.svelte';
 	import {
 		analyticsFees,
 		fetchAnalyticsFees,
@@ -23,7 +22,6 @@
 			fetchTransactions({ limit: 10 });
 		};
 		refresh();
-		fetchFx({ limit: 5 });
 		fetchAgentLeaderboard(5);
 		fetchAnalyticsFees();
 		fetchAnalyticsVolume();
@@ -32,12 +30,11 @@
 		return () => clearInterval(id);
 	});
 
-	const latestBlock = $derived(stats.data?.block_number ?? 0);
 	const bridgeFlow = $derived(analyticsBridgeFlow.data);
 	const chainEntries = $derived(
 		Object.entries(bridgeFlow?.by_chain ?? {})
 			.sort((a, b) => b[1].inbound_vol + b[1].outbound_vol - (a[1].inbound_vol + a[1].outbound_vol))
-			.slice(0, 5)
+			.slice(0, 7)
 	);
 </script>
 
@@ -84,76 +81,27 @@
 		</div>
 	</div>
 
-	<!-- Throughput + Cross-chain pulse -->
-	<div class="grid grid-2" style="margin-top:12px">
-		<div class="card">
-			<div class="card-head">
-				<div class="card-title">Fee analytics · 24h</div>
-				<div class="card-sub">block_stats · percentiles</div>
+	<!-- Fee analytics · stat cards -->
+	{#if analyticsFees.data && analyticsFees.data.block_count > 0}
+		<div class="grid" style="grid-template-columns:repeat(4,1fr);margin-top:12px">
+			<div class="stat">
+				<div class="label">Fee p50</div>
+				<div class="value">{fmt.usdc(analyticsFees.data.avg_fee_p50, 6)}</div>
 			</div>
-			<div class="card-body">
-				{#if analyticsFees.data && analyticsFees.data.block_count > 0}
-					<div class="detail-grid">
-						<dt>Blocks sampled</dt>
-						<dd>{fmt.num(analyticsFees.data.block_count)}</dd>
-						<dt>Total fees</dt>
-						<dd>{fmt.usdc(analyticsFees.data.total_fees, 4)}</dd>
-						<dt>Fee p25</dt>
-						<dd>{fmt.usdc(analyticsFees.data.avg_fee_p25, 6)}</dd>
-						<dt>Fee p50</dt>
-						<dd>{fmt.usdc(analyticsFees.data.avg_fee_p50, 6)}</dd>
-						<dt>Fee p75</dt>
-						<dd>{fmt.usdc(analyticsFees.data.avg_fee_p75, 6)}</dd>
-						<dt>Fee p95</dt>
-						<dd>{fmt.usdc(analyticsFees.data.avg_fee_p95, 6)}</dd>
-						<dt>Avg block time</dt>
-						<dd>{fmt.ms(analyticsFees.data.avg_block_time_ms)}</dd>
-						<dt>Failed tx ratio</dt>
-						<dd>{(analyticsFees.data.failed_tx_ratio * 100).toFixed(2)}%</dd>
-					</div>
-				{:else}
-					<p class="mono muted" style="font-size:11px">loading…</p>
-				{/if}
+			<div class="stat">
+				<div class="label">Fee p95</div>
+				<div class="value">{fmt.usdc(analyticsFees.data.avg_fee_p95, 6)}</div>
+			</div>
+			<div class="stat">
+				<div class="label">Avg block time</div>
+				<div class="value">{fmt.ms(analyticsFees.data.avg_block_time_ms)}</div>
+			</div>
+			<div class="stat">
+				<div class="label">Failed tx ratio</div>
+				<div class="value">{(analyticsFees.data.failed_tx_ratio * 100).toFixed(2)}%</div>
 			</div>
 		</div>
-
-		<div class="card">
-			<div class="card-head">
-				<div class="card-title">Cross-chain pulse</div>
-				<div class="card-sub">CCTP · 24h by chain</div>
-			</div>
-			<div class="card-body" style="padding:0">
-				{#if bridgeFlow}
-					<div class="flow" style="border-top:0;background:var(--bg-2);padding:8px 14px">
-						<span class="mono dim" style="font-size:10px">in</span>
-						<span class="mono fg0" style="margin-left:4px"
-							>{fmt.usdc(bridgeFlow.inbound_vol)} ({bridgeFlow.inbound_count})</span
-						>
-						<span class="spacer"></span>
-						<span class="mono dim" style="font-size:10px">out</span>
-						<span class="mono" style="margin-left:4px"
-							>{fmt.usdc(bridgeFlow.outbound_vol)} ({bridgeFlow.outbound_count})</span
-						>
-					</div>
-					{#each chainEntries as [chain, flow] (chain)}
-						<div class="flow">
-							<span class="chain">{chain}</span>
-							<span class="arrow">↔</span>
-							<span class="mono" style="font-size:11px;color:var(--ok)"
-								>↘ {fmt.usdc(flow.inbound_vol)}</span
-							>
-							<span class="spacer"></span>
-							<span class="mono" style="font-size:11px;color:var(--err)"
-								>↗ {fmt.usdc(flow.outbound_vol)}</span
-							>
-						</div>
-					{/each}
-				{:else}
-					<p class="mono muted" style="padding:14px;font-size:11px">loading…</p>
-				{/if}
-			</div>
-		</div>
-	</div>
+	{/if}
 
 	<!-- Latest blocks + latest txs -->
 	<div class="grid grid-2" style="margin-top:12px">
@@ -275,29 +223,40 @@
 
 		<div class="card">
 			<div class="card-head">
-				<div class="card-title">StableFX · live trades</div>
-				<div class="card-sub">RFQ · recent</div>
+				<div class="card-title">Cross-chain pulse</div>
+				<div class="card-sub">CCTP · 24h by chain</div>
 				<div class="card-actions">
-					<a class="mono dim" style="font-size:10px" href={resolve('/fx/')}>FX BOOK →</a>
+					<a class="mono dim" style="font-size:10px" href={resolve('/crosschain/')}>SEE ALL →</a>
 				</div>
 			</div>
 			<div class="card-body" style="padding:0">
-				{#if fx.data?.trades.length}
-					{#each fx.data.trades as t, i (i)}
+				{#if bridgeFlow}
+					<div class="flow" style="border-top:0;background:var(--bg-2);padding:8px 14px">
+						<span class="mono dim" style="font-size:10px">in</span>
+						<span class="mono fg0" style="margin-left:4px"
+							>{fmt.usdc(bridgeFlow.inbound_vol)} ({bridgeFlow.inbound_count})</span
+						>
+						<span class="spacer"></span>
+						<span class="mono dim" style="font-size:10px">out</span>
+						<span class="mono" style="margin-left:4px"
+							>{fmt.usdc(bridgeFlow.outbound_vol)} ({bridgeFlow.outbound_count})</span
+						>
+					</div>
+					{#each chainEntries as [chain, flow] (chain)}
 						<div class="flow">
-							<span class="chain mono" style="font-size:10px"
-								>{(t.input_token as string) ?? '?'}/{(t.output_token as string) ?? '?'}</span
-							>
-							<span class="mono" style="font-size:11px;margin-left:6px"
-								>{fmt.usdc(t.input_amount as string)}</span
+							<span class="chain">{chain}</span>
+							<span class="arrow">↔</span>
+							<span class="mono" style="font-size:11px;color:var(--ok)"
+								>↘ {fmt.usdc(flow.inbound_vol)}</span
 							>
 							<span class="spacer"></span>
-							<span class="badge {fmt.fxBadge(t.status)}">{t.status}</span>
-							<span class="sub">{fmt.blockAge(t.block_number, latestBlock)}</span>
+							<span class="mono" style="font-size:11px;color:var(--err)"
+								>↗ {fmt.usdc(flow.outbound_vol)}</span
+							>
 						</div>
 					{/each}
 				{:else}
-					<p class="mono muted" style="padding:32px;text-align:center;font-size:11px">loading…</p>
+					<p class="mono muted" style="padding:14px;font-size:11px">loading…</p>
 				{/if}
 			</div>
 		</div>
