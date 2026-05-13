@@ -4,7 +4,9 @@ import type {
 	TransactionsResponse,
 	TransactionFilter,
 	TracesResponse,
-	TraceFilter
+	TraceFilter,
+	TxDetailResponse,
+	BlockDetailResponse
 } from './types.js';
 
 function qs(params: Record<string, string | number | undefined>): string {
@@ -34,6 +36,18 @@ export class ChainCrudClient {
 		const { limit = 50, offset = 0, ...rest } = filter;
 		const res = await fetch(`${getApiUrl()}/api/v1/traces${qs({ limit, offset, ...rest })}`);
 		if (!res.ok) throw new Error(`traces: ${res.status}`);
+		return res.json();
+	}
+
+	async txDetail(hash: string): Promise<TxDetailResponse> {
+		const res = await fetch(`${getApiUrl()}/api/v1/tx/${encodeURIComponent(hash)}`);
+		if (!res.ok) throw new Error(`tx detail: ${res.status}`);
+		return res.json();
+	}
+
+	async blockDetail(number: number): Promise<BlockDetailResponse> {
+		const res = await fetch(`${getApiUrl()}/api/v1/block/${number}`);
+		if (!res.ok) throw new Error(`block detail: ${res.status}`);
 		return res.json();
 	}
 }

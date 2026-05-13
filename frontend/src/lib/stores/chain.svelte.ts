@@ -4,7 +4,9 @@ import type {
 	TransactionsResponse,
 	TracesResponse,
 	TransactionFilter,
-	TraceFilter
+	TraceFilter,
+	TxDetailResponse,
+	BlockDetailResponse
 } from '../api/chain/types.js';
 
 const client = new ChainCrudClient();
@@ -27,9 +29,25 @@ export interface TracesState {
 	error: string | null;
 }
 
+export interface TxDetailState {
+	hash: string;
+	data: TxDetailResponse | null;
+	loading: boolean;
+	error: string | null;
+}
+
+export interface BlockDetailState {
+	number: number | null;
+	data: BlockDetailResponse | null;
+	loading: boolean;
+	error: string | null;
+}
+
 export const blocks = $state<BlocksState>({ data: null, loading: false, error: null });
 export const transactions = $state<TransactionsState>({ data: null, loading: false, error: null });
 export const traces = $state<TracesState>({ data: null, loading: false, error: null });
+export const txDetail = $state<TxDetailState>({ hash: '', data: null, loading: false, error: null });
+export const blockDetail = $state<BlockDetailState>({ number: null, data: null, loading: false, error: null });
 
 export async function fetchBlocks(limit = 50, offset = 0) {
 	blocks.loading = true;
@@ -64,5 +82,33 @@ export async function fetchTraces(filter: TraceFilter = {}) {
 		traces.error = String(e);
 	} finally {
 		traces.loading = false;
+	}
+}
+
+export async function fetchTxDetail(hash: string) {
+	txDetail.hash = hash;
+	txDetail.loading = true;
+	txDetail.error = null;
+	txDetail.data = null;
+	try {
+		txDetail.data = await client.txDetail(hash);
+	} catch (e) {
+		txDetail.error = String(e);
+	} finally {
+		txDetail.loading = false;
+	}
+}
+
+export async function fetchBlockDetail(number: number) {
+	blockDetail.number = number;
+	blockDetail.loading = true;
+	blockDetail.error = null;
+	blockDetail.data = null;
+	try {
+		blockDetail.data = await client.blockDetail(number);
+	} catch (e) {
+		blockDetail.error = String(e);
+	} finally {
+		blockDetail.loading = false;
 	}
 }

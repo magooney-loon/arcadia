@@ -6,9 +6,13 @@
 		blocks,
 		transactions,
 		traces,
+		txDetail,
+		blockDetail,
 		fetchBlocks,
 		fetchTransactions,
-		fetchTraces
+		fetchTraces,
+		fetchTxDetail,
+		fetchBlockDetail
 	} from '$lib/stores/chain.svelte';
 	import { transfers, fetchTransfers } from '$lib/stores/transfers.svelte';
 	import { wallet, fetchWallet } from '$lib/stores/wallet.svelte';
@@ -23,7 +27,20 @@
 		fetchAgentJobs
 	} from '$lib/stores/agents.svelte';
 	import { graph, fetchEdges } from '$lib/stores/graph.svelte';
+	import { health, fetchHealth } from '$lib/stores/health.svelte';
+	import { search, runSearch } from '$lib/stores/search.svelte';
+	import {
+		analyticsFees,
+		analyticsVolume,
+		analyticsBridgeFlow,
+		analyticsAgentLeaderboard,
+		fetchAnalyticsFees,
+		fetchAnalyticsVolume,
+		fetchAnalyticsBridgeFlow,
+		fetchAgentLeaderboard
+	} from '$lib/stores/analytics.svelte';
 
+	// existing filters
 	let blockStatsLimit = $state('');
 	let blockStatsOffset = $state('');
 	let blocksLimit = $state('');
@@ -50,6 +67,16 @@
 	let walletOffset = $state('');
 	let agentAddress = $state('');
 
+	// new endpoint filters
+	let searchQuery = $state('');
+	let txDetailHash = $state('');
+	let blockDetailNumber = $state('');
+	let feesWindow = $state('24h');
+	let volumeWindow = $state('24h');
+	let volumeToken = $state('');
+	let bridgeWindow = $state('24h');
+	let leaderboardLimit = $state('');
+
 	onMount(() => {
 		fetchStats();
 		fetchBlockStats(50);
@@ -62,6 +89,11 @@
 		fetchAgents();
 		fetchAgentJobs();
 		fetchEdges();
+		fetchHealth();
+		fetchAnalyticsFees();
+		fetchAnalyticsVolume();
+		fetchAnalyticsBridgeFlow();
+		fetchAgentLeaderboard();
 	});
 </script>
 
@@ -70,6 +102,210 @@
 		<div>
 			<div class="view-title">Debug</div>
 			<div class="view-sub">API Explorer · all endpoints</div>
+		</div>
+	</div>
+
+	<!-- HEALTH -->
+	<div class="card">
+		<div class="card-head">
+			<div class="card-title">Health</div>
+			<div class="card-sub">GET /api/v1/health</div>
+			<div class="card-actions">
+				<button class="btn ghost" onclick={() => fetchHealth()}>refetch</button>
+			</div>
+		</div>
+		<div class="card-body">
+			{#if health.loading}<p class="mono muted">loading…</p>{/if}
+			{#if health.error}<p class="mono err-text">{health.error}</p>{/if}
+			{#if health.data}<pre>{JSON.stringify(health.data, null, 2)}</pre>{/if}
+		</div>
+	</div>
+
+	<!-- SEARCH -->
+	<div class="card">
+		<div class="card-head">
+			<div class="card-title">Search</div>
+			<div class="card-sub">GET /api/v1/search?q=X</div>
+		</div>
+		<div class="card-body">
+			<div class="filter-bar">
+				<input
+					bind:value={searchQuery}
+					placeholder="tx hash (0x+64), address (0x+40), or block number"
+					style="width:380px"
+				/>
+				<button
+					class="btn acc"
+					onclick={() => {
+						if (searchQuery.trim()) runSearch(searchQuery.trim());
+					}}>search</button
+				>
+			</div>
+			{#if search.loading}<p class="mono muted">loading…</p>{/if}
+			{#if search.error}<p class="mono err-text">{search.error}</p>{/if}
+			{#if search.data}<pre>{JSON.stringify(search.data, null, 2)}</pre>{/if}
+		</div>
+	</div>
+
+	<!-- TX DETAIL -->
+	<div class="card">
+		<div class="card-head">
+			<div class="card-title">TX Detail</div>
+			<div class="card-sub">GET /api/v1/tx/{'{hash}'}</div>
+		</div>
+		<div class="card-body">
+			<div class="filter-bar">
+				<input bind:value={txDetailHash} placeholder="0x… tx hash" style="width:380px" />
+				<button
+					class="btn acc"
+					onclick={() => {
+						if (txDetailHash.trim()) fetchTxDetail(txDetailHash.trim());
+					}}>lookup</button
+				>
+			</div>
+			{#if txDetail.loading}<p class="mono muted">loading…</p>{/if}
+			{#if txDetail.error}<p class="mono err-text">{txDetail.error}</p>{/if}
+			{#if txDetail.data}<pre>{JSON.stringify(txDetail.data, null, 2)}</pre>{/if}
+		</div>
+	</div>
+
+	<!-- BLOCK DETAIL -->
+	<div class="card">
+		<div class="card-head">
+			<div class="card-title">Block Detail</div>
+			<div class="card-sub">GET /api/v1/block/{'{number}'}</div>
+		</div>
+		<div class="card-body">
+			<div class="filter-bar">
+				<input bind:value={blockDetailNumber} placeholder="block number" style="width:160px" />
+				<button
+					class="btn acc"
+					onclick={() => {
+						const n = Number(blockDetailNumber);
+						if (n > 0) fetchBlockDetail(n);
+					}}>lookup</button
+				>
+			</div>
+			{#if blockDetail.loading}<p class="mono muted">loading…</p>{/if}
+			{#if blockDetail.error}<p class="mono err-text">{blockDetail.error}</p>{/if}
+			{#if blockDetail.data}<pre>{JSON.stringify(blockDetail.data, null, 2)}</pre>{/if}
+		</div>
+	</div>
+
+	<!-- ANALYTICS: FEES -->
+	<div class="card">
+		<div class="card-head">
+			<div class="card-title">Analytics · Fees</div>
+			<div class="card-sub">GET /api/v1/analytics/fees</div>
+		</div>
+		<div class="card-body">
+			<div class="filter-bar">
+				<label class="dim"
+					>window
+					<select bind:value={feesWindow}>
+						<option>1h</option><option>24h</option><option>7d</option>
+					</select>
+				</label>
+				<button
+					class="btn acc"
+					onclick={() =>
+						fetchAnalyticsFees({ window: feesWindow as '1h' | '24h' | '7d' })}>fetch</button
+				>
+			</div>
+			{#if analyticsFees.loading}<p class="mono muted">loading…</p>{/if}
+			{#if analyticsFees.error}<p class="mono err-text">{analyticsFees.error}</p>{/if}
+			{#if analyticsFees.data}<pre>{JSON.stringify(analyticsFees.data, null, 2)}</pre>{/if}
+		</div>
+	</div>
+
+	<!-- ANALYTICS: VOLUME -->
+	<div class="card">
+		<div class="card-head">
+			<div class="card-title">Analytics · Volume</div>
+			<div class="card-sub">GET /api/v1/analytics/volume</div>
+		</div>
+		<div class="card-body">
+			<div class="filter-bar">
+				<label class="dim"
+					>window
+					<select bind:value={volumeWindow}>
+						<option>1h</option><option>24h</option><option>7d</option>
+					</select>
+				</label>
+				<label class="dim"
+					>token
+					<select bind:value={volumeToken}>
+						<option value="">all</option>
+						<option>USDC</option><option>EURC</option><option>USYC</option>
+					</select>
+				</label>
+				<button
+					class="btn acc"
+					onclick={() =>
+						fetchAnalyticsVolume({
+							window: volumeWindow as '1h' | '24h' | '7d',
+							token: volumeToken || undefined
+						})}>fetch</button
+				>
+			</div>
+			{#if analyticsVolume.loading}<p class="mono muted">loading…</p>{/if}
+			{#if analyticsVolume.error}<p class="mono err-text">{analyticsVolume.error}</p>{/if}
+			{#if analyticsVolume.data}<pre>{JSON.stringify(analyticsVolume.data, null, 2)}</pre>{/if}
+		</div>
+	</div>
+
+	<!-- ANALYTICS: BRIDGE FLOW -->
+	<div class="card">
+		<div class="card-head">
+			<div class="card-title">Analytics · Bridge Flow</div>
+			<div class="card-sub">GET /api/v1/analytics/bridge_flow</div>
+		</div>
+		<div class="card-body">
+			<div class="filter-bar">
+				<label class="dim"
+					>window
+					<select bind:value={bridgeWindow}>
+						<option>1h</option><option>24h</option><option>7d</option>
+					</select>
+				</label>
+				<button
+					class="btn acc"
+					onclick={() =>
+						fetchAnalyticsBridgeFlow({
+							window: bridgeWindow as '1h' | '24h' | '7d'
+						})}>fetch</button
+				>
+			</div>
+			{#if analyticsBridgeFlow.loading}<p class="mono muted">loading…</p>{/if}
+			{#if analyticsBridgeFlow.error}<p class="mono err-text">{analyticsBridgeFlow.error}</p>{/if}
+			{#if analyticsBridgeFlow.data}<pre>{JSON.stringify(analyticsBridgeFlow.data, null, 2)}</pre>{/if}
+		</div>
+	</div>
+
+	<!-- ANALYTICS: AGENT LEADERBOARD -->
+	<div class="card">
+		<div class="card-head">
+			<div class="card-title">Analytics · Agent Leaderboard</div>
+			<div class="card-sub">GET /api/v1/analytics/agent_leaderboard</div>
+		</div>
+		<div class="card-body">
+			<div class="filter-bar">
+				<label class="dim"
+					>limit <input bind:value={leaderboardLimit} placeholder="50" style="width:60px" /></label
+				>
+				<button
+					class="btn acc"
+					onclick={() =>
+						fetchAgentLeaderboard(leaderboardLimit ? Number(leaderboardLimit) : 50)}>fetch</button
+				>
+			</div>
+			{#if analyticsAgentLeaderboard.loading}<p class="mono muted">loading…</p>{/if}
+			{#if analyticsAgentLeaderboard.error}
+				<p class="mono err-text">{analyticsAgentLeaderboard.error}</p>
+			{/if}
+			{#if analyticsAgentLeaderboard.data}
+				<pre>{JSON.stringify(analyticsAgentLeaderboard.data, null, 2)}</pre>
+			{/if}
 		</div>
 	</div>
 

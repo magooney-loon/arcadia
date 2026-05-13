@@ -65,3 +65,30 @@ export { AgentsCrudClient } from './agents/crud.js';
 // GRAPH
 export type { Edge, EdgesResponse, EdgeFilter } from './graph/types.js';
 export { GraphCrudClient } from './graph/crud.js';
+
+// HEALTH
+export type { HealthResponse } from './health/types.js';
+export { HealthCrudClient } from './health/crud.js';
+
+// SEARCH
+export type { SearchType, SearchResponse } from './search/types.js';
+export { SearchCrudClient } from './search/crud.js';
+
+// ANALYTICS
+export type {
+	Window,
+	FeesFilter,
+	FeesResponse,
+	VolumeFilter,
+	VolumeResponse,
+	TokenStats,
+	BridgeFlowFilter,
+	BridgeFlowResponse,
+	ChainFlow,
+	AgentLeaderboardEntry,
+	AgentLeaderboardResponse
+} from './analytics/types.js';
+export { AnalyticsCrudClient } from './analytics/crud.js';
+
+// CHAIN (detail responses)
+export type { TxDetailResponse, BlockDetailResponse } from './chain/types.js';

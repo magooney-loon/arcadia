@@ -86,3 +86,15 @@ export interface TraceFilter {
 	from?: string;
 	to?: string;
 }
+
+export interface TxDetailResponse {
+	transaction: Transaction;
+	transfers: Record<string, unknown>[];
+	traces: Trace[];
+}
+
+export interface BlockDetailResponse {
+	block: Block;
+	transactions: Transaction[];
+	stats?: Record<string, unknown>;
+}

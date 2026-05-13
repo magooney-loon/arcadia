@@ -10,6 +10,9 @@ import { CrosschainCrudClient } from './crosschain/crud.js';
 import { FxCrudClient } from './fx/crud.js';
 import { AgentsCrudClient } from './agents/crud.js';
 import { GraphCrudClient } from './graph/crud.js';
+import { HealthCrudClient } from './health/crud.js';
+import { SearchCrudClient } from './search/crud.js';
+import { AnalyticsCrudClient } from './analytics/crud.js';
 
 export class ApiClient {
 	private pb: PocketBase;
@@ -23,6 +26,9 @@ export class ApiClient {
 	private _fx: FxCrudClient;
 	private _agents: AgentsCrudClient;
 	private _graph: GraphCrudClient;
+	private _health: HealthCrudClient;
+	private _search: SearchCrudClient;
+	private _analytics: AnalyticsCrudClient;
 
 	constructor() {
 		this.pb = getPocketBaseInstance();
@@ -36,40 +42,26 @@ export class ApiClient {
 		this._fx = new FxCrudClient();
 		this._agents = new AgentsCrudClient();
 		this._graph = new GraphCrudClient();
+		this._health = new HealthCrudClient();
+		this._search = new SearchCrudClient();
+		this._analytics = new AnalyticsCrudClient();
 	}
 
 	getPocketBase(): PocketBase {
 		return this.pb;
 	}
 
-	get auth() {
-		return this._auth;
-	}
-	get stats() {
-		return this._stats;
-	}
-	get blockStats() {
-		return this._blockStats;
-	}
-	get chain() {
-		return this._chain;
-	}
-	get transfers() {
-		return this._transfers;
-	}
-	get wallet() {
-		return this._wallet;
-	}
-	get crosschain() {
-		return this._crosschain;
-	}
-	get fx() {
-		return this._fx;
-	}
-	get agents() {
-		return this._agents;
-	}
-	get graph() {
-		return this._graph;
-	}
+	get auth() { return this._auth; }
+	get stats() { return this._stats; }
+	get blockStats() { return this._blockStats; }
+	get chain() { return this._chain; }
+	get transfers() { return this._transfers; }
+	get wallet() { return this._wallet; }
+	get crosschain() { return this._crosschain; }
+	get fx() { return this._fx; }
+	get agents() { return this._agents; }
+	get graph() { return this._graph; }
+	get health() { return this._health; }
+	get search() { return this._search; }
+	get analytics() { return this._analytics; }
 }

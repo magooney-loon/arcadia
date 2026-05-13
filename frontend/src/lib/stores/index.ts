@@ -18,12 +18,18 @@ export {
 	blocks,
 	transactions,
 	traces,
+	txDetail,
+	blockDetail,
 	fetchBlocks,
 	fetchTransactions,
 	fetchTraces,
+	fetchTxDetail,
+	fetchBlockDetail,
 	type BlocksState,
 	type TransactionsState,
-	type TracesState
+	type TracesState,
+	type TxDetailState,
+	type BlockDetailState
 } from './chain.svelte';
 // TRANSFERS
 export { transfers, fetchTransfers, type TransfersState } from './transfers.svelte';
@@ -47,3 +53,22 @@ export {
 } from './agents.svelte';
 // GRAPH
 export { graph, fetchEdges, type GraphState } from './graph.svelte';
+// HEALTH
+export { health, fetchHealth, type HealthState } from './health.svelte';
+// SEARCH
+export { search, runSearch, clearSearch, type SearchState } from './search.svelte';
+// ANALYTICS
+export {
+	analyticsFees,
+	analyticsVolume,
+	analyticsBridgeFlow,
+	analyticsAgentLeaderboard,
+	fetchAnalyticsFees,
+	fetchAnalyticsVolume,
+	fetchAnalyticsBridgeFlow,
+	fetchAgentLeaderboard,
+	type FeesState,
+	type VolumeState,
+	type BridgeFlowState,
+	type AgentLeaderboardState
+} from './analytics.svelte';
