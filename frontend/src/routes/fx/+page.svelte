@@ -90,7 +90,7 @@
 									><a
 										href={fmt.explorerAddr(t.maker)}
 										target="_blank"
-										rel="noopener noreferrer"
+										rel="external noopener noreferrer"
 										style="text-decoration:none">{fmt.addr(t.maker)}</a
 									></td
 								>
@@ -98,7 +98,7 @@
 									><a
 										href={fmt.explorerAddr(t.taker)}
 										target="_blank"
-										rel="noopener noreferrer"
+										rel="external noopener noreferrer"
 										style="text-decoration:none">{fmt.addr(t.taker)}</a
 									></td
 								>

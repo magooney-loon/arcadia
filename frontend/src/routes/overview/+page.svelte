@@ -174,7 +174,7 @@
 								class="num"
 								href={fmt.explorerBlock(b.number)}
 								target="_blank"
-								rel="noopener noreferrer"
+								rel="external noopener noreferrer"
 								style="text-decoration:none">#{b.number}</a
 							>
 							<span class="age">{fmt.tsAge(b.timestamp)}</span>
@@ -205,7 +205,7 @@
 								class="hash mono"
 								href={fmt.explorerTx(t.hash)}
 								target="_blank"
-								rel="noopener noreferrer"
+								rel="external noopener noreferrer"
 								style="font-size:11px;min-width:130px;overflow:hidden;text-overflow:ellipsis;text-decoration:none"
 								>{fmt.hash(t.hash)}</a
 							>
@@ -218,7 +218,7 @@
 								class="addr mono"
 								href={fmt.explorerAddr(t.from_addr)}
 								target="_blank"
-								rel="noopener noreferrer"
+								rel="external noopener noreferrer"
 								style="font-size:11px;overflow:hidden;text-overflow:ellipsis;text-decoration:none"
 								>{fmt.addr(t.from_addr)}</a
 							>
@@ -254,7 +254,7 @@
 									class="agent-name addr"
 									href={fmt.explorerAddr(a.agent_address)}
 									target="_blank"
-									rel="noopener noreferrer"
+									rel="external noopener noreferrer"
 									style="text-decoration:none">{fmt.addr(a.agent_address)}</a
 								>
 								<div class="agent-sub">{a.tx_count ?? 0} txs · {a.job_count ?? 0} jobs</div>

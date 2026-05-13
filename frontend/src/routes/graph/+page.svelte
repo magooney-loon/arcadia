@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { graph, fetchEdges } from '$lib/stores/graph.svelte';
+	import ForceGraph from '$lib/components/ForceGraph.svelte';
 	import * as fmt from '$lib/fmt.js';
 
 	let walletInput = $state('');
@@ -18,7 +19,6 @@
 	}
 
 	const edges = $derived(graph.data?.edges ?? []);
-	const totalVol = $derived(edges.reduce((s, e) => s + parseFloat(e.total_usdc ?? '0'), 0));
 </script>
 
 <div class="view">
@@ -55,18 +55,19 @@
 		>
 	</div>
 
-	<!-- 3D graph placeholder -->
+	<!-- Force graph -->
 	<div class="graph-stage" style="margin-bottom:12px">
-		<div
-			style="position:absolute;inset:0;display:grid;place-items:center;flex-direction:column;gap:8px"
-		>
-			<span class="mono dim" style="font-size:11px">3D force graph · coming soon</span>
-			{#if edges.length}
-				<span class="mono" style="font-size:11px;color:var(--accent);margin-top:4px"
-					>{edges.length} edges loaded · {fmt.usdc(totalVol)} total vol</span
-				>
-			{/if}
-		</div>
+		{#if edges.length}
+			<ForceGraph {edges} />
+		{:else if graph.loading}
+			<div style="position:absolute;inset:0;display:grid;place-items:center">
+				<span class="mono dim" style="font-size:11px">loading…</span>
+			</div>
+		{:else}
+			<div style="position:absolute;inset:0;display:grid;place-items:center">
+				<span class="mono dim" style="font-size:11px">no edges to display</span>
+			</div>
+		{/if}
 	</div>
 
 	<!-- Edge table -->
@@ -108,7 +109,7 @@
 									><a
 										href={fmt.explorerAddr(e.from_wallet)}
 										target="_blank"
-										rel="noopener noreferrer"
+										rel="external noopener noreferrer"
 										style="text-decoration:none">{fmt.addr(e.from_wallet)}</a
 									></td
 								>
@@ -117,7 +118,7 @@
 									><a
 										href={fmt.explorerAddr(e.to_wallet)}
 										target="_blank"
-										rel="noopener noreferrer"
+										rel="external noopener noreferrer"
 										style="text-decoration:none">{fmt.addr(e.to_wallet)}</a
 									></td
 								>

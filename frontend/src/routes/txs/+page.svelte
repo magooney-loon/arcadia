@@ -81,7 +81,7 @@
 										class="hash mono"
 										href={fmt.explorerTx(t.hash)}
 										target="_blank"
-										rel="noopener noreferrer"
+										rel="external noopener noreferrer"
 										style="text-decoration:none">{fmt.hash(t.hash)}</a
 									></td
 								>
@@ -90,7 +90,7 @@
 									><a
 										href={fmt.explorerAddr(t.from_addr)}
 										target="_blank"
-										rel="noopener noreferrer"
+										rel="external noopener noreferrer"
 										style="text-decoration:none">{fmt.addr(t.from_addr)}</a
 									></td
 								>
@@ -99,7 +99,7 @@
 									>{#if t.is_contract_deploy}(new){:else}<a
 											href={fmt.explorerAddr(t.to_addr)}
 											target="_blank"
-											rel="noopener noreferrer"
+											rel="external noopener noreferrer"
 											style="text-decoration:none">{fmt.addr(t.to_addr)}</a
 										>{/if}</td
 								>

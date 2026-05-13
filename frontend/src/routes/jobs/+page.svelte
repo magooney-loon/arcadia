@@ -113,7 +113,7 @@
 										class="hash mono"
 										href={fmt.explorerTx(j.job_id)}
 										target="_blank"
-										rel="noopener noreferrer"
+										rel="external noopener noreferrer"
 										style="text-decoration:none">{fmt.hash(j.job_id)}</a
 									></td
 								>
@@ -121,7 +121,7 @@
 									><a
 										href={fmt.explorerAddr(j.employer_address)}
 										target="_blank"
-										rel="noopener noreferrer"
+										rel="external noopener noreferrer"
 										style="text-decoration:none">{fmt.addr(j.employer_address)}</a
 									></td
 								>
@@ -129,7 +129,7 @@
 									><a
 										href={fmt.explorerAddr(j.worker_address)}
 										target="_blank"
-										rel="noopener noreferrer"
+										rel="external noopener noreferrer"
 										style="text-decoration:none">{fmt.addr(j.worker_address)}</a
 									></td
 								>

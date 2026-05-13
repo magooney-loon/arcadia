@@ -152,7 +152,7 @@
 							class="search-result-item"
 							href={fmt.explorerTx(search.data.result.hash as string)}
 							target="_blank"
-							rel="noopener noreferrer"
+							rel="external noopener noreferrer"
 						>
 							<span class="badge info">tx</span>
 							<span class="mono">{fmt.hash(search.data.result.hash as string)}</span>
@@ -162,7 +162,7 @@
 							class="search-result-item"
 							href={fmt.explorerBlock(search.data.result.number as number)}
 							target="_blank"
-							rel="noopener noreferrer"
+							rel="external noopener noreferrer"
 						>
 							<span class="badge ok">block</span>
 							<span class="mono">#{search.data.result.number}</span>
@@ -172,7 +172,7 @@
 							class="search-result-item"
 							href={fmt.explorerAddr(search.data.result.address as string)}
 							target="_blank"
-							rel="noopener noreferrer"
+							rel="external noopener noreferrer"
 						>
 							<span class="badge warn">wallet</span>
 							<span class="mono">{fmt.addr(search.data.result.address as string)}</span>
@@ -182,7 +182,7 @@
 							class="search-result-item"
 							href={fmt.explorerAddr(search.data.result.address as string)}
 							target="_blank"
-							rel="noopener noreferrer"
+							rel="external noopener noreferrer"
 						>
 							<span class="badge acc">agent</span>
 							<span class="mono">{fmt.addr(search.data.result.address as string)}</span>
@@ -254,7 +254,7 @@
 			><a
 				href="https://envio.dev/"
 				target="_blank"
-				rel="noopener noreferrer"
+				rel="external noopener noreferrer"
 				style="text-decoration:none;color:inherit">HyperSync ↗</a
 			></span
 		>

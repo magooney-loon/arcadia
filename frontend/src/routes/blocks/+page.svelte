@@ -66,7 +66,7 @@
 										class="acc mono"
 										href={fmt.explorerBlock(b.number)}
 										target="_blank"
-										rel="noopener noreferrer"
+										rel="external noopener noreferrer"
 										style="text-decoration:none">#{b.number}</a
 									></td
 								>
@@ -74,9 +74,9 @@
 								<td>{b.tx_count ?? 0}</td>
 								<td class="addr"
 									><a
-										href={fmt.explorerAddr(b.miner ?? '')}
+										href={fmt.explorerAddr(b.miner)}
 										target="_blank"
-										rel="noopener noreferrer"
+										rel="external noopener noreferrer"
 										style="text-decoration:none">{fmt.addr(b.miner)}</a
 									></td
 								>

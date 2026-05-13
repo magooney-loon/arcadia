@@ -89,7 +89,7 @@
 										class="hash mono"
 										href={fmt.explorerTx(t.tx_hash)}
 										target="_blank"
-										rel="noopener noreferrer"
+										rel="external noopener noreferrer"
 										style="text-decoration:none">{fmt.hash(t.tx_hash)}</a
 									></td
 								>
@@ -102,7 +102,7 @@
 									><a
 										href={fmt.explorerAddr(t.from_addr)}
 										target="_blank"
-										rel="noopener noreferrer"
+										rel="external noopener noreferrer"
 										style="text-decoration:none">{fmt.addr(t.from_addr)}</a
 									></td
 								>
@@ -111,7 +111,7 @@
 									><a
 										href={fmt.explorerAddr(t.to_addr)}
 										target="_blank"
-										rel="noopener noreferrer"
+										rel="external noopener noreferrer"
 										style="text-decoration:none">{fmt.addr(t.to_addr)}</a
 									></td
 								>

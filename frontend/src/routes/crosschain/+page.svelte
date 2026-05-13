@@ -140,7 +140,7 @@
 									><a
 										href={fmt.explorerAddr(e.sender ?? '')}
 										target="_blank"
-										rel="noopener noreferrer"
+										rel="external noopener noreferrer"
 										style="text-decoration:none">{fmt.addr(e.sender)}</a
 									></td
 								>
