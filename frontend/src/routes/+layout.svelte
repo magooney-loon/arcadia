@@ -13,8 +13,8 @@
 			group: 'Live',
 			items: [
 				{ id: 'overview', label: 'Overview', href: resolve('/overview/') },
-				{ id: 'blocks', label: 'Blocks', href: resolve('/blocks/'), live: true },
-				{ id: 'txs', label: 'Transactions', href: resolve('/txs/'), live: true },
+				{ id: 'blocks', label: 'Blocks', href: resolve('/blocks/'), live: false },
+				{ id: 'txs', label: 'Transactions', href: resolve('/txs/'), live: false },
 				{ id: 'transfers', label: 'Transfers', href: resolve('/transfers/') },
 				{ id: 'traces', label: 'Traces', href: resolve('/traces/') }
 			]
