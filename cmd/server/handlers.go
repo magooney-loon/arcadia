@@ -41,6 +41,17 @@ func recordsToMaps(records []*core.Record) []map[string]any {
 	return out
 }
 
+// enrichEdgeRecord adds total_usdc_human (stablecoin 6-decimal raw → human string).
+func enrichEdgeRecord(r *core.Record) map[string]any {
+	m := r.PublicExport()
+	if raw := r.GetString("total_usdc"); raw != "" && raw != "0" {
+		if n, ok := new(big.Int).SetString(raw, 10); ok {
+			m["total_usdc_human"] = stablecoinHuman(n)
+		}
+	}
+	return m
+}
+
 // enrichAgentRecord adds human-readable conversions for the raw big.Int fields
 // stored on agent records: usdc_spent_fees (wei, 18 dec) and usdc_transferred
 // (raw ERC-20 units, 6 dec).
@@ -224,6 +235,14 @@ func walletHandler(c *core.RequestEvent) error {
 		agentData = enrichAgentRecord(agentRecords[0])
 	}
 
+	enrichEdges := func(recs []*core.Record) []map[string]any {
+		out := make([]map[string]any, len(recs))
+		for i, r := range recs {
+			out[i] = enrichEdgeRecord(r)
+		}
+		return out
+	}
+
 	return c.JSON(http.StatusOK, map[string]any{
 		"address":        address,
 		"is_agent":       agentData != nil,
@@ -232,8 +251,8 @@ func walletHandler(c *core.RequestEvent) error {
 		"txs_received":   recordsToMaps(txsReceived),
 		"sent":           recordsToMaps(sent),
 		"received":       recordsToMaps(received),
-		"outgoing_edges": recordsToMaps(outEdges),
-		"incoming_edges": recordsToMaps(inEdges),
+		"outgoing_edges": enrichEdges(outEdges),
+		"incoming_edges": enrichEdges(inEdges),
 	})
 }
 
@@ -474,8 +493,12 @@ func edgesHandler(c *core.RequestEvent) error {
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error()})
 	}
+	out := make([]map[string]any, len(records))
+	for i, r := range records {
+		out[i] = enrichEdgeRecord(r)
+	}
 	return c.JSON(http.StatusOK, map[string]any{
-		"edges": recordsToMaps(records),
+		"edges": out,
 		"count": len(records),
 	})
 }

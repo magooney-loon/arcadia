@@ -123,7 +123,7 @@
 									></td
 								>
 								<td class="num">{fmt.num(e.tx_count)}</td>
-								<td class="num">{fmt.usdc(e.total_usdc)}</td>
+								<td class="num">{fmt.usdc(e.total_usdc_human)}</td>
 								<td>{e.from_is_agent ? '<span class="badge acc">agent</span>' : ''}</td>
 								<td>{e.to_is_agent ? '<span class="badge acc">agent</span>' : ''}</td>
 							</tr>

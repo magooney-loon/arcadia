@@ -3,6 +3,7 @@ export interface Edge {
 	from_wallet: string;
 	to_wallet: string;
 	total_usdc?: string;
+	total_usdc_human?: string;
 	tx_count: number;
 	last_seen_block?: number;
 	from_is_agent?: boolean;
