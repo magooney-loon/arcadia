@@ -4,6 +4,8 @@
 	import { stats } from '$lib/stores/stats.svelte';
 	import * as fmt from '$lib/fmt.js';
 	import { createSort } from '$lib/sort.svelte';
+	import AddrLink from '$lib/components/AddrLink.svelte';
+	import TxLink from '$lib/components/TxLink.svelte';
 
 	const METHODS = ['all', 'transfer', 'approve', 'swap', 'execute', 'multicall', 'deploy'];
 
@@ -110,31 +112,15 @@
 						{#each sortedTxs as t (t.hash)}
 							<tr>
 								<td
-									><a
-										class="hash mono"
-										href={fmt.explorerTx(t.hash)}
-										target="_blank"
-										rel="external noopener noreferrer"
-										style="text-decoration:none">{fmt.hash(t.hash)}</a
-									></td
+									><TxLink hash={t.hash} /></td
 								>
 								<td><span class="badge info">{fmt.methodName(t.sighash)}</span></td>
 								<td class="addr"
-									><a
-										href={fmt.explorerAddr(t.from_addr)}
-										target="_blank"
-										rel="external noopener noreferrer"
-										style="text-decoration:none">{fmt.addr(t.from_addr)}</a
-									></td
+									><AddrLink address={t.from_addr} /></td
 								>
 								<td class="muted">→</td>
 								<td class="addr"
-									>{#if t.is_contract_deploy}(new){:else}<a
-											href={fmt.explorerAddr(t.to_addr)}
-											target="_blank"
-											rel="external noopener noreferrer"
-											style="text-decoration:none">{fmt.addr(t.to_addr)}</a
-										>{/if}</td
+									>{#if t.is_contract_deploy}(new){:else}<AddrLink address={t.to_addr} />{/if}</td
 								>
 								<td class="num muted">{fmt.usdc(t.fee_usdc, 5)}</td>
 								<td class="num">

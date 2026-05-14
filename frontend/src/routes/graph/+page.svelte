@@ -4,6 +4,7 @@
 	import ForceGraph from '$lib/components/ForceGraph.svelte';
 	import * as fmt from '$lib/fmt.js';
 	import { createSort } from '$lib/sort.svelte';
+	import AddrLink from '$lib/components/AddrLink.svelte';
 
 	let walletInput = $state('');
 	let offset = $state(0);
@@ -135,21 +136,11 @@
 						{#each sortedEdges as e (e.from_wallet + e.to_wallet)}
 							<tr>
 								<td class="addr"
-									><a
-										href={fmt.explorerAddr(e.from_wallet)}
-										target="_blank"
-										rel="external noopener noreferrer"
-										style="text-decoration:none">{fmt.addr(e.from_wallet)}</a
-									></td
+									><AddrLink address={e.from_wallet} /></td
 								>
 								<td class="acc">→</td>
 								<td class="addr"
-									><a
-										href={fmt.explorerAddr(e.to_wallet)}
-										target="_blank"
-										rel="external noopener noreferrer"
-										style="text-decoration:none">{fmt.addr(e.to_wallet)}</a
-									></td
+									><AddrLink address={e.to_wallet} /></td
 								>
 								<td class="num">{fmt.num(e.tx_count)}</td>
 								<td class="num">{fmt.usdc(e.total_usdc_human)}</td>

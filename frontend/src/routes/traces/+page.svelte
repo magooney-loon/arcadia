@@ -4,6 +4,8 @@
 	import { stats } from '$lib/stores/stats.svelte';
 	import { createSort } from '$lib/sort.svelte';
 	import * as fmt from '$lib/fmt.js';
+	import AddrLink from '$lib/components/AddrLink.svelte';
+	import TxLink from '$lib/components/TxLink.svelte';
 
 	let txFilter = $state('');
 	let offset = $state(0);
@@ -119,30 +121,14 @@
 						{#each sortedTraces as t (t.tx_hash + '_' + t.block_number)}
 							<tr>
 								<td
-									><a
-										class="hash mono"
-										href={fmt.explorerTx(t.tx_hash)}
-										target="_blank"
-										rel="external noopener noreferrer"
-										style="text-decoration:none">{fmt.hash(t.tx_hash)}</a
-									></td
+									><TxLink hash={t.tx_hash} /></td
 								>
 								<td><span class="badge muted">{t.call_type ?? t.trace_type ?? '—'}</span></td>
 								<td class="addr"
-									><a
-										href={fmt.explorerAddr(t.from_addr)}
-										target="_blank"
-										rel="external noopener noreferrer"
-										style="text-decoration:none">{fmt.addr(t.from_addr)}</a
-									></td
+									><AddrLink address={t.from_addr} /></td
 								>
 								<td class="addr"
-									><a
-										href={fmt.explorerAddr(t.to_addr)}
-										target="_blank"
-										rel="external noopener noreferrer"
-										style="text-decoration:none">{fmt.addr(t.to_addr)}</a
-									></td
+									><AddrLink address={t.to_addr} /></td
 								>
 								<td class="num muted">{fmt.num(t.gas_used)}</td>
 								<td class="num muted">{fmt.blockAge(t.block_number, latestBlock)}</td>

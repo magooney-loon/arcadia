@@ -4,6 +4,7 @@
 	import { blockStats, fetchBlockStats } from '$lib/stores/blockStats.svelte';
 	import { createSort } from '$lib/sort.svelte';
 	import * as fmt from '$lib/fmt.js';
+	import AddrLink from '$lib/components/AddrLink.svelte';
 
 	let limit = $state(50);
 	let offset = $state(0);
@@ -103,12 +104,7 @@
 								<td class="muted">{fmt.tsAge(b.timestamp)}</td>
 								<td>{b.tx_count ?? 0}</td>
 								<td class="addr"
-									><a
-										href={fmt.explorerAddr(b.miner)}
-										target="_blank"
-										rel="external noopener noreferrer"
-										style="text-decoration:none">{fmt.addr(b.miner)}</a
-									></td
+									><AddrLink address={b.miner} /></td
 								>
 								<td class="num">{fmt.pct(b.utilization_pct)}</td>
 								<td class="num">{stat ? fmt.usdc(stat.total_fee_usdc, 4) : '—'}</td>

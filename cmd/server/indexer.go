@@ -25,6 +25,7 @@ import (
 func StartIndexer(app core.App) {
 	const startupDelay = 10 * time.Second
 	log.Printf("[indexer] scheduled Arcadia HyperSync indexer startup in %s", startupDelay)
+	seedKnownTokens()
 	go func() {
 		time.Sleep(startupDelay)
 		log.Println("[indexer] starting Arcadia HyperSync indexer")
@@ -1255,6 +1256,13 @@ func saveTransfer(app core.App, log *types.Log) (*big.Int, error) {
 		amountRaw = new(big.Int)
 	}
 
+	// Look up real decimals + symbol (cached). Falls back to OTHER on RPC failure.
+	var firstSeenBlock uint64
+	if log.BlockNumber != nil {
+		firstSeenBlock = log.BlockNumber.Uint64()
+	}
+	info := lookupTokenInfo(app, *log.Address, firstSeenBlock)
+
 	symbol := "OTHER"
 	if s, ok := KnownTokens[*log.Address]; ok {
 		symbol = s
@@ -1271,10 +1279,14 @@ func saveTransfer(app core.App, log *types.Log) (*big.Int, error) {
 	r.Set("from_addr", from.Hex())
 	r.Set("to_addr", to.Hex())
 	r.Set("amount_raw", amountRaw.String())
-	// amount_human only makes sense for tokens whose decimals we know.
-	// OTHER tokens have arbitrary decimals — frontend should rely on amount_raw.
-	if symbol != "OTHER" {
-		r.Set("amount_human", stablecoinHuman(amountRaw))
+	r.Set("decimals", info.Decimals)
+	if info.Symbol != "" {
+		r.Set("token_name", info.Symbol)
+	}
+	// amount_human uses real on-chain decimals when available.
+	// Tokens whose decimals lookup failed are left blank (frontend should rely on amount_raw).
+	if !info.LookupFailed {
+		r.Set("amount_human", tokenAmountHuman(amountRaw, info.Decimals))
 	}
 
 	if err := app.Save(r); err != nil {
@@ -1883,6 +1895,21 @@ func stablecoinHuman(raw *big.Int) string {
 	divisor := new(big.Int).Exp(big.NewInt(10), big.NewInt(6), nil)
 	quot := new(big.Float).Quo(new(big.Float).SetInt(raw), new(big.Float).SetInt(divisor))
 	return quot.Text('f', 6)
+}
+
+// tokenAmountHuman converts a raw uint256 amount to a human-readable string using
+// the supplied decimals. Output precision is min(decimals, 8) to keep strings short.
+func tokenAmountHuman(raw *big.Int, decimals uint8) string {
+	if raw == nil || raw.Sign() == 0 {
+		return "0"
+	}
+	divisor := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(decimals)), nil)
+	quot := new(big.Float).Quo(new(big.Float).SetInt(raw), new(big.Float).SetInt(divisor))
+	prec := int(decimals)
+	if prec > 8 {
+		prec = 8
+	}
+	return quot.Text('f', prec)
 }
 
 // mustCollection fetches a collection by name and panics if missing — collections are

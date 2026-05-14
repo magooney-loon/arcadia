@@ -3,6 +3,7 @@
 	import { createSort } from '$lib/sort.svelte';
 	import { analyticsAgentLeaderboard, fetchAgentLeaderboard } from '$lib/stores/analytics.svelte';
 	import * as fmt from '$lib/fmt.js';
+	import AddrLink from '$lib/components/AddrLink.svelte';
 
 	let limit = $state(50);
 
@@ -118,13 +119,7 @@
 							<tr>
 								<td class="muted">{i + 1}</td>
 								<td>
-									<a
-										class="addr"
-										href={fmt.explorerAddr(a.agent_address)}
-										target="_blank"
-										rel="external noopener noreferrer"
-										style="text-decoration:none">{fmt.addr(a.agent_address)}</a
-									>
+									<AddrLink address={a.agent_address} />
 									{#if a.job_count > 0}
 										<span class="badge acc" style="margin-left:6px">agent</span>
 									{/if}

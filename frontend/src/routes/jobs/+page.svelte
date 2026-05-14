@@ -4,6 +4,8 @@
 	import { stats } from '$lib/stores/stats.svelte';
 	import { createSort } from '$lib/sort.svelte';
 	import * as fmt from '$lib/fmt.js';
+	import AddrLink from '$lib/components/AddrLink.svelte';
+	import TxLink from '$lib/components/TxLink.svelte';
 
 	const TABS = [
 		{ label: 'All', status: '' },
@@ -147,29 +149,13 @@
 						{#each sortedJobs as j (j.job_id)}
 							<tr>
 								<td
-									><a
-										class="hash mono"
-										href={fmt.explorerTx(j.job_id)}
-										target="_blank"
-										rel="external noopener noreferrer"
-										style="text-decoration:none">{fmt.hash(j.job_id)}</a
-									></td
+									><TxLink hash={j.job_id} /></td
 								>
 								<td class="addr"
-									><a
-										href={fmt.explorerAddr(j.employer_address)}
-										target="_blank"
-										rel="external noopener noreferrer"
-										style="text-decoration:none">{fmt.addr(j.employer_address)}</a
-									></td
+									><AddrLink address={j.employer_address} /></td
 								>
 								<td class="addr"
-									><a
-										href={fmt.explorerAddr(j.worker_address)}
-										target="_blank"
-										rel="external noopener noreferrer"
-										style="text-decoration:none">{fmt.addr(j.worker_address)}</a
-									></td
+									><AddrLink address={j.worker_address} /></td
 								>
 								<td><span class="badge {fmt.jobBadge(j.status)}">{j.status}</span></td>
 								<td class="num">{fmt.usdc(j.payment_usdc)}</td>

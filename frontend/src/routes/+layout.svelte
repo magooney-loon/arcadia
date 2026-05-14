@@ -1,7 +1,7 @@
 <script lang="ts">
 	import '../app.css';
 	import { onMount } from 'svelte';
-	import { page } from '$app/stores';
+	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import favicon from '$lib/assets/favicon.svg';
 	import { stats, fetchStats } from '$lib/stores/stats.svelte';
@@ -100,7 +100,7 @@
 	];
 
 	function isActive(href: string) {
-		return $page.url.pathname === href || $page.url.pathname === href.replace(/\/$/, '');
+		return page.url.pathname === href || page.url.pathname === href.replace(/\/$/, '');
 	}
 </script>
 
@@ -189,9 +189,12 @@
 					{:else if search.data?.type === 'tx' && search.data.result}
 						<a
 							class="search-result-item"
-							href={fmt.explorerTx(search.data.result.hash as string)}
-							target="_blank"
-							rel="external noopener noreferrer"
+							href={resolve(`/tx/${search.data.result.hash as string}/`)}
+							onclick={() => {
+								searchFocused = false;
+								searchQuery = '';
+								clearSearch();
+							}}
 						>
 							<span class="badge info">tx</span>
 							<span class="mono">{fmt.hash(search.data.result.hash as string)}</span>
@@ -209,9 +212,12 @@
 					{:else if search.data?.type === 'wallet' && search.data.result}
 						<a
 							class="search-result-item"
-							href={fmt.explorerAddr(search.data.result.address as string)}
-							target="_blank"
-							rel="external noopener noreferrer"
+							href={resolve(`/wallet/${search.data.result.address as string}/`)}
+							onclick={() => {
+								searchFocused = false;
+								searchQuery = '';
+								clearSearch();
+							}}
 						>
 							<span class="badge warn">wallet</span>
 							<span class="mono">{fmt.addr(search.data.result.address as string)}</span>
@@ -219,9 +225,12 @@
 					{:else if search.data?.type === 'agent' && search.data.result}
 						<a
 							class="search-result-item"
-							href={fmt.explorerAddr(search.data.result.address as string)}
-							target="_blank"
-							rel="external noopener noreferrer"
+							href={resolve(`/wallet/${search.data.result.address as string}/`)}
+							onclick={() => {
+								searchFocused = false;
+								searchQuery = '';
+								clearSearch();
+							}}
 						>
 							<span class="badge acc">agent</span>
 							<span class="mono">{fmt.addr(search.data.result.address as string)}</span>

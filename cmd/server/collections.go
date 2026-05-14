@@ -9,6 +9,7 @@ func registerCollections(app core.App) {
 		for _, fn := range []func(core.App) error{
 			metaCollection,
 			indexerEventsCollection,
+			tokensCollection,
 			blocksCollection,
 			transactionsCollection,
 			transfersCollection,
@@ -81,6 +82,28 @@ func indexerEventsCollection(app core.App) error {
 		return err
 	}
 	app.Logger().Info("Created indexer_events collection")
+	return nil
+}
+
+// tokensCollection — Layer 3b: token metadata cache (decimals + symbol).
+// Populated lazily by the indexer on first sighting of an ERC-20 contract.
+// Known stables (USDC/EURC/USYC) are also stored so the lookup path is uniform.
+func tokensCollection(app core.App) error {
+	if collectionExists(app, "tokens") {
+		return nil
+	}
+	c := core.NewBaseCollection("tokens")
+	c.Fields.Add(&core.TextField{Name: "address", Required: true, Max: 42})
+	c.Fields.Add(&core.TextField{Name: "symbol", Required: false, Max: 32})
+	c.Fields.Add(&core.NumberField{Name: "decimals"})
+	c.Fields.Add(&core.NumberField{Name: "first_seen_block"})
+	c.Fields.Add(&core.BoolField{Name: "lookup_failed"}) // true if RPC didn't return decimals
+	c.AddIndex("idx_tokens_address", true, "address", "")
+	c.ViewRule = nil
+	if err := app.Save(c); err != nil {
+		return err
+	}
+	app.Logger().Info("Created tokens collection")
 	return nil
 }
 
@@ -180,6 +203,22 @@ func transactionsCollection(app core.App) error {
 // transfersCollection — Layer 3: all ERC-20 token transfers (USDC, EURC, USYC, …).
 func transfersCollection(app core.App) error {
 	if collectionExists(app, "transfers") {
+		c, err := app.FindCollectionByNameOrId("transfers")
+		if err != nil {
+			return err
+		}
+		changed := false
+		if c.Fields.GetByName("decimals") == nil {
+			c.Fields.Add(&core.NumberField{Name: "decimals"})
+			changed = true
+		}
+		if c.Fields.GetByName("token_name") == nil {
+			c.Fields.Add(&core.TextField{Name: "token_name", Required: false, Max: 32})
+			changed = true
+		}
+		if changed {
+			return app.Save(c)
+		}
 		return nil
 	}
 	c := core.NewBaseCollection("transfers")
@@ -191,10 +230,12 @@ func transfersCollection(app core.App) error {
 		Name:   "token_symbol",
 		Values: []string{"USDC", "EURC", "USYC", "OTHER"},
 	})
+	c.Fields.Add(&core.TextField{Name: "token_name", Required: false, Max: 32}) // RPC symbol() result
+	c.Fields.Add(&core.NumberField{Name: "decimals"})                            // RPC decimals() result
 	c.Fields.Add(&core.TextField{Name: "from_addr", Required: false, Max: 42})
 	c.Fields.Add(&core.TextField{Name: "to_addr", Required: false, Max: 42})
 	c.Fields.Add(&core.TextField{Name: "amount_raw", Required: false, Max: 80})
-	// amount_human = amount_raw / 1e6 (ERC-20 stablecoins use 6 decimals)
+	// amount_human = amount_raw / 10^decimals (per-token, from on-chain decimals())
 	c.Fields.Add(&core.TextField{Name: "amount_human", Required: false, Max: 40})
 	c.AddIndex("idx_transfers_unique", true, "tx_hash, log_index", "")
 	c.AddIndex("idx_transfers_block", false, "block_number", "")

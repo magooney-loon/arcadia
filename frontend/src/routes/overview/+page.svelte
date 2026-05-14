@@ -9,11 +9,15 @@
 		fetchAnalyticsOverview,
 		analyticsBridgeFlow,
 		fetchAnalyticsBridgeFlow,
+		analyticsVolume,
+		fetchAnalyticsVolume,
 		analyticsAgentLeaderboard,
 		fetchAgentLeaderboard
 	} from '$lib/stores/analytics.svelte';
 	import * as fmt from '$lib/fmt.js';
 	import Chart from '$lib/components/Chart.svelte';
+	import AddrLink from '$lib/components/AddrLink.svelte';
+	import TxLink from '$lib/components/TxLink.svelte';
 
 	onMount(() => {
 		const refresh = () => {
@@ -26,6 +30,7 @@
 		fetchAgentLeaderboard(5);
 		fetchAnalyticsOverview();
 		fetchAnalyticsBridgeFlow();
+		fetchAnalyticsVolume();
 		const id = setInterval(refresh, 6000);
 		return () => clearInterval(id);
 	});
@@ -35,6 +40,24 @@
 		Object.entries(bridgeFlow?.by_chain ?? {})
 			.sort((a, b) => b[1].inbound_vol + b[1].outbound_vol - (a[1].inbound_vol + a[1].outbound_vol))
 			.slice(0, 7)
+	);
+
+	const volume = $derived(analyticsVolume.data);
+	const tokenStats = $derived({
+		USDC: volume?.by_token?.USDC ?? { volume: 0, count: 0, whale_count: 0 },
+		EURC: volume?.by_token?.EURC ?? { volume: 0, count: 0, whale_count: 0 },
+		USYC: volume?.by_token?.USYC ?? { volume: 0, count: 0, whale_count: 0 }
+	});
+	// Latest block_stats row carries the largest single USDC transfer in that block.
+	// Show the max across the loaded 200-block window.
+	const largestTransfer = $derived(
+		(blockStats.data?.stats ?? []).reduce(
+			(max, s) => {
+				const v = parseFloat(s.largest_usdc_transfer ?? '0');
+				return v > max.v ? { v, block: s.block_number ?? 0 } : max;
+			},
+			{ v: 0, block: 0 }
+		)
 	);
 
 	// Chart data from block stats (sorted oldest → newest)
@@ -139,6 +162,45 @@
 		</div>
 	{/if}
 
+	<!-- Stablecoin volume breakdown + whales -->
+	{#if volume}
+		<div class="grid" style="grid-template-columns:repeat(5,1fr);margin-top:12px">
+			<div class="stat">
+				<div class="label" style="color:var(--ok)">USDC vol 24h</div>
+				<div class="value">{fmt.usdc(tokenStats.USDC.volume)}</div>
+				<div class="mono dim" style="font-size:10px">
+					{fmt.num(tokenStats.USDC.count)} transfers
+				</div>
+			</div>
+			<div class="stat">
+				<div class="label" style="color:var(--info)">EURC vol 24h</div>
+				<div class="value">{fmt.usdc(tokenStats.EURC.volume)}</div>
+				<div class="mono dim" style="font-size:10px">
+					{fmt.num(tokenStats.EURC.count)} transfers
+				</div>
+			</div>
+			<div class="stat">
+				<div class="label" style="color:var(--warn)">USYC vol 24h</div>
+				<div class="value">{fmt.usdc(tokenStats.USYC.volume)}</div>
+				<div class="mono dim" style="font-size:10px">
+					{fmt.num(tokenStats.USYC.count)} transfers
+				</div>
+			</div>
+			<div class="stat">
+				<div class="label">Whale transfers</div>
+				<div class="value" style="color:var(--warn)">{fmt.num(volume.whale_transfers)}</div>
+				<div class="mono dim" style="font-size:10px">≥ $10K · 24h</div>
+			</div>
+			<div class="stat hide-mobile">
+				<div class="label">Largest transfer</div>
+				<div class="value" style="color:var(--acc)">{fmt.usdc(largestTransfer.v)}</div>
+				<div class="mono dim" style="font-size:10px">
+					{largestTransfer.block ? `block #${largestTransfer.block}` : '—'}
+				</div>
+			</div>
+		</div>
+	{/if}
+
 	<!-- Charts -->
 	{#if chartStats.length > 1}
 		<div class="grid grid-2" style="margin-top:12px">
@@ -229,27 +291,13 @@
 				{#if transactions.data?.transactions.length}
 					{#each transactions.data.transactions as t (t.hash)}
 						<div class="live-row" style="white-space:nowrap;overflow:hidden">
-							<a
-								class="hash mono"
-								href={fmt.explorerTx(t.hash)}
-								target="_blank"
-								rel="external noopener noreferrer"
-								style="font-size:11px;min-width:130px;overflow:hidden;text-overflow:ellipsis;text-decoration:none"
-								>{fmt.hash(t.hash)}</a
-							>
+							<TxLink hash={t.hash} />
 							<span
 								class="mono"
 								style="font-size:10px;color:var(--info);width:80px;overflow:hidden;text-overflow:ellipsis"
 								>{fmt.methodName(t.sighash)}</span
 							>
-							<a
-								class="addr mono"
-								href={fmt.explorerAddr(t.from_addr)}
-								target="_blank"
-								rel="external noopener noreferrer"
-								style="font-size:11px;overflow:hidden;text-overflow:ellipsis;text-decoration:none"
-								>{fmt.addr(t.from_addr)}</a
-							>
+							<AddrLink address={t.from_addr} />
 							<span class="arrow mono muted" style="margin-left:auto;font-size:10px"
 								>{t.status === 1 ? '✓' : '✗'}</span
 							>
@@ -278,13 +326,7 @@
 						<div class="agent-row">
 							<div class="agent-avatar">{i + 1}</div>
 							<div class="agent-meta">
-								<a
-									class="agent-name addr"
-									href={fmt.explorerAddr(a.agent_address)}
-									target="_blank"
-									rel="external noopener noreferrer"
-									style="text-decoration:none">{fmt.addr(a.agent_address)}</a
-								>
+								<AddrLink address={a.agent_address} />
 								<div class="agent-sub">{a.tx_count ?? 0} txs · {a.job_count ?? 0} jobs</div>
 							</div>
 							<div class="agent-stats">

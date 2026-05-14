@@ -4,6 +4,7 @@
 	import { stats } from '$lib/stores/stats.svelte';
 	import * as fmt from '$lib/fmt.js';
 	import { createSort } from '$lib/sort.svelte';
+	import AddrLink from '$lib/components/AddrLink.svelte';
 
 	const STATUSES = ['all', 'created', 'taker_funded', 'maker_funded', 'settled', 'cancelled'];
 
@@ -122,20 +123,10 @@
 										: '—'}</td
 								>
 								<td class="addr"
-									><a
-										href={fmt.explorerAddr(t.maker)}
-										target="_blank"
-										rel="external noopener noreferrer"
-										style="text-decoration:none">{fmt.addr(t.maker)}</a
-									></td
+									><AddrLink address={t.maker} /></td
 								>
 								<td class="addr"
-									><a
-										href={fmt.explorerAddr(t.taker)}
-										target="_blank"
-										rel="external noopener noreferrer"
-										style="text-decoration:none">{fmt.addr(t.taker)}</a
-									></td
+									><AddrLink address={t.taker} /></td
 								>
 								<td><span class="badge {fmt.fxBadge(t.status)}">{t.status}</span></td>
 								<td class="num muted">{fmt.blockAge(t.block_number, latestBlock)}</td>
