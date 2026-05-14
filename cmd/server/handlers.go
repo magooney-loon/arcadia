@@ -919,6 +919,61 @@ func latestSnapshot(app core.App, window string) (*core.Record, bool) {
 	return rows[0], true
 }
 
+// API_DESC All discovered ERC-20 tokens with aggregated analytics
+// API_TAGS Tokens
+func tokensHandler(c *core.RequestEvent) error {
+	limit, offset := limitOffset(c)
+
+	filter := ""
+	params := map[string]any{}
+
+	if search := qp(c, "search", ""); search != "" {
+		filter = "(LOWER(symbol) LIKE {:s} OR LOWER(name) LIKE {:s} OR LOWER(token_address) LIKE {:s})"
+		params["s"] = "%" + strings.ToLower(search) + "%"
+	}
+
+	records, err := c.App.FindRecordsByFilter("token_analytics", filter, "-transfer_count", limit, offset, params)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error()})
+	}
+
+	return c.JSON(http.StatusOK, map[string]any{
+		"tokens": recordsToMaps(records),
+		"count":  len(records),
+	})
+}
+
+// API_DESC Token detail with recent transfers
+// API_TAGS Tokens
+func tokenDetailHandler(c *core.RequestEvent) error {
+	address := c.Request.PathValue("address")
+	if address == "" {
+		return c.JSON(http.StatusBadRequest, map[string]any{"error": "address required"})
+	}
+
+	tokenRows, err := c.App.FindRecordsByFilter("token_analytics",
+		"LOWER(token_address) = {:a}", "", 1, 0,
+		map[string]any{"a": strings.ToLower(address)})
+	if err != nil || len(tokenRows) == 0 {
+		return c.JSON(http.StatusNotFound, map[string]any{"error": "token not found"})
+	}
+
+	tokenAddr := strings.ToLower(tokenRows[0].GetString("token_address"))
+
+	// Fetch recent transfers for this token
+	transfers, err := c.App.FindRecordsByFilter("transfers",
+		"LOWER(token_address) = {:a}", "-block_number", 50, 0,
+		map[string]any{"a": tokenAddr})
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error()})
+	}
+
+	return c.JSON(http.StatusOK, map[string]any{
+		"token":     tokenRows[0].PublicExport(),
+		"transfers": recordsToMaps(transfers),
+	})
+}
+
 // API_DESC Agent leaderboard ranked by stablecoin volume transferred
 // API_TAGS Agents
 func analyticsAgentLeaderboardHandler(c *core.RequestEvent) error {

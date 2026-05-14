@@ -53,6 +53,11 @@
 			href: resolve('/graph/'),
 			label: 'Wallet graph',
 			desc: 'Interactive force-directed graph of wallet-to-wallet capital flows. Visualize who transacts with whom and how value moves through the network.'
+		},
+		{
+			href: resolve('/tokens/'),
+			label: 'Tokens',
+			desc: 'All discovered ERC-20 tokens on Arc with symbol, decimals, transfer count, and metadata status. See every token contract the indexer has encountered.'
 		}
 	];
 
@@ -72,6 +77,10 @@
 		{
 			label: 'Analytics snapshots',
 			detail: '5-min resolution: TPS, fees (p25–p95), volume, active addresses'
+		},
+		{
+			label: 'Token registry',
+			detail: 'ERC-20 contract address, symbol, decimals, transfer count, first seen block'
 		}
 	];
 

@@ -61,6 +61,11 @@
 			href: resolve('/graph/')
 		},
 		{
+			keywords: ['token', 'tokens', 'erc20', 'erc-20', 'coin'],
+			label: 'Tokens',
+			href: resolve('/tokens/')
+		},
+		{
 			keywords: ['readme', 'about', 'help', 'docs', 'info'],
 			label: 'About Arcadia',
 			href: resolve('/readme/')
@@ -157,7 +162,8 @@
 				{ id: 'blocks', label: 'Blocks', href: resolve('/blocks/'), live: false },
 				{ id: 'txs', label: 'Transactions', href: resolve('/txs/'), live: false },
 				{ id: 'transfers', label: 'Transfers', href: resolve('/transfers/') },
-				{ id: 'traces', label: 'Traces', href: resolve('/traces/') }
+				{ id: 'traces', label: 'Traces', href: resolve('/traces/') },
+				{ id: 'tokens', label: 'Tokens', href: resolve('/tokens/') }
 			]
 		},
 		{
@@ -467,6 +473,14 @@
 	{:else if id === 'traces'}
 		<svg viewBox="0 0 14 14" fill="none" class="ico" stroke="currentColor" stroke-width="1.4"
 			><path d="M2 2 V12 H12 M4 9 L7 6 L9 8 L12 4" /></svg
+		>
+	{:else if id === 'tokens'}
+		<svg viewBox="0 0 14 14" fill="none" class="ico" stroke="currentColor" stroke-width="1.4"
+			><circle cx="7" cy="7" r="5" /><path
+				d="M5 7.5 L6.5 9 L9 5.5"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+			/></svg
 		>
 	{:else if id === 'crosschain'}
 		<svg viewBox="0 0 14 14" fill="none" class="ico" stroke="currentColor" stroke-width="1.4"

@@ -62,6 +62,10 @@ func registerV1Routes(router *api.VersionedAPIRouter) {
 	// token flows  — ?token=USDC|EURC|USYC, ?from=addr, ?to=addr
 	v1.GET("/transfers", transfersHandler)
 
+	// tokens
+	v1.GET("/tokens", tokensHandler)
+	v1.GET("/tokens/{address}", tokenDetailHandler)
+
 	// wallet profile + edges
 	v1.GET("/wallet/{address}", walletHandler)
 

@@ -139,6 +139,68 @@ func callSymbol(rpcURL string, addr common.Address) (string, bool) {
 	return s, s != ""
 }
 
+// name() selector: keccak256("name()")[:4] = 0x06fdde03
+const sigName = "0x06fdde03"
+
+// totalSupply() selector: keccak256("totalSupply()")[:4] = 0x18160ddd
+const sigTotalSupply = "0x18160ddd"
+
+func callName(rpcURL string, addr common.Address) (string, bool) {
+	raw, err := ethCall(rpcURL, addr, sigName)
+	if err != nil || len(raw) == 0 {
+		return "", false
+	}
+	s := decodeABIString(raw)
+	if s == "" || len(s) > 64 {
+		// bytes32-encoded fallback
+		s = strings.TrimRight(string(bytes.Trim(raw, "\x00")), "\x00")
+	}
+	s = strings.TrimSpace(s)
+	if len(s) > 64 {
+		s = s[:64]
+	}
+	return s, s != ""
+}
+
+func callTotalSupply(rpcURL string, addr common.Address) (*big.Int, bool) {
+	raw, err := ethCall(rpcURL, addr, sigTotalSupply)
+	if err != nil || len(raw) == 0 {
+		return nil, false
+	}
+	n := new(big.Int).SetBytes(raw)
+	return n, true
+}
+
+// fetchFullTokenInfo calls name(), symbol(), decimals(), totalSupply() on the contract.
+// Tries each RPC in the pool until one succeeds for decimals, then uses same endpoint for rest.
+func fetchFullTokenInfo(addr common.Address) FullTokenInfo {
+	for _, rpcURL := range arcRPCPool {
+		dec, ok := callDecimals(rpcURL, addr)
+		if !ok {
+			continue
+		}
+		sym, _ := callSymbol(rpcURL, addr)
+		nm, _ := callName(rpcURL, addr)
+		ts, _ := callTotalSupply(rpcURL, addr)
+		return FullTokenInfo{
+			Name:        nm,
+			Symbol:      sym,
+			Decimals:    dec,
+			TotalSupply: ts,
+		}
+	}
+	return FullTokenInfo{LookupFailed: true}
+}
+
+// FullTokenInfo holds all ERC-20 metadata retrieved from onchain calls.
+type FullTokenInfo struct {
+	Name         string
+	Symbol       string
+	Decimals     uint8
+	TotalSupply  *big.Int
+	LookupFailed bool
+}
+
 // ethCall issues an eth_call against rpcURL and returns the raw return bytes.
 func ethCall(rpcURL string, addr common.Address, dataHex string) ([]byte, error) {
 	body := fmt.Sprintf(
@@ -192,4 +254,3 @@ func decodeABIString(raw []byte) string {
 	}
 	return string(raw[64 : 64+length])
 }
-

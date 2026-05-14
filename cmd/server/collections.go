@@ -10,6 +10,7 @@ func registerCollections(app core.App) {
 			metaCollection,
 			indexerEventsCollection,
 			tokensCollection,
+			tokenAnalyticsCollection,
 			blocksCollection,
 			transactionsCollection,
 			transfersCollection,
@@ -105,6 +106,33 @@ func tokensCollection(app core.App) error {
 		return err
 	}
 	app.Logger().Info("Created tokens collection")
+	return nil
+}
+
+// blocksCollection — Layer 1: chain skeleton.
+func tokenAnalyticsCollection(app core.App) error {
+	if collectionExists(app, "token_analytics") {
+		return nil
+	}
+	c := core.NewBaseCollection("token_analytics")
+	c.Fields.Add(&core.TextField{Name: "token_address", Required: true, Max: 42})
+	c.Fields.Add(&core.TextField{Name: "symbol", Required: false, Max: 64})
+	c.Fields.Add(&core.TextField{Name: "name", Required: false, Max: 128})
+	c.Fields.Add(&core.NumberField{Name: "decimals"})
+	c.Fields.Add(&core.TextField{Name: "total_supply_raw", Required: false, Max: 80})   // raw uint256 as string
+	c.Fields.Add(&core.TextField{Name: "total_supply_human", Required: false, Max: 80}) // formatted
+	c.Fields.Add(&core.NumberField{Name: "transfer_count"})
+	c.Fields.Add(&core.NumberField{Name: "unique_senders"})
+	c.Fields.Add(&core.NumberField{Name: "unique_receivers"})
+	c.Fields.Add(&core.NumberField{Name: "first_seen_block"})
+	c.Fields.Add(&core.NumberField{Name: "last_seen_block"})
+	c.Fields.Add(&core.BoolField{Name: "lookup_failed"})
+	c.AddIndex("idx_token_analytics_address", true, "token_address", "")
+	c.ViewRule = nil
+	if err := app.Save(c); err != nil {
+		return err
+	}
+	app.Logger().Info("Created token_analytics collection")
 	return nil
 }
 
@@ -232,7 +260,7 @@ func transfersCollection(app core.App) error {
 		Values: []string{"USDC", "EURC", "USYC", "OTHER"},
 	})
 	c.Fields.Add(&core.TextField{Name: "token_name", Required: false, Max: 32}) // RPC symbol() result
-	c.Fields.Add(&core.NumberField{Name: "decimals"})                            // RPC decimals() result
+	c.Fields.Add(&core.NumberField{Name: "decimals"})                           // RPC decimals() result
 	c.Fields.Add(&core.TextField{Name: "from_addr", Required: false, Max: 42})
 	c.Fields.Add(&core.TextField{Name: "to_addr", Required: false, Max: 42})
 	c.Fields.Add(&core.TextField{Name: "amount_raw", Required: false, Max: 80})
@@ -339,12 +367,12 @@ func fxSwapsCollection(app core.App) error {
 	c := core.NewBaseCollection("fx_swaps")
 	// trade_id links all events for the same trade (uint256 as string)
 	c.Fields.Add(&core.TextField{Name: "trade_id", Required: true, Max: 80})
-	c.Fields.Add(&core.TextField{Name: "quote_id", Required: false, Max: 66})  // bytes32 from TradeRecorded
+	c.Fields.Add(&core.TextField{Name: "quote_id", Required: false, Max: 66}) // bytes32 from TradeRecorded
 	c.Fields.Add(&core.TextField{Name: "maker", Required: false, Max: 42})
 	c.Fields.Add(&core.TextField{Name: "taker", Required: false, Max: 42})
 	c.Fields.Add(&core.TextField{Name: "taker_fee", Required: false, Max: 40}) // raw wei
 	c.Fields.Add(&core.TextField{Name: "maker_fee", Required: false, Max: 40}) // raw wei
-	c.Fields.Add(&core.NumberField{Name: "status_code"})                        // raw uint8 from TradeStatusChanged
+	c.Fields.Add(&core.NumberField{Name: "status_code"})                       // raw uint8 from TradeStatusChanged
 	c.Fields.Add(&core.SelectField{
 		Name:   "status",
 		Values: []string{"created", "taker_funded", "maker_funded", "settled", "cancelled"},

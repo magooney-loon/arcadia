@@ -48,6 +48,9 @@ func StartIndexer(app core.App) {
 			}
 		}
 	}()
+
+	// Start token analytics scheduler
+	StartTokenAnalyticsScheduler(app)
 }
 
 type indexerEventFields map[string]any

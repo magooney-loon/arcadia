@@ -28,6 +28,7 @@
 	} from '$lib/stores/agents.svelte';
 	import { graph, fetchEdges } from '$lib/stores/graph.svelte';
 	import { health, fetchHealth } from '$lib/stores/health.svelte';
+	import { tokens, fetchTokens } from '$lib/stores/tokens.svelte';
 	import { search, runSearch } from '$lib/stores/search.svelte';
 	import {
 		analyticsFees,
@@ -83,6 +84,7 @@
 	let historyWindow = $state('24h');
 	let historyLimit = $state('');
 	let leaderboardLimit = $state('');
+	let tokensSearch = $state('');
 
 	onMount(() => {
 		fetchStats();
@@ -216,8 +218,8 @@
 				</label>
 				<button
 					class="btn acc"
-					onclick={() =>
-						fetchAnalyticsOverview({ window: overviewWindow as '1h' | '24h' | '7d' })}>fetch</button
+					onclick={() => fetchAnalyticsOverview({ window: overviewWindow as '1h' | '24h' | '7d' })}
+					>fetch</button
 				>
 			</div>
 			{#if analyticsOverview.loading}<p class="mono muted">loading…</p>{/if}
@@ -274,8 +276,8 @@
 				</label>
 				<button
 					class="btn acc"
-					onclick={() =>
-						fetchAnalyticsFees({ window: feesWindow as '1h' | '24h' | '7d' })}>fetch</button
+					onclick={() => fetchAnalyticsFees({ window: feesWindow as '1h' | '24h' | '7d' })}
+					>fetch</button
 				>
 			</div>
 			{#if analyticsFees.loading}<p class="mono muted">loading…</p>{/if}
@@ -344,7 +346,11 @@
 			</div>
 			{#if analyticsBridgeFlow.loading}<p class="mono muted">loading…</p>{/if}
 			{#if analyticsBridgeFlow.error}<p class="mono err-text">{analyticsBridgeFlow.error}</p>{/if}
-			{#if analyticsBridgeFlow.data}<pre>{JSON.stringify(analyticsBridgeFlow.data, null, 2)}</pre>{/if}
+			{#if analyticsBridgeFlow.data}<pre>{JSON.stringify(
+						analyticsBridgeFlow.data,
+						null,
+						2
+					)}</pre>{/if}
 		</div>
 	</div>
 
@@ -361,8 +367,8 @@
 				>
 				<button
 					class="btn acc"
-					onclick={() =>
-						fetchAgentLeaderboard(leaderboardLimit ? Number(leaderboardLimit) : 50)}>fetch</button
+					onclick={() => fetchAgentLeaderboard(leaderboardLimit ? Number(leaderboardLimit) : 50)}
+					>fetch</button
 				>
 			</div>
 			{#if analyticsAgentLeaderboard.loading}<p class="mono muted">loading…</p>{/if}
@@ -726,6 +732,31 @@
 			{#if agents.loading}<p class="mono muted">loading…</p>{/if}
 			{#if agents.error}<p class="mono err-text">{agents.error}</p>{/if}
 			{#if agents.data}<pre>{JSON.stringify(agents.data, null, 2)}</pre>{/if}
+		</div>
+	</div>
+
+	<!-- TOKENS -->
+	<div class="card">
+		<div class="card-head">
+			<div class="card-title">Tokens</div>
+			<div class="card-sub">GET /api/v1/tokens</div>
+		</div>
+		<div class="card-body">
+			<div class="filter-bar">
+				<label class="dim"
+					>search <input
+						bind:value={tokensSearch}
+						placeholder="symbol, name, or address"
+						style="width:260px"
+					/></label
+				>
+				<button class="btn acc" onclick={() => fetchTokens(50, 0, tokensSearch.trim() || undefined)}
+					>fetch</button
+				>
+			</div>
+			{#if tokens.loading}<p class="mono muted">loading…</p>{/if}
+			{#if tokens.error}<p class="mono err-text">{tokens.error}</p>{/if}
+			{#if tokens.data}<pre>{JSON.stringify(tokens.data, null, 2)}</pre>{/if}
 		</div>
 	</div>
 
