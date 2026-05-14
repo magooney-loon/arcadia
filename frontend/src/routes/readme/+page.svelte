@@ -2,7 +2,6 @@
 	import { resolve } from '$app/paths';
 
 	const GITHUB = 'https://github.com/magooney-loon/arcadia';
-	const ENVIO = 'https://envio.dev';
 
 	const sections = [
 		{
@@ -80,7 +79,7 @@
 		{
 			icon: '📈',
 			label: 'Monitor capital flows',
-			desc: 'Track net capital entering or leaving Arc via CCTP bridges from Ethereum, Base, and Solana. The cross-chain page breaks down inbound vs outbound volume per chain in real time — useful for understanding liquidity trends and market sentiment.'
+			desc: 'Track net capital entering or leaving Arc via CCTP and Gateway bridges across all connected chains. The cross-chain page breaks down inbound vs outbound volume per chain in real time — useful for understanding liquidity trends and market sentiment.'
 		},
 		{
 			icon: '🐋',
@@ -167,9 +166,9 @@
 			<div>
 				<div class="notice-title">Demo instance</div>
 				<div class="notice-body">
-					This explorer runs on Envio's free HyperSync tier. Data is rate-limited and the indexer
-					lags ~55 minutes behind chain tip (Envio's ingestion delay on Arc testnet). For production
-					use or real-time data, <a href="#self-host">self-host with your own API key</a>.
+					This explorer runs on Envio's free HyperSync tier. Data is rate-limited and the free API
+					can lag behind chain tip. For production use or real-time data, self-host with your own
+					Envio API key.
 				</div>
 			</div>
 		</section>
@@ -217,53 +216,6 @@
 						<div class="uc-desc">{uc.desc}</div>
 					</div>
 				{/each}
-			</div>
-		</section>
-
-		<!-- Self-hosting -->
-		<section class="card" id="self-host">
-			<div class="section-head">Self-hosting</div>
-			<p class="prose">
-				Run your own instance with an Envio API key for full throughput, no lag, and your own
-				PocketBase database. The entire stack — Go indexer + PocketBase + SvelteKit frontend — runs
-				in a single process.
-			</p>
-			<div class="steps">
-				<div class="step">
-					<div class="step-n">1</div>
-					<div>
-						Get a free API key at
-						<a href={ENVIO} target="_blank" rel="external noopener noreferrer">{ENVIO}</a>
-					</div>
-				</div>
-				<div class="step">
-					<div class="step-n">2</div>
-					<div>
-						Clone the repo and install the toolchain:
-						<pre><code
-								>git clone {GITHUB}.git
-cd arcadia
-go install github.com/magooney-loon/pb-ext/cmd/pb-cli@latest</code
-							></pre>
-					</div>
-				</div>
-				<div class="step">
-					<div class="step-n">3</div>
-					<div>
-						Set your API token and run:
-						<pre><code
-								>export ENVIO_API_TOKEN=your_token_here
-go run ./cmd/server --dev</code
-							></pre>
-					</div>
-				</div>
-				<div class="step">
-					<div class="step-n">4</div>
-					<div>
-						Open <code>http://127.0.0.1:8090</code> — the frontend and API are served from the same
-						process. Admin UI at <code>/_/</code>.
-					</div>
-				</div>
 			</div>
 		</section>
 
@@ -326,15 +278,6 @@ go run ./cmd/server --dev</code
 		font-size: 13px;
 		line-height: 1.6;
 		color: var(--fg-2);
-	}
-
-	.notice-body a {
-		color: var(--accent);
-		text-decoration: none;
-	}
-
-	.notice-body a:hover {
-		text-decoration: underline;
 	}
 
 	/* Sections */
@@ -460,58 +403,6 @@ go run ./cmd/server --dev</code
 		line-height: 1.65;
 		color: var(--fg-2);
 		padding-left: 22px;
-	}
-
-	/* Steps */
-	.steps {
-		display: flex;
-		flex-direction: column;
-		gap: 14px;
-		margin-top: 4px;
-	}
-
-	.step {
-		display: flex;
-		gap: 14px;
-		align-items: flex-start;
-		font-size: 13px;
-		color: var(--fg-2);
-		line-height: 1.6;
-	}
-
-	.step-n {
-		width: 22px;
-		height: 22px;
-		border-radius: 50%;
-		background: var(--bg-3);
-		border: 1px solid var(--border-1);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		font-size: 11px;
-		font-weight: 600;
-		color: var(--accent);
-		flex-shrink: 0;
-		margin-top: 1px;
-	}
-
-	.step pre {
-		margin: 8px 0 0 0;
-		background: var(--bg-3);
-		border: 1px solid var(--border-1);
-		border-radius: 4px;
-		padding: 10px 12px;
-		overflow-x: auto;
-	}
-
-	.step code {
-		font-family: var(--font-mono, monospace);
-		font-size: 12px;
-		color: var(--fg-1);
-	}
-
-	.step a {
-		color: var(--accent);
 	}
 
 	/* GitHub */
