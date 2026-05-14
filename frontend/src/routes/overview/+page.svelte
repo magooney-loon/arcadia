@@ -124,29 +124,52 @@
 	<div class="grid grid-stats">
 		<div class="stat">
 			<div class="label">TPS</div>
-			<div class="value">{fmt.tps(stats.data?.tps)}<span class="unit">tx/s</span></div>
+			<div class="value">
+				{#key stats.data?.block_number}
+					<span class="flash-val">{fmt.tps(stats.data?.tps)}</span>
+				{/key}
+				<span class="unit">tx/s</span>
+			</div>
 		</div>
 		<div class="stat">
 			<div class="label">Transfers · {selectedWindow}</div>
-			<div class="value">{fmt.num(analyticsOverview.data?.transfers_count)}</div>
+			<div class="value">
+				{#key analyticsOverview.data?.snapshot_at}
+					<span class="flash-val">{fmt.num(analyticsOverview.data?.transfers_count)}</span>
+				{/key}
+			</div>
 		</div>
 		<div class="stat">
 			<div class="label">Volume · {selectedWindow}</div>
-			<div class="value">{fmt.usdc(analyticsOverview.data?.transfer_volume)}</div>
+			<div class="value">
+				{#key analyticsOverview.data?.snapshot_at}
+					<span class="flash-val">{fmt.usdc(analyticsOverview.data?.transfer_volume)}</span>
+				{/key}
+			</div>
 		</div>
 		<div class="stat">
 			<div class="label">Fees · {selectedWindow}</div>
-			<div class="value">{fmt.usdc(analyticsOverview.data?.fees_total)}</div>
+			<div class="value">
+				{#key analyticsOverview.data?.snapshot_at}
+					<span class="flash-val">{fmt.usdc(analyticsOverview.data?.fees_total)}</span>
+				{/key}
+			</div>
 		</div>
 		<div class="stat">
 			<div class="label">Bridge net flow · {selectedWindow}</div>
 			<div class="value {(analyticsOverview.data?.bridge_net_flow ?? 0) >= 0 ? '' : 'err'}">
-				{fmt.usdc(analyticsOverview.data?.bridge_net_flow)}
+				{#key analyticsOverview.data?.snapshot_at}
+					<span class="flash-val">{fmt.usdc(analyticsOverview.data?.bridge_net_flow)}</span>
+				{/key}
 			</div>
 		</div>
 		<div class="stat">
 			<div class="label">Agents</div>
-			<div class="value">{analyticsOverview.data?.agent_count ?? '—'}</div>
+			<div class="value">
+				{#key analyticsOverview.data?.snapshot_at}
+					<span class="flash-val">{analyticsOverview.data?.agent_count ?? '—'}</span>
+				{/key}
+			</div>
 		</div>
 	</div>
 
@@ -156,13 +179,17 @@
 			<div class="stat">
 				<div class="label">Fee p50</div>
 				<div class="value" style="color:var(--info)">
-					{fmt.usdc(analyticsOverview.data.fee_p50, 6)}
+					{#key analyticsOverview.data.snapshot_at}
+						<span class="flash-val">{fmt.usdc(analyticsOverview.data.fee_p50, 6)}</span>
+					{/key}
 				</div>
 			</div>
 			<div class="stat">
 				<div class="label">Fee p95</div>
 				<div class="value" style="color:var(--warn)">
-					{fmt.usdc(analyticsOverview.data.fee_p95, 6)}
+					{#key analyticsOverview.data.snapshot_at}
+						<span class="flash-val">{fmt.usdc(analyticsOverview.data.fee_p95, 6)}</span>
+					{/key}
 				</div>
 			</div>
 			<div class="stat hide-mobile">
@@ -171,7 +198,9 @@
 					class="value"
 					style="color:{analyticsOverview.data.failed_tx_ratio > 0.05 ? 'var(--err)' : 'var(--ok)'}"
 				>
-					{(analyticsOverview.data.failed_tx_ratio * 100).toFixed(2)}%
+					{#key analyticsOverview.data.snapshot_at}
+						<span class="flash-val">{(analyticsOverview.data.failed_tx_ratio * 100).toFixed(2)}%</span>
+					{/key}
 				</div>
 			</div>
 		</div>
@@ -182,33 +211,53 @@
 		<div class="grid" style="grid-template-columns:repeat(5,1fr);margin-top:12px">
 			<div class="stat">
 				<div class="label" style="color:var(--ok)">USDC vol · {selectedWindow}</div>
-				<div class="value">{fmt.usdc(tokenStats.USDC.volume)}</div>
+				<div class="value">
+					{#key analyticsOverview.data?.snapshot_at}
+						<span class="flash-val">{fmt.usdc(tokenStats.USDC.volume)}</span>
+					{/key}
+				</div>
 				<div class="mono dim" style="font-size:10px">
 					{fmt.num(tokenStats.USDC.count)} transfers
 				</div>
 			</div>
 			<div class="stat">
 				<div class="label" style="color:var(--info)">EURC vol · {selectedWindow}</div>
-				<div class="value">{fmt.usdc(tokenStats.EURC.volume)}</div>
+				<div class="value">
+					{#key analyticsOverview.data?.snapshot_at}
+						<span class="flash-val">{fmt.usdc(tokenStats.EURC.volume)}</span>
+					{/key}
+				</div>
 				<div class="mono dim" style="font-size:10px">
 					{fmt.num(tokenStats.EURC.count)} transfers
 				</div>
 			</div>
 			<div class="stat">
 				<div class="label" style="color:var(--warn)">USYC vol · {selectedWindow}</div>
-				<div class="value">{fmt.usdc(tokenStats.USYC.volume)}</div>
+				<div class="value">
+					{#key analyticsOverview.data?.snapshot_at}
+						<span class="flash-val">{fmt.usdc(tokenStats.USYC.volume)}</span>
+					{/key}
+				</div>
 				<div class="mono dim" style="font-size:10px">
 					{fmt.num(tokenStats.USYC.count)} transfers
 				</div>
 			</div>
 			<div class="stat">
 				<div class="label">Whale transfers</div>
-				<div class="value" style="color:var(--warn)">{fmt.num(volume.whale_transfers)}</div>
-				<div class="mono dim" style="font-size:10px">≥ $10K · 24h</div>
+				<div class="value" style="color:var(--warn)">
+					{#key analyticsOverview.data?.snapshot_at}
+						<span class="flash-val">{fmt.num(volume.whale_transfers)}</span>
+					{/key}
+				</div>
+				<div class="mono dim" style="font-size:10px">≥ $10K · {selectedWindow}</div>
 			</div>
 			<div class="stat hide-mobile">
 				<div class="label">Largest transfer</div>
-				<div class="value" style="color:var(--acc)">{fmt.usdc(largestTransfer.v)}</div>
+				<div class="value" style="color:var(--acc)">
+					{#key analyticsOverview.data?.snapshot_at}
+						<span class="flash-val">{fmt.usdc(largestTransfer.v)}</span>
+					{/key}
+				</div>
 				<div class="mono dim" style="font-size:10px">
 					{largestTransfer.block ? `block #${largestTransfer.block}` : '—'}
 				</div>

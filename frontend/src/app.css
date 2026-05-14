@@ -891,6 +891,14 @@ a {
 		background: transparent;
 	}
 }
+@keyframes valFlash {
+	0% { color: var(--accent); }
+	100% { color: inherit; }
+}
+.flash-val {
+	animation: valFlash 0.6s ease;
+	display: inline;
+}
 .live-row .num {
 	color: var(--accent);
 	width: 90px;
