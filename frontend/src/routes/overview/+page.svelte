@@ -259,7 +259,9 @@
 					{/key}
 				</div>
 				<div class="mono dim" style="font-size:10px">
-					{largestTransfer.block ? `block #${largestTransfer.block}` : '—'}
+					{#if largestTransfer.block}
+						<a href={resolve(`/blocks/${largestTransfer.block}/`)} style="text-decoration:none;color:inherit">block #{largestTransfer.block}</a>
+					{:else}—{/if}
 				</div>
 			</div>
 		</div>
@@ -324,12 +326,8 @@
 				{#if blocks.data?.blocks.length}
 					{#each blocks.data.blocks as b (b.number)}
 						<div class="live-row">
-							<a
-								class="num"
-								href={fmt.explorerBlock(b.number)}
-								target="_blank"
-								rel="external noopener noreferrer"
-								style="text-decoration:none">#{b.number}</a
+							<a class="num" href={resolve(`/blocks/${b.number}/`)} style="text-decoration:none"
+								>#{b.number}</a
 							>
 							<span class="age">{fmt.tsAge(b.timestamp)}</span>
 							<span class="txs">{b.tx_count ?? 0} txs</span>

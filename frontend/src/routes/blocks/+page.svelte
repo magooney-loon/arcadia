@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { resolve } from '$app/paths';
 	import { blocks, fetchBlocks } from '$lib/stores/chain.svelte';
 	import { blockStats, fetchBlockStats } from '$lib/stores/blockStats.svelte';
 	import { createSort } from '$lib/sort.svelte';
@@ -95,9 +96,7 @@
 								<td
 									><a
 										class="acc mono"
-										href={fmt.explorerBlock(b.number)}
-										target="_blank"
-										rel="external noopener noreferrer"
+										href={resolve(`/blocks/${b.number}/`)}
 										style="text-decoration:none">#{b.number}</a
 									></td
 								>

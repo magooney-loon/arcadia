@@ -2,6 +2,7 @@
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import { txDetail, fetchTxDetail } from '$lib/stores/chain.svelte';
+	import BlockLink from '$lib/components/BlockLink.svelte';
 	import { stats } from '$lib/stores/stats.svelte';
 	import * as fmt from '$lib/fmt.js';
 	import AddrLink from '$lib/components/AddrLink.svelte';
@@ -85,7 +86,7 @@
 				</div>
 				<div class="stat" style="padding:0;background:transparent;border:0">
 					<div class="label">Block</div>
-					<div class="value" style="font-size:18px">#{tx.block_number}</div>
+					<div class="value" style="font-size:18px"><BlockLink number={tx.block_number} /></div>
 					<div class="mono dim" style="font-size:10px">
 						{fmt.blockAge(tx.block_number, latestBlock)} ago
 					</div>
@@ -127,6 +128,8 @@
 										{:else}
 											{r.value}
 										{/if}
+									{:else if r.label === 'Block'}
+										<BlockLink number={typeof r.value === 'number' ? r.value : Number(r.value)} />
 									{:else}
 										{r.value}
 									{/if}

@@ -203,9 +203,12 @@
 					{:else if search.data?.type === 'block' && search.data.result}
 						<a
 							class="search-result-item"
-							href={fmt.explorerBlock(search.data.result.number as number)}
-							target="_blank"
-							rel="external noopener noreferrer"
+							href={resolve(`/blocks/${search.data.result.number as number}/`)}
+							onclick={() => {
+								searchFocused = false;
+								searchQuery = '';
+								clearSearch();
+							}}
 						>
 							<span class="badge ok">block</span>
 							<span class="mono">#{search.data.result.number}</span>
