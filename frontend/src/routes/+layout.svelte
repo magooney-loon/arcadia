@@ -88,6 +88,7 @@
 		{
 			group: 'Dev',
 			items: [
+				{ id: 'readme', label: 'README', href: resolve('/readme/') },
 				{ id: 'debug', label: 'Debug', href: resolve('/debug/') },
 				{
 					id: 'openapi',
@@ -412,6 +413,10 @@
 				cy="11"
 				r="1.5"
 			/><circle cx="11" cy="9" r="1.2" /><path d="M4 4 L6 10 M10 4 L8 10 M11 4.5 L11 7.5" /></svg
+		>
+	{:else if id === 'readme'}
+		<svg viewBox="0 0 14 14" fill="none" class="ico" stroke="currentColor" stroke-width="1.4"
+			><rect x="2" y="1" width="10" height="12" rx="1" /><path d="M4 4 H10 M4 6.5 H10 M4 9 H7.5" /></svg
 		>
 	{:else if id === 'debug'}
 		<svg viewBox="0 0 14 14" fill="none" class="ico" stroke="currentColor" stroke-width="1.4"

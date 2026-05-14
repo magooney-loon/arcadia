@@ -1,6 +1,27 @@
 # arcadia
 
-A real-time streaming blockchain indexer and UI dashboard for the Arc L1 chain. Built with Go + PocketBase + HyperSync + SvelteKit. Indexes every layer of Arc's onchain activity — blocks, transactions, USDC/EURC/USYC transfers, internal traces, AI agent registrations, job settlements, cross-chain flows, FX swaps, and derived economic metrics — then streams it live to a 3D frontend via PocketBase websockets.
+A real-time streaming blockchain indexer and analytics dashboard for the Arc L1 chain. Built with Go + PocketBase + HyperSync + SvelteKit. Indexes every layer of Arc's onchain activity — blocks, transactions, USDC/EURC/USYC transfers, internal traces, AI agent registrations, job settlements, cross-chain flows, FX swaps, and derived economic metrics — then serves it through a REST API and live SvelteKit frontend.
+
+> **Demo**: The live instance runs on the Envio HyperSync free tier. For production throughput and real-time data, self-host with your own API key (see Get Started below).
+
+---
+
+## Use Cases
+
+### Trading agents
+Feed live inflow/outflow and bridge flow direction into agent decision loops. The `/analytics/bridge_flow` endpoint gives per-chain directional USDC volume (CCTP + Gateway) in real time — useful for detecting capital entering or leaving Arc ahead of price movements. Combine with the agent leaderboard to track which AI agents are accumulating fees or volume.
+
+### Quant analytics
+The `analytics_snapshots` collection stores a full time-series of transfer volume, fee percentiles (p25/p50/p75/p95), block time, whale transfer count, and active address metrics at 5-minute resolution. Pull rolling windows via `/analytics/history` for volatility modelling, regime detection, or autocorrelation analysis on stablecoin flows.
+
+### Whale tracking · copy trading
+Transfers above $10K are flagged as whale events and counted in every snapshot window. The `/wallet/{address}` endpoint returns complete send/receive history and graph edges per address. Combine with the wallet graph (`wallet_edges` collection) to map capital flows between large wallets, identify lead actors, and build copy-trading signal pipelines.
+
+### Agent economy monitoring
+Arc has native onchain AI agent identity (ERC-8004) and a job escrow standard (ERC-8183). Arcadia indexes every agent registration, job lifecycle event (created → funded → completed/rejected → paid), and agent-to-agent capital flow. Use the agent leaderboard and job market page to track agent growth rate, settlement ratio, and top earners.
+
+### FX and stablecoin research
+StableFX settles USDC↔EURC swaps onchain. Every trade is indexed with implied rate, maker/taker, and settlement status. Cross-chain USDC mint/burn events via CCTP and Gateway give a full picture of stablecoin supply dynamics. Useful for FX basis research, arbitrage signal generation, and stablecoin peg health monitoring.
 
 ---
 
@@ -569,10 +590,12 @@ Pre-aggregated, window-scoped analytics for dashboards.
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/api/v1/analytics/fees` | Fee analytics — `?window=1h\|6h\|24h\|7d\|30d` |
+| `GET` | `/api/v1/analytics/overview` | All key metrics in one call (snapshot-backed) — `?window=1h\|24h\|7d` |
+| `GET` | `/api/v1/analytics/history` | Time-series of snapshots — `?window=…&limit=N` (max 1000) |
+| `GET` | `/api/v1/analytics/fees` | Fee percentiles and failed tx ratio — `?window=1h\|24h\|7d` |
 | `GET` | `/api/v1/analytics/volume` | Transfer volume per token — `?window=…`, whale threshold $10k+ |
 | `GET` | `/api/v1/analytics/bridge_flow` | CCTP + Gateway inflow/outflow per chain — `?window=…` |
-| `GET` | `/api/v1/analytics/agent_leaderboard` | Top agents by job count, fees, volume — `?window=…` |
+| `GET` | `/api/v1/analytics/agent_leaderboard` | Top agents by job count, fees, volume — `?limit=N` |
 
 Everything is also available via PocketBase REST + real-time websockets directly on the collections.
 
@@ -582,6 +605,7 @@ Everything is also available via PocketBase REST + real-time websockets directly
 
 | Job | Schedule | Description |
 |---|---|---|
+| `analyticsSnapshot` | Every 5 min (`*/5 * * * *`) | Computes and stores a pre-aggregated snapshot for 1h / 24h / 7d windows into `analytics_snapshots` |
 | `indexerHealth` | Every hour (`0 * * * *`) | Logs indexer cursor and row counts for all collections |
 | `indexerEventsCleanup` | Every hour (`0 * * * *`) | Deletes `indexer_events` records older than 2 hours |
 
