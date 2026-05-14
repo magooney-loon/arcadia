@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import * as fmt from '$lib/fmt.js';
 
 	interface Props {
@@ -14,7 +15,7 @@
 
 {#if address}
 	<span class="addr-link" class:muted>
-		<a class="addr" href={fmt.walletPath(address)} style="text-decoration:none">{display}</a>
+		<a class="addr" href={resolve(`/wallet/${address}/`)} style="text-decoration:none">{display}</a>
 		<a
 			class="ext"
 			href={fmt.explorerAddr(address)}

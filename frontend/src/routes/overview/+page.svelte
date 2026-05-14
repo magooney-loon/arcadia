@@ -48,17 +48,10 @@
 		EURC: volume?.by_token?.EURC ?? { volume: 0, count: 0, whale_count: 0 },
 		USYC: volume?.by_token?.USYC ?? { volume: 0, count: 0, whale_count: 0 }
 	});
-	// Latest block_stats row carries the largest single USDC transfer in that block.
-	// Show the max across the loaded 200-block window.
-	const largestTransfer = $derived(
-		(blockStats.data?.stats ?? []).reduce(
-			(max, s) => {
-				const v = parseFloat(s.largest_usdc_transfer ?? '0');
-				return v > max.v ? { v, block: s.block_number ?? 0 } : max;
-			},
-			{ v: 0, block: 0 }
-		)
-	);
+	const largestTransfer = $derived({
+		v: analyticsOverview.data?.largest_transfer ?? 0,
+		block: analyticsOverview.data?.largest_transfer_block ?? 0
+	});
 
 	// Chart data from block stats (sorted oldest → newest)
 	const chartStats = $derived((blockStats.data?.stats ?? []).slice().reverse());

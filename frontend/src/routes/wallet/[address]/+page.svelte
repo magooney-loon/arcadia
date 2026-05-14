@@ -103,7 +103,7 @@
 			<div class="grid" style="grid-template-columns:repeat({Math.min(tokenFlow().length, 4)},1fr);margin-bottom:12px">
 				{#each tokenFlow().slice(0, 4) as [sym, flow] (sym)}
 					<div class="stat">
-						<div class="label">{sym} net</div>
+						<div class="label">{sym} net · recent 50</div>
 						<div class="value" style="color:{flow.net >= 0 ? 'var(--ok)' : 'var(--err)'}">
 							{flow.net >= 0 ? '+' : ''}{fmt.usdc(flow.net)}
 						</div>

@@ -76,11 +76,11 @@
 				<div class="value">{jobs.length}</div>
 			</div>
 			<div class="stat">
-				<div class="label">Total escrow</div>
+				<div class="label">Escrow · shown</div>
 				<div class="value">{fmt.usdc(totalEscrow)}</div>
 			</div>
 			<div class="stat">
-				<div class="label">Avg reward</div>
+				<div class="label">Avg reward · shown</div>
 				<div class="value">{jobs.length ? fmt.usdc(totalEscrow / jobs.length) : '—'}</div>
 			</div>
 		</div>

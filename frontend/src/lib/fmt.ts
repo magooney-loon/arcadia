@@ -12,15 +12,6 @@ export function explorerBlock(n: number): string {
 	return `${EXPLORER}/block/${n}`;
 }
 
-// Internal route helpers — return the SvelteKit path for our own detail pages.
-export function walletPath(a?: string | null): string {
-	return `/wallet/${a ?? ''}/`;
-}
-
-export function txPath(h?: string | null): string {
-	return `/tx/${h ?? ''}/`;
-}
-
 export const DOMAIN_NAMES: Record<number, string> = {
 	0: 'Ethereum',
 	1: 'Avalanche',

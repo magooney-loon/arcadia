@@ -741,49 +741,66 @@ func blockDetailHandler(c *core.RequestEvent) error {
 // API_TAGS Stats
 func analyticsFeesHandler(c *core.RequestEvent) error {
 	window := qp(c, "window", "24h")
-	filterStr, params := windowBlockFilter(c.App, window)
+	_, wParams := windowBlockFilter(c.App, window)
+	fromBlock := wParams["from"]
 
-	records, err := c.App.FindRecordsByFilter("block_stats", filterStr, "-block_number", 500, 0, params)
-	if err != nil || len(records) == 0 {
+	var agg struct {
+		BlockCount int     `db:"block_count"`
+		TotalFees  float64 `db:"total_fees"`
+		TotalTxs   int64   `db:"total_txs"`
+		FailedTxs  int64   `db:"failed_txs"`
+		AvgBms     float64 `db:"avg_bms"`
+	}
+	_ = c.App.DB().NewQuery(
+		`SELECT
+			COUNT(*) AS block_count,
+			COALESCE(SUM(CAST(total_fee_usdc AS REAL)), 0) AS total_fees,
+			COALESCE(SUM(tx_count), 0) AS total_txs,
+			COALESCE(SUM(failed_tx_count), 0) AS failed_txs,
+			COALESCE(AVG(CASE WHEN block_time_ms > 0 THEN block_time_ms END), 0) AS avg_bms
+		 FROM block_stats WHERE block_number >= {:from}`).
+		Bind(dbx.Params{"from": fromBlock}).One(&agg)
+
+	if agg.BlockCount == 0 {
 		return c.JSON(http.StatusOK, map[string]any{"window": window, "block_count": 0})
 	}
 
-	fees := make([]float64, 0, len(records))
-	var totalFees, totalTxs, failedTxs, totalBms float64
-	var bmsCount int
-
-	for _, r := range records {
-		fees = append(fees, parseUSDC(r.GetString("avg_fee_usdc")))
-		totalFees += parseUSDC(r.GetString("total_fee_usdc"))
-		totalTxs += float64(r.GetInt("tx_count"))
-		failedTxs += float64(r.GetInt("failed_tx_count"))
-		if bms := float64(r.GetInt("block_time_ms")); bms > 0 {
-			totalBms += bms
-			bmsCount++
-		}
-	}
-
+	fees := loadFeeColumn(c.App, fromBlock)
 	sort.Float64s(fees)
 
-	var avgBms, failedRatio float64
-	if bmsCount > 0 {
-		avgBms = totalBms / float64(bmsCount)
-	}
-	if totalTxs > 0 {
-		failedRatio = failedTxs / totalTxs
+	var failedRatio float64
+	if agg.TotalTxs > 0 {
+		failedRatio = float64(agg.FailedTxs) / float64(agg.TotalTxs)
 	}
 
 	return c.JSON(http.StatusOK, map[string]any{
 		"window":            window,
-		"block_count":       len(records),
-		"total_fees":        totalFees,
+		"block_count":       agg.BlockCount,
+		"total_fees":        agg.TotalFees,
 		"avg_fee_p25":       percentileFloat(fees, 25),
 		"avg_fee_p50":       percentileFloat(fees, 50),
 		"avg_fee_p75":       percentileFloat(fees, 75),
 		"avg_fee_p95":       percentileFloat(fees, 95),
-		"avg_block_time_ms": avgBms,
+		"avg_block_time_ms": agg.AvgBms,
 		"failed_tx_ratio":   failedRatio,
 	})
+}
+
+// loadFeeColumn returns avg_fee_usdc values for all block_stats rows in window.
+// Used for percentile computation — full set, no row cap.
+func loadFeeColumn(app core.App, fromBlock any) []float64 {
+	type row struct {
+		V float64 `db:"v"`
+	}
+	var rows []row
+	_ = app.DB().NewQuery(
+		`SELECT CAST(avg_fee_usdc AS REAL) AS v FROM block_stats WHERE block_number >= {:from}`).
+		Bind(dbx.Params{"from": fromBlock}).All(&rows)
+	out := make([]float64, len(rows))
+	for i, r := range rows {
+		out[i] = r.V
+	}
+	return out
 }
 
 // API_DESC Transfer volume aggregates with whale count and per-token breakdown
@@ -791,19 +808,16 @@ func analyticsFeesHandler(c *core.RequestEvent) error {
 func analyticsVolumeHandler(c *core.RequestEvent) error {
 	window := qp(c, "window", "24h")
 	token := qp(c, "token", "")
-	filterStr, params := windowBlockFilter(c.App, window)
+	_, wParams := windowBlockFilter(c.App, window)
+	fromBlock := wParams["from"]
 
+	where := "block_number >= {:from}"
+	params := dbx.Params{"from": fromBlock}
 	if token != "" {
-		filterStr += " && token_symbol = {:sym}"
+		where += " AND token_symbol = {:sym}"
 		params["sym"] = token
 	} else {
-		// Exclude OTHER — non-stables have unknown decimals so amount_human is meaningless.
-		filterStr += " && token_symbol != 'OTHER'"
-	}
-
-	records, err := c.App.FindRecordsByFilter("transfers", filterStr, "-block_number", 500, 0, params)
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		where += " AND token_symbol != 'OTHER'"
 	}
 
 	type tokenStats struct {
@@ -811,37 +825,45 @@ func analyticsVolumeHandler(c *core.RequestEvent) error {
 		Count      int     `json:"count"`
 		WhaleCount int     `json:"whale_count"`
 	}
-	byToken := map[string]*tokenStats{}
-	senders := map[string]bool{}
-	receivers := map[string]bool{}
-	var whaleCount int
-	const whaleThreshold = 10_000.0
 
-	for _, r := range records {
-		sym := r.GetString("token_symbol")
-		amt := parseUSDC(r.GetString("amount_human"))
-
-		if byToken[sym] == nil {
-			byToken[sym] = &tokenStats{}
-		}
-		byToken[sym].Volume += amt
-		byToken[sym].Count++
-		senders[r.GetString("from_addr")] = true
-		receivers[r.GetString("to_addr")] = true
-
-		if amt >= whaleThreshold {
-			whaleCount++
-			byToken[sym].WhaleCount++
-		}
+	type groupRow struct {
+		Symbol string  `db:"token_symbol"`
+		Vol    float64 `db:"vol"`
+		Cnt    int     `db:"cnt"`
+		Whales int     `db:"whales"`
 	}
+	var groupRows []groupRow
+	_ = c.App.DB().NewQuery(
+		`SELECT token_symbol,
+		        COALESCE(SUM(CAST(amount_human AS REAL)), 0) AS vol,
+		        COUNT(*) AS cnt,
+		        SUM(CASE WHEN CAST(amount_human AS REAL) >= 10000 THEN 1 ELSE 0 END) AS whales
+		 FROM transfers WHERE ` + where + `
+		 GROUP BY token_symbol`).Bind(params).All(&groupRows)
+
+	byToken := map[string]*tokenStats{}
+	var totalTransfers, totalWhales int
+	for _, g := range groupRows {
+		byToken[g.Symbol] = &tokenStats{Volume: g.Vol, Count: g.Cnt, WhaleCount: g.Whales}
+		totalTransfers += g.Cnt
+		totalWhales += g.Whales
+	}
+
+	var addrs struct {
+		Senders   int `db:"senders"`
+		Receivers int `db:"receivers"`
+	}
+	_ = c.App.DB().NewQuery(
+		`SELECT COUNT(DISTINCT from_addr) AS senders, COUNT(DISTINCT to_addr) AS receivers
+		 FROM transfers WHERE ` + where).Bind(params).One(&addrs)
 
 	return c.JSON(http.StatusOK, map[string]any{
 		"window":           window,
 		"token":            token,
-		"total_transfers":  len(records),
-		"unique_senders":   len(senders),
-		"unique_receivers": len(receivers),
-		"whale_transfers":  whaleCount,
+		"total_transfers":  totalTransfers,
+		"unique_senders":   addrs.Senders,
+		"unique_receivers": addrs.Receivers,
+		"whale_transfers":  totalWhales,
 		"by_token":         byToken,
 	})
 }
@@ -850,12 +872,8 @@ func analyticsVolumeHandler(c *core.RequestEvent) error {
 // API_TAGS CrossChain
 func analyticsBridgeFlowHandler(c *core.RequestEvent) error {
 	window := qp(c, "window", "24h")
-	filterStr, params := windowBlockFilter(c.App, window)
-
-	records, err := c.App.FindRecordsByFilter("crosschain_events", filterStr, "-block_number", 500, 0, params)
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error()})
-	}
+	_, wParams := windowBlockFilter(c.App, window)
+	fromBlock := wParams["from"]
 
 	type chainFlow struct {
 		InboundVol    float64 `json:"inbound_vol"`
@@ -863,33 +881,43 @@ func analyticsBridgeFlowHandler(c *core.RequestEvent) error {
 		OutboundVol   float64 `json:"outbound_vol"`
 		OutboundCount int     `json:"outbound_count"`
 	}
+
+	type row struct {
+		Dir         string  `db:"dir"`
+		ChainDomain int     `db:"chain_domain"`
+		Cnt         int     `db:"cnt"`
+		Vol         float64 `db:"vol"`
+	}
+	var rows []row
+	_ = c.App.DB().NewQuery(
+		`SELECT
+			CASE WHEN destination_domain = 26 THEN 'in' ELSE 'out' END AS dir,
+			CASE WHEN destination_domain = 26 THEN source_domain ELSE destination_domain END AS chain_domain,
+			COUNT(*) AS cnt,
+			COALESCE(SUM(CAST(amount_usdc AS REAL)), 0) AS vol
+		 FROM crosschain_events
+		 WHERE block_number >= {:from} AND (destination_domain = 26 OR source_domain = 26)
+		 GROUP BY dir, chain_domain`).
+		Bind(dbx.Params{"from": fromBlock}).All(&rows)
+
 	byChain := map[string]*chainFlow{}
 	var totalIn, totalOut float64
 	var countIn, countOut int
-
-	for _, r := range records {
-		amt := parseUSDC(r.GetString("amount_usdc"))
-		src := r.GetInt("source_domain")
-		dst := r.GetInt("destination_domain")
-
-		if dst == 26 {
-			totalIn += amt
-			countIn++
-			k := domainName(src)
-			if byChain[k] == nil {
-				byChain[k] = &chainFlow{}
-			}
-			byChain[k].InboundVol += amt
-			byChain[k].InboundCount++
-		} else if src == 26 {
-			totalOut += amt
-			countOut++
-			k := domainName(dst)
-			if byChain[k] == nil {
-				byChain[k] = &chainFlow{}
-			}
-			byChain[k].OutboundVol += amt
-			byChain[k].OutboundCount++
+	for _, r := range rows {
+		k := domainName(r.ChainDomain)
+		if byChain[k] == nil {
+			byChain[k] = &chainFlow{}
+		}
+		if r.Dir == "in" {
+			byChain[k].InboundVol += r.Vol
+			byChain[k].InboundCount += r.Cnt
+			totalIn += r.Vol
+			countIn += r.Cnt
+		} else {
+			byChain[k].OutboundVol += r.Vol
+			byChain[k].OutboundCount += r.Cnt
+			totalOut += r.Vol
+			countOut += r.Cnt
 		}
 	}
 
@@ -911,7 +939,7 @@ func analyticsOverviewHandler(c *core.RequestEvent) error {
 	_, wParams := windowBlockFilter(c.App, window)
 	fromBlock := wParams["from"]
 
-	// Exact transfer count + volume — no row cap
+	// Exact transfer count + volume + largest single transfer — no row cap
 	var tStats struct {
 		Count  int     `db:"cnt"`
 		Volume float64 `db:"vol"`
@@ -921,21 +949,36 @@ func analyticsOverviewHandler(c *core.RequestEvent) error {
 		 FROM transfers WHERE block_number >= {:from} AND token_symbol != 'OTHER'`).
 		Bind(dbx.Params{"from": fromBlock}).One(&tStats)
 
-	// Block stats rows for fee aggregation + percentiles (5k cap well above any 24h window)
-	bsRows, _ := c.App.FindRecordsByFilter("block_stats",
-		"block_number >= {:from}", "-block_number", 5000, 0, wParams)
-	fees := make([]float64, 0, len(bsRows))
-	var feesTotal, totalTxs, failedTxs float64
-	for _, r := range bsRows {
-		fees = append(fees, parseUSDC(r.GetString("avg_fee_usdc")))
-		feesTotal += parseUSDC(r.GetString("total_fee_usdc"))
-		totalTxs += float64(r.GetInt("tx_count"))
-		failedTxs += float64(r.GetInt("failed_tx_count"))
+	var largest struct {
+		Amount float64 `db:"amt"`
+		Block  int     `db:"block_number"`
 	}
+	_ = c.App.DB().NewQuery(
+		`SELECT CAST(amount_human AS REAL) AS amt, block_number
+		 FROM transfers WHERE block_number >= {:from} AND token_symbol != 'OTHER'
+		 ORDER BY CAST(amount_human AS REAL) DESC LIMIT 1`).
+		Bind(dbx.Params{"from": fromBlock}).One(&largest)
+
+	// Exact fee aggregates across the full window
+	var fAgg struct {
+		FeesTotal float64 `db:"fees_total"`
+		TotalTxs  int64   `db:"total_txs"`
+		FailedTxs int64   `db:"failed_txs"`
+	}
+	_ = c.App.DB().NewQuery(
+		`SELECT
+			COALESCE(SUM(CAST(total_fee_usdc AS REAL)), 0) AS fees_total,
+			COALESCE(SUM(tx_count), 0) AS total_txs,
+			COALESCE(SUM(failed_tx_count), 0) AS failed_txs
+		 FROM block_stats WHERE block_number >= {:from}`).
+		Bind(dbx.Params{"from": fromBlock}).One(&fAgg)
+
+	fees := loadFeeColumn(c.App, fromBlock)
 	sort.Float64s(fees)
+
 	var failedRatio float64
-	if totalTxs > 0 {
-		failedRatio = failedTxs / totalTxs
+	if fAgg.TotalTxs > 0 {
+		failedRatio = float64(fAgg.FailedTxs) / float64(fAgg.TotalTxs)
 	}
 
 	// Bridge inbound (arriving on Arc)
@@ -968,7 +1011,9 @@ func analyticsOverviewHandler(c *core.RequestEvent) error {
 		"window":                window,
 		"transfers_count":       tStats.Count,
 		"transfer_volume":       tStats.Volume,
-		"fees_total":            feesTotal,
+		"largest_transfer":      largest.Amount,
+		"largest_transfer_block": largest.Block,
+		"fees_total":            fAgg.FeesTotal,
 		"fee_p50":               percentileFloat(fees, 50),
 		"fee_p95":               percentileFloat(fees, 95),
 		"failed_tx_ratio":       failedRatio,

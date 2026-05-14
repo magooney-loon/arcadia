@@ -97,6 +97,8 @@ export interface OverviewResponse {
 	window: string;
 	transfers_count: number;
 	transfer_volume: number;
+	largest_transfer: number;
+	largest_transfer_block: number;
 	fees_total: number;
 	fee_p50: number;
 	fee_p95: number;

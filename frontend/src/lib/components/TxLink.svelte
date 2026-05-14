@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import * as fmt from '$lib/fmt.js';
 
 	interface Props {
@@ -13,7 +14,7 @@
 
 {#if hash}
 	<span class="tx-link">
-		<a class="hash mono" href={fmt.txPath(hash)} style="text-decoration:none">{display}</a>
+		<a class="hash mono" href={resolve(`/tx/${hash}/`)} style="text-decoration:none">{display}</a>
 		<a
 			class="ext"
 			href={fmt.explorerTx(hash)}
