@@ -1271,7 +1271,11 @@ func saveTransfer(app core.App, log *types.Log) (*big.Int, error) {
 	r.Set("from_addr", from.Hex())
 	r.Set("to_addr", to.Hex())
 	r.Set("amount_raw", amountRaw.String())
-	r.Set("amount_human", stablecoinHuman(amountRaw))
+	// amount_human only makes sense for tokens whose decimals we know.
+	// OTHER tokens have arbitrary decimals — frontend should rely on amount_raw.
+	if symbol != "OTHER" {
+		r.Set("amount_human", stablecoinHuman(amountRaw))
+	}
 
 	if err := app.Save(r); err != nil {
 		return nil, fmt.Errorf("save transfer %s/%d: %w", txHash, logIdx, err)

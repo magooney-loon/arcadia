@@ -7,6 +7,7 @@
 		from_wallet: string;
 		to_wallet: string;
 		total_usdc?: string;
+		total_usdc_human?: string;
 		tx_count: number;
 		from_is_agent?: boolean;
 		to_is_agent?: boolean;
@@ -84,7 +85,7 @@
 		links = edges.map((e) => ({
 			source: e.from_wallet,
 			target: e.to_wallet,
-			volume: parseFloat(e.total_usdc ?? '0'),
+			volume: parseFloat(e.total_usdc_human ?? '0'),
 			txCount: e.tx_count
 		}));
 

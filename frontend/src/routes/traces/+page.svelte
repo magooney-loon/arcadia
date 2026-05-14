@@ -42,6 +42,19 @@
 		</div>
 	</div>
 
+	<div
+		class="card"
+		style="border-left:2px solid var(--warn);padding:10px 14px;margin-bottom:12px;background:var(--bg-2)"
+	>
+		<div class="mono" style="font-size:11px;color:var(--fg-2)">
+			<span style="color:var(--warn);font-weight:600">⚠ no data available</span>
+			— HyperSync does not expose traces for Arc Testnet. Traces are only served on select
+			networks via dedicated <span class="dim">*-traces.hypersync.xyz</span> endpoints (eth-traces, base-traces).
+			Backfilling from JSON-RPC <span class="dim">debug_traceBlockByNumber</span> against the Arc
+			RPC pool is possible but not yet wired up.
+		</div>
+	</div>
+
 	<div class="filter-bar">
 		<input
 			bind:value={txFilter}

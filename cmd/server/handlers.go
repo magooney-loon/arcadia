@@ -796,6 +796,9 @@ func analyticsVolumeHandler(c *core.RequestEvent) error {
 	if token != "" {
 		filterStr += " && token_symbol = {:sym}"
 		params["sym"] = token
+	} else {
+		// Exclude OTHER — non-stables have unknown decimals so amount_human is meaningless.
+		filterStr += " && token_symbol != 'OTHER'"
 	}
 
 	records, err := c.App.FindRecordsByFilter("transfers", filterStr, "-block_number", 500, 0, params)
