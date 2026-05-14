@@ -15,18 +15,108 @@
 	let searchQuery = $state('');
 	let searchFocused = $state(false);
 	let searchInput: HTMLInputElement | undefined = $state();
+	let debounceTimer: ReturnType<typeof setTimeout> | undefined;
 
-	function handleSearch() {
+	const PAGE_SUGGESTIONS = [
+		{
+			keywords: ['overview', 'dashboard', 'home', 'stats'],
+			label: 'Overview',
+			href: resolve('/overview/')
+		},
+		{ keywords: ['block', 'blocks', 'height'], label: 'Blocks', href: resolve('/blocks/') },
+		{
+			keywords: ['transaction', 'transactions', 'tx', 'txs'],
+			label: 'Transactions',
+			href: resolve('/txs/')
+		},
+		{
+			keywords: ['transfer', 'transfers', 'usdc', 'eurc', 'usyc', 'token'],
+			label: 'Transfers',
+			href: resolve('/transfers/')
+		},
+		{ keywords: ['trace', 'traces', 'internal'], label: 'Traces', href: resolve('/traces/') },
+		{
+			keywords: ['crosschain', 'cross-chain', 'bridge', 'cctp', 'gateway'],
+			label: 'Cross-chain',
+			href: resolve('/crosschain/')
+		},
+		{
+			keywords: ['fx', 'stablefx', 'swap', 'eurc', 'exchange', 'rate'],
+			label: 'StableFX',
+			href: resolve('/fx/')
+		},
+		{
+			keywords: ['agent', 'agents', 'ai', 'erc-8004', 'erc8004', 'robot'],
+			label: 'Agent registry',
+			href: resolve('/agents/')
+		},
+		{
+			keywords: ['job', 'jobs', 'escrow', 'task', 'erc-8183', 'erc8183'],
+			label: 'Job market',
+			href: resolve('/jobs/')
+		},
+		{
+			keywords: ['graph', 'wallet graph', 'network', 'force'],
+			label: 'Wallet graph',
+			href: resolve('/graph/')
+		},
+		{
+			keywords: ['readme', 'about', 'help', 'docs', 'info'],
+			label: 'About Arcadia',
+			href: resolve('/readme/')
+		},
+		{ keywords: ['debug', 'health', 'status'], label: 'Debug', href: resolve('/debug/') }
+	];
+
+	const pageSuggestions = $derived.by(() => {
+		const q = searchQuery.trim().toLowerCase();
+		if (!q) return [];
+		const matches = PAGE_SUGGESTIONS.filter((p) =>
+			p.keywords.some((k) => k.includes(q) || q.includes(k))
+		);
+		return matches.slice(0, 3);
+	});
+
+	function triggerSearch(q: string) {
+		if (!q) return;
+		// Only hit the API if the query could be an exact entity
+		const couldBeEntity =
+			(q.startsWith('0x') && (q.length === 42 || q.length === 66)) || /^\d+$/.test(q);
+		if (couldBeEntity) {
+			runSearch(q);
+		} else {
+			// Non-entity queries: clear previous API results so we just show page suggestions
+			search.data = null;
+			search.error = null;
+			search.loading = false;
+		}
+	}
+
+	function handleInput() {
+		clearTimeout(debounceTimer);
 		const q = searchQuery.trim();
-		if (q) runSearch(q);
+		if (!q) {
+			clearSearch();
+			return;
+		}
+		debounceTimer = setTimeout(() => triggerSearch(q), 300);
 	}
 
 	function handleKeydown(e: KeyboardEvent) {
-		if (e.key === 'Enter') handleSearch();
+		if (e.key === 'Enter') {
+			clearTimeout(debounceTimer);
+			triggerSearch(searchQuery.trim());
+		}
 		if (e.key === 'Escape') {
 			searchFocused = false;
 			searchInput?.blur();
 		}
+	}
+
+	function dismissSearch() {
+		searchFocused = false;
+		searchQuery = '';
+		clearSearch();
 	}
 
 	onMount(() => {
@@ -147,7 +237,7 @@
 			<span class="logo-text" style="font-size:12px">ARCADIA</span>
 		</a>
 
-		<div class="search" class:open={searchFocused || search.data}>
+		<div class="search" class:open={searchFocused || search.data || pageSuggestions.length > 0}>
 			<svg
 				viewBox="0 0 14 14"
 				fill="none"
@@ -161,9 +251,10 @@
 			<input
 				bind:this={searchInput}
 				bind:value={searchQuery}
-				placeholder="Search address, tx, block, agent…"
+				placeholder="Search address, tx, block, page…"
 				onfocus={() => (searchFocused = true)}
 				onblur={() => setTimeout(() => (searchFocused = false), 200)}
+				oninput={handleInput}
 				onkeydown={handleKeydown}
 			/>
 			{#if searchQuery}
@@ -179,23 +270,19 @@
 			{/if}
 
 			<!-- Search results dropdown -->
-			{#if searchFocused && (search.loading || search.error || search.data)}
+			{#if searchFocused && (search.loading || search.error || search.data || pageSuggestions.length > 0)}
 				<div class="search-results">
 					{#if search.loading}
 						<div class="search-result-item muted">searching…</div>
 					{:else if search.error}
 						<div class="search-result-item err-text">{search.error}</div>
 					{:else if search.data?.type === 'not_found'}
-						<div class="search-result-item muted">no results found</div>
+						<div class="search-result-item muted">no onchain match — try a page name below</div>
 					{:else if search.data?.type === 'tx' && search.data.result}
 						<a
 							class="search-result-item"
 							href={resolve(`/tx/${search.data.result.hash as string}/`)}
-							onclick={() => {
-								searchFocused = false;
-								searchQuery = '';
-								clearSearch();
-							}}
+							onclick={dismissSearch}
 						>
 							<span class="badge info">tx</span>
 							<span class="mono">{fmt.hash(search.data.result.hash as string)}</span>
@@ -204,11 +291,7 @@
 						<a
 							class="search-result-item"
 							href={resolve(`/blocks/${search.data.result.number as number}/`)}
-							onclick={() => {
-								searchFocused = false;
-								searchQuery = '';
-								clearSearch();
-							}}
+							onclick={dismissSearch}
 						>
 							<span class="badge ok">block</span>
 							<span class="mono">#{search.data.result.number}</span>
@@ -217,11 +300,7 @@
 						<a
 							class="search-result-item"
 							href={resolve(`/wallet/${search.data.result.address as string}/`)}
-							onclick={() => {
-								searchFocused = false;
-								searchQuery = '';
-								clearSearch();
-							}}
+							onclick={dismissSearch}
 						>
 							<span class="badge warn">wallet</span>
 							<span class="mono">{fmt.addr(search.data.result.address as string)}</span>
@@ -230,17 +309,24 @@
 						<a
 							class="search-result-item"
 							href={resolve(`/wallet/${search.data.result.address as string}/`)}
-							onclick={() => {
-								searchFocused = false;
-								searchQuery = '';
-								clearSearch();
-							}}
+							onclick={dismissSearch}
 						>
 							<span class="badge acc">agent</span>
 							<span class="mono">{fmt.addr(search.data.result.address as string)}</span>
 						</a>
-					{:else}
-						<div class="search-result-item muted">unknown result</div>
+					{/if}
+
+					{#if pageSuggestions.length > 0}
+						{#if search.data?.type !== 'not_found' && search.data}
+							<div class="search-divider"></div>
+						{/if}
+						<div class="search-section-label">Pages</div>
+						{#each pageSuggestions as p (p.label)}
+							<a class="search-result-item" href={p.href} onclick={dismissSearch}>
+								<span class="badge dim">page</span>
+								<span>{p.label}</span>
+							</a>
+						{/each}
 					{/if}
 				</div>
 			{/if}
@@ -419,7 +505,9 @@
 		>
 	{:else if id === 'readme'}
 		<svg viewBox="0 0 14 14" fill="none" class="ico" stroke="currentColor" stroke-width="1.4"
-			><rect x="2" y="1" width="10" height="12" rx="1" /><path d="M4 4 H10 M4 6.5 H10 M4 9 H7.5" /></svg
+			><rect x="2" y="1" width="10" height="12" rx="1" /><path
+				d="M4 4 H10 M4 6.5 H10 M4 9 H7.5"
+			/></svg
 		>
 	{:else if id === 'debug'}
 		<svg viewBox="0 0 14 14" fill="none" class="ico" stroke="currentColor" stroke-width="1.4"

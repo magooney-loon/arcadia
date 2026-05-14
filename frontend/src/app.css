@@ -220,6 +220,22 @@ a {
 .search-result-item:hover {
 	background: var(--bg-hover);
 }
+.search-divider {
+	border-top: 1px solid var(--border-1);
+	margin: 4px 0;
+}
+.search-section-label {
+	padding: 6px 14px 4px;
+	font-size: 10px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	color: var(--fg-3);
+}
+.badge.dim {
+	background: var(--bg-3);
+	color: var(--fg-3);
+}
 .kbd {
 	display: inline-flex;
 	align-items: center;
@@ -892,8 +908,12 @@ a {
 	}
 }
 @keyframes valFlash {
-	0% { color: var(--accent); }
-	100% { color: inherit; }
+	0% {
+		color: var(--accent);
+	}
+	100% {
+		color: inherit;
+	}
 }
 .flash-val {
 	animation: valFlash 0.6s ease;
