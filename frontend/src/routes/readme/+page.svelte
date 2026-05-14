@@ -1,109 +1,233 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
+
 	const GITHUB = 'https://github.com/magooney-loon/arcadia';
 	const ENVIO = 'https://envio.dev';
+
+	const sections = [
+		{
+			href: resolve('/overview/'),
+			label: 'Overview',
+			desc: 'Live dashboard with TPS, transfer volume, fee analytics, bridge net flow, top agents, and cross-chain pulse — all with switchable 1h / 24h / 7d windows.'
+		},
+		{
+			href: resolve('/blocks/'),
+			label: 'Blocks',
+			desc: 'Every block on Arc with timestamp, transaction count, gas utilization, and fees. Click into any block for full details.'
+		},
+		{
+			href: resolve('/txs/'),
+			label: 'Transactions',
+			desc: 'Real-time transaction feed with status, method signature, sender/receiver, and fee. Filter and sort by any column.'
+		},
+		{
+			href: resolve('/transfers/'),
+			label: 'Transfers',
+			desc: 'Every USDC, EURC, and USYC token transfer on the network. Filter by token, spot whale transfers ($10K+), and trace capital movements.'
+		},
+		{
+			href: resolve('/traces/'),
+			label: 'Traces',
+			desc: 'Internal transaction traces — see what really happens inside complex transactions: contract calls, delegate calls, and value transfers.'
+		},
+		{
+			href: resolve('/crosschain/'),
+			label: 'Cross-chain',
+			desc: 'CCTP and Gateway bridge events between Arc and Ethereum, Base, Solana, and more. Track inbound/outbound flows by chain and protocol.'
+		},
+		{
+			href: resolve('/fx/'),
+			label: 'StableFX',
+			desc: 'Onchain USDC↔EURC swap trades with implied exchange rate, maker/taker, and full lifecycle tracking from creation to settlement.'
+		},
+		{
+			href: resolve('/agents/'),
+			label: 'Agent registry',
+			desc: 'All registered AI agents (ERC-8004) with transaction count, volume, fees, and job statistics. See who the most active agents are.'
+		},
+		{
+			href: resolve('/jobs/'),
+			label: 'Job market',
+			desc: 'AI agent job postings and settlements (ERC-8183). Track escrow amounts, job lifecycle, and agent-to-agent service economy.'
+		},
+		{
+			href: resolve('/graph/'),
+			label: 'Wallet graph',
+			desc: 'Interactive force-directed graph of wallet-to-wallet capital flows. Visualize who transacts with whom and how value moves through the network.'
+		}
+	];
+
+	const dataPoints = [
+		{ label: 'Blocks', detail: 'height, timestamp, tx count, gas used, utilization %, fees' },
+		{ label: 'Transactions', detail: 'hash, status, from/to, value, gas price, method (sighash)' },
+		{ label: 'Token transfers', detail: 'USDC, EURC, USYC — amount, sender, receiver, tx hash' },
+		{ label: 'Internal traces', detail: 'call type, from/to, value, gas used, depth' },
+		{
+			label: 'Bridge events',
+			detail: 'CCTP + Gateway, source/destination chain, direction, amount'
+		},
+		{ label: 'StableFX trades', detail: 'USDC/EURC pair, rate, maker/taker, status, escrow' },
+		{ label: 'Agent profiles', detail: 'ERC-8004 registration, metadata, tx volume, job stats' },
+		{ label: 'Job lifecycle', detail: 'ERC-8183 jobs — escrow, agent, status, settlement' },
+		{ label: 'Wallet history', detail: 'per-address send/receive, net flow by token, graph edges' },
+		{
+			label: 'Analytics snapshots',
+			detail: '5-min resolution: TPS, fees (p25–p95), volume, active addresses'
+		}
+	];
+
+	const useCases = [
+		{
+			icon: '📈',
+			label: 'Monitor capital flows',
+			desc: 'Track net capital entering or leaving Arc via CCTP bridges from Ethereum, Base, and Solana. The cross-chain page breaks down inbound vs outbound volume per chain in real time — useful for understanding liquidity trends and market sentiment.'
+		},
+		{
+			icon: '🐋',
+			label: 'Track whale movements',
+			desc: 'Transfers of $10K or more are flagged throughout the app. Sort the transfers table by amount, or check the overview page for the largest transfer in any window. Navigate to any wallet to see its full send/receive history and who it interacts with.'
+		},
+		{
+			icon: '🤖',
+			label: 'Watch the AI agent economy',
+			desc: 'Arc has native onchain AI agent identity (ERC-8004) and a job escrow system (ERC-8183). Browse the agent leaderboard by volume, check the job market for active and settled jobs, and see which agents are earning the most.'
+		},
+		{
+			icon: '💱',
+			label: 'Analyze stablecoin FX',
+			desc: 'StableFX settles USDC↔EURC swaps onchain. Every trade is captured with implied exchange rate, maker/taker, and lifecycle status. Useful for monitoring FX basis risk, stablecoin peg health, and onchain DeFi activity.'
+		},
+		{
+			icon: '🔍',
+			label: 'Investigate any address',
+			desc: 'Search for any wallet address, transaction hash, or block number using the search bar (⌘K). The wallet detail page shows full transfer history, net flow by token, graph connections, and agent status if the address is registered.'
+		},
+		{
+			icon: '📊',
+			label: 'Build quant models',
+			desc: 'All analytics are pre-aggregated into 5-minute snapshots across 1h/24h/7d windows — transfer volume, fee percentiles (p25/p50/p75/p95), block time, and active address counts. Use the REST API to pull time-series data for volatility analysis or regime detection.'
+		},
+		{
+			icon: '🕸️',
+			label: 'Map wallet networks',
+			desc: 'The interactive wallet graph renders capital flow edges between addresses. Filter by a specific wallet to see its direct connections and volume, or explore the full network to identify clusters and key actors.'
+		},
+		{
+			icon: '⚡',
+			label: 'Feed trading agents',
+			desc: 'Use the REST API endpoints for live bridge flow, transfer volume, and analytics snapshots as data feeds for automated trading or agent decision loops. The OpenAPI docs describe every available endpoint.'
+		}
+	];
 </script>
 
 <svelte:head>
-	<title>README · Arcadia Explorer</title>
+	<title>About · Arcadia Explorer</title>
 </svelte:head>
 
 <div class="view">
 	<div class="view-head">
 		<div>
-			<div class="view-title">README</div>
-			<div class="view-sub">Demo · self-hosting · use cases</div>
+			<div class="view-title">About Arcadia</div>
+			<div class="view-sub">What this app tracks and how to use it</div>
 		</div>
 	</div>
 
 	<div class="readme-body">
+		<!-- Intro -->
+		<section class="card">
+			<div class="section-head">What is Arcadia Explorer?</div>
+			<p class="prose">
+				Arcadia is a <strong>real-time blockchain explorer and analytics dashboard</strong> for the Arc
+				L1 testnet (chain ID 5042002). It indexes every block, transaction, token transfer, bridge event,
+				FX trade, AI agent registration, and job settlement — then presents it through interactive pages
+				you can search, sort, and filter.
+			</p>
+			<p class="prose">
+				Think of it as a combination block explorer, analytics platform, and onchain data API
+				purpose-built for the Arc ecosystem. Everything updates live — blocks stream in every few
+				seconds, analytics refresh every 10 seconds, and you can drill into any address,
+				transaction, or block instantly.
+			</p>
+		</section>
+
+		<!-- Notice -->
 		<section class="card notice-card">
 			<div class="notice-icon">
-				<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" style="width:20px;height:20px">
+				<svg
+					viewBox="0 0 20 20"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="1.5"
+					style="width:20px;height:20px"
+				>
 					<circle cx="10" cy="10" r="8" />
 					<path d="M10 6 V10.5 M10 13.5 V14" stroke-linecap="round" />
 				</svg>
 			</div>
 			<div>
-				<div class="notice-title">Demo instance · free tier</div>
+				<div class="notice-title">Demo instance</div>
 				<div class="notice-body">
-					This explorer runs on the <strong>Envio HyperSync free API tier</strong>. Throughput is
-					rate-limited and the Arc testnet HyperSync endpoint lags ~55 minutes behind chain tip by
-					design (Envio's ingestion delay on this network). For production use or real-time data,
-					self-host with your own API key.
+					This explorer runs on Envio's free HyperSync tier. Data is rate-limited and the indexer
+					lags ~55 minutes behind chain tip (Envio's ingestion delay on Arc testnet). For production
+					use or real-time data, <a href="#self-host">self-host with your own API key</a>.
 				</div>
 			</div>
 		</section>
 
+		<!-- What you can explore -->
 		<section class="card">
-			<div class="section-head">What is Arcadia?</div>
-			<p class="prose">
-				Arcadia is a full-stack, real-time blockchain indexer and analytics dashboard for the
-				<strong>Arc L1 testnet</strong> (chain ID 5042002). It streams every layer of onchain
-				activity — blocks, transactions, USDC/EURC/USYC token transfers, internal traces, AI agent
-				registrations (ERC-8004), job settlements (ERC-8183), cross-chain CCTP/Gateway flows, and
-				StableFX swaps — into a local PocketBase database and exposes it through a REST API and live
-				SvelteKit frontend.
-			</p>
-			<p class="prose">
-				All data is pre-aggregated into 5-minute snapshots across 1h / 24h / 7d windows so
-				dashboards are instant reads rather than live SQL aggregations.
-			</p>
+			<div class="section-head">Pages</div>
+			<div class="page-list">
+				{#each sections as s (s.label)}
+					<a href={s.href} class="page-item">
+						<div class="page-label">{s.label}</div>
+						<div class="page-desc">{s.desc}</div>
+					</a>
+				{/each}
+			</div>
 		</section>
 
+		<!-- Data tracked -->
+		<section class="card">
+			<div class="section-head">Data coverage</div>
+			<p class="prose">
+				Arcadia indexes <strong>every onchain event</strong> on the Arc testnet and pre-aggregates analytics
+				into 5-minute snapshots. Here's what's available:
+			</p>
+			<div class="data-grid">
+				{#each dataPoints as d (d.label)}
+					<div class="data-row">
+						<div class="data-label">{d.label}</div>
+						<div class="data-detail">{d.detail}</div>
+					</div>
+				{/each}
+			</div>
+		</section>
+
+		<!-- Use cases -->
 		<section class="card">
 			<div class="section-head">Use cases</div>
 			<div class="use-cases">
-				<div class="use-case">
-					<div class="uc-label">Trading agents</div>
-					<div class="uc-desc">
-						Feed live inflow/outflow data and bridge flow direction into agent decision loops.
-						Monitor net capital entering Arc via CCTP from Ethereum/Base/Solana and adjust
-						positions ahead of liquidity movements. The <code>/analytics/bridge_flow</code> endpoint
-						gives per-chain directional volume in real time.
+				{#each useCases as uc (uc.label)}
+					<div class="use-case">
+						<div class="uc-head">
+							<span class="uc-icon">{uc.icon}</span>
+							<span class="uc-label">{uc.label}</span>
+						</div>
+						<div class="uc-desc">{uc.desc}</div>
 					</div>
-				</div>
-				<div class="use-case">
-					<div class="uc-label">Quant analytics</div>
-					<div class="uc-desc">
-						The <code>analytics_snapshots</code> collection stores a complete time-series of
-						transfer volume, fee percentiles (p25/p50/p75/p95), block time, and active address
-						counts at 5-minute resolution. Use the <code>/analytics/history</code> endpoint to pull
-						rolling windows for volatility, autocorrelation, or regime-detection models.
-					</div>
-				</div>
-				<div class="use-case">
-					<div class="uc-label">Whale tracking · copy trading</div>
-					<div class="uc-desc">
-						Whale transfers ($10K+) are tracked in the <code>transfers</code> collection and
-						flagged in snapshots. The <code>/wallet/{"{address}"}</code> endpoint returns full
-						send/receive history and graph edges per address. Combine with the wallet graph to map
-						capital flows between large wallets and identify lead actors to follow.
-					</div>
-				</div>
-				<div class="use-case">
-					<div class="uc-label">Agent economy monitoring</div>
-					<div class="uc-desc">
-						Arc has native onchain AI agent identity (ERC-8004) and a job escrow system
-						(ERC-8183). Arcadia indexes every agent registration, job lifecycle event, and
-						agent-to-agent capital flow. Use the agent leaderboard and job market to monitor the
-						health and growth rate of the AI agent economy on Arc.
-					</div>
-				</div>
-				<div class="use-case">
-					<div class="uc-label">FX and stablecoin research</div>
-					<div class="uc-desc">
-						StableFX settles USDC↔EURC swaps onchain. Every trade is indexed with implied rate,
-						maker/taker, and settlement status. Cross-chain USDC mint/burn events give a full
-						picture of stablecoin supply dynamics. Useful for FX basis research and stablecoin
-						peg health monitoring.
-					</div>
-				</div>
+				{/each}
 			</div>
 		</section>
 
-		<section class="card">
+		<!-- Self-hosting -->
+		<section class="card" id="self-host">
 			<div class="section-head">Self-hosting</div>
-			<p class="prose">Run your own instance with an Envio API key for full throughput and no lag.</p>
+			<p class="prose">
+				Run your own instance with an Envio API key for full throughput, no lag, and your own
+				PocketBase database. The entire stack — Go indexer + PocketBase + SvelteKit frontend — runs
+				in a single process.
+			</p>
 			<div class="steps">
 				<div class="step">
 					<div class="step-n">1</div>
@@ -116,17 +240,21 @@
 					<div class="step-n">2</div>
 					<div>
 						Clone the repo and install the toolchain:
-						<pre><code>git clone {GITHUB}.git
+						<pre><code
+								>git clone {GITHUB}.git
 cd arcadia
-go install github.com/magooney-loon/pb-ext/cmd/pb-cli@latest</code></pre>
+go install github.com/magooney-loon/pb-ext/cmd/pb-cli@latest</code
+							></pre>
 					</div>
 				</div>
 				<div class="step">
 					<div class="step-n">3</div>
 					<div>
 						Set your API token and run:
-						<pre><code>export ENVIO_API_TOKEN=your_token_here
-go run ./cmd/server --dev</code></pre>
+						<pre><code
+								>export ENVIO_API_TOKEN=your_token_here
+go run ./cmd/server --dev</code
+							></pre>
 					</div>
 				</div>
 				<div class="step">
@@ -139,6 +267,7 @@ go run ./cmd/server --dev</code></pre>
 			</div>
 		</section>
 
+		<!-- Source code -->
 		<section class="card">
 			<div class="section-head">Source code</div>
 			<div class="github-row">
@@ -169,6 +298,7 @@ go run ./cmd/server --dev</code></pre>
 		max-width: 760px;
 	}
 
+	/* Notice */
 	.notice-card {
 		display: flex;
 		gap: 14px;
@@ -198,10 +328,16 @@ go run ./cmd/server --dev</code></pre>
 		color: var(--fg-2);
 	}
 
-	.notice-body strong {
-		color: var(--fg-1);
+	.notice-body a {
+		color: var(--accent);
+		text-decoration: none;
 	}
 
+	.notice-body a:hover {
+		text-decoration: underline;
+	}
+
+	/* Sections */
 	.section-head {
 		font-size: 11px;
 		font-weight: 600;
@@ -226,6 +362,70 @@ go run ./cmd/server --dev</code></pre>
 		margin-bottom: 0;
 	}
 
+	/* Pages list */
+	.page-list {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+	}
+
+	.page-item {
+		display: block;
+		padding: 10px 12px;
+		border-radius: 6px;
+		text-decoration: none;
+		transition: background 0.15s;
+	}
+
+	.page-item:hover {
+		background: var(--bg-3);
+	}
+
+	.page-label {
+		font-size: 13px;
+		font-weight: 600;
+		color: var(--accent);
+		margin-bottom: 2px;
+	}
+
+	.page-desc {
+		font-size: 12.5px;
+		line-height: 1.55;
+		color: var(--fg-3);
+	}
+
+	.page-item:hover .page-desc {
+		color: var(--fg-2);
+	}
+
+	/* Data grid */
+	.data-grid {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+	}
+
+	.data-row {
+		display: flex;
+		gap: 12px;
+		align-items: baseline;
+	}
+
+	.data-label {
+		font-size: 12px;
+		font-weight: 600;
+		color: var(--fg-1);
+		white-space: nowrap;
+		min-width: 120px;
+	}
+
+	.data-detail {
+		font-size: 12.5px;
+		line-height: 1.55;
+		color: var(--fg-3);
+	}
+
+	/* Use cases */
 	.use-cases {
 		display: flex;
 		flex-direction: column;
@@ -235,30 +435,34 @@ go run ./cmd/server --dev</code></pre>
 	.use-case {
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
+		gap: 5px;
+	}
+
+	.uc-head {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+	}
+
+	.uc-icon {
+		font-size: 14px;
+		flex-shrink: 0;
 	}
 
 	.uc-label {
-		font-size: 12px;
+		font-size: 13px;
 		font-weight: 600;
 		color: var(--fg-1);
 	}
 
 	.uc-desc {
-		font-size: 13px;
+		font-size: 12.5px;
 		line-height: 1.65;
 		color: var(--fg-2);
+		padding-left: 22px;
 	}
 
-	.uc-desc code {
-		font-family: var(--font-mono, monospace);
-		font-size: 11px;
-		background: var(--bg-3);
-		padding: 1px 5px;
-		border-radius: 3px;
-		color: var(--accent);
-	}
-
+	/* Steps */
 	.steps {
 		display: flex;
 		flex-direction: column;
@@ -310,6 +514,7 @@ go run ./cmd/server --dev</code></pre>
 		color: var(--accent);
 	}
 
+	/* GitHub */
 	.github-row {
 		display: flex;
 		align-items: center;
