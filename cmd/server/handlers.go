@@ -611,12 +611,14 @@ func healthHandler(c *core.RequestEvent) error {
 		lastBlock, _ = strconv.Atoi(cursor[0].GetString("value"))
 	}
 
-	// latest heartbeat carries tip + lag written by the indexer loop
-	heartbeats, _ := c.App.FindRecordsByFilter("indexer_events", "event = 'heartbeat'", "-created", 1, 0)
+	tipMeta, _ := c.App.FindRecordsByFilter("indexer_meta", "key = 'chainTip'", "", 1, 0)
+	lagMeta, _ := c.App.FindRecordsByFilter("indexer_meta", "key = 'lagBlocks'", "", 1, 0)
 	var tip, lag int
-	if len(heartbeats) > 0 {
-		tip = heartbeats[0].GetInt("tip")
-		lag = heartbeats[0].GetInt("lag")
+	if len(tipMeta) > 0 {
+		tip, _ = strconv.Atoi(tipMeta[0].GetString("value"))
+	}
+	if len(lagMeta) > 0 {
+		lag, _ = strconv.Atoi(lagMeta[0].GetString("value"))
 	}
 
 	since := time.Now().UTC().Add(-time.Hour).Format("2006-01-02 15:04:05.000Z")

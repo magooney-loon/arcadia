@@ -127,6 +127,8 @@ func logIndexerHeartbeat(ctx context.Context, app core.App, client interface {
 	} else {
 		log.Printf("[indexer] heartbeat | idle %s | block %d | tip %d | lag %d | batches=%d", idleFor, currentBlock, tip, lag, batchCount)
 	}
+	setMetaValue(app, "chainTip", strconv.FormatUint(tip, 10))
+	setMetaValue(app, "lagBlocks", strconv.FormatUint(lag, 10))
 	if persist {
 		recordIndexerEvent(app, "info", "heartbeat", "indexer heartbeat", indexerEventFields{"attempt": attempt, "batch": batchCount, "block": currentBlock, "tip": tip, "lag": lag})
 	}
@@ -1873,6 +1875,23 @@ func setLastIndexedBlock(app core.App, block uint64) error {
 		return fmt.Errorf("save lastBlock cursor %d: %w", block, err)
 	}
 	return nil
+}
+
+func setMetaValue(app core.App, key, value string) {
+	records, err := app.FindRecordsByFilter("indexer_meta", "key = {:k}", "", 1, 0, map[string]any{"k": key})
+	if err != nil {
+		return
+	}
+	var r *core.Record
+	if len(records) > 0 {
+		r = records[0]
+	} else {
+		c := mustCollection(app, "indexer_meta")
+		r = core.NewRecord(c)
+		r.Set("key", key)
+	}
+	r.Set("value", value)
+	_ = app.Save(r)
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
