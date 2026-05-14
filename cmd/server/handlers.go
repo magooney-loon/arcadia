@@ -3,6 +3,7 @@ package main
 // API_SOURCE
 
 import (
+	"encoding/json"
 	"math/big"
 	"net/http"
 	"sort"
@@ -741,48 +742,21 @@ func blockDetailHandler(c *core.RequestEvent) error {
 // API_TAGS Stats
 func analyticsFeesHandler(c *core.RequestEvent) error {
 	window := qp(c, "window", "24h")
-	_, wParams := windowBlockFilter(c.App, window)
-	fromBlock := wParams["from"]
-
-	var agg struct {
-		BlockCount int     `db:"block_count"`
-		TotalFees  float64 `db:"total_fees"`
-		TotalTxs   int64   `db:"total_txs"`
-		FailedTxs  int64   `db:"failed_txs"`
-		AvgBms     float64 `db:"avg_bms"`
-	}
-	_ = c.App.DB().NewQuery(
-		`SELECT
-			COUNT(*) AS block_count,
-			COALESCE(SUM(CAST(total_fee_usdc AS REAL)), 0) AS total_fees,
-			COALESCE(SUM(tx_count), 0) AS total_txs,
-			COALESCE(SUM(failed_tx_count), 0) AS failed_txs,
-			COALESCE(AVG(CASE WHEN block_time_ms > 0 THEN block_time_ms END), 0) AS avg_bms
-		 FROM block_stats WHERE block_number >= {:from}`).
-		Bind(dbx.Params{"from": fromBlock}).One(&agg)
-
-	if agg.BlockCount == 0 {
+	snap, ok := latestSnapshot(c.App, window)
+	if !ok {
 		return c.JSON(http.StatusOK, map[string]any{"window": window, "block_count": 0})
 	}
-
-	fees := loadFeeColumn(c.App, fromBlock)
-	sort.Float64s(fees)
-
-	var failedRatio float64
-	if agg.TotalTxs > 0 {
-		failedRatio = float64(agg.FailedTxs) / float64(agg.TotalTxs)
-	}
-
 	return c.JSON(http.StatusOK, map[string]any{
 		"window":            window,
-		"block_count":       agg.BlockCount,
-		"total_fees":        agg.TotalFees,
-		"avg_fee_p25":       percentileFloat(fees, 25),
-		"avg_fee_p50":       percentileFloat(fees, 50),
-		"avg_fee_p75":       percentileFloat(fees, 75),
-		"avg_fee_p95":       percentileFloat(fees, 95),
-		"avg_block_time_ms": agg.AvgBms,
-		"failed_tx_ratio":   failedRatio,
+		"block_count":       snap.GetInt("block_count"),
+		"total_fees":        snap.GetFloat("fees_total"),
+		"avg_fee_p25":       snap.GetFloat("fee_p25"),
+		"avg_fee_p50":       snap.GetFloat("fee_p50"),
+		"avg_fee_p75":       snap.GetFloat("fee_p75"),
+		"avg_fee_p95":       snap.GetFloat("fee_p95"),
+		"avg_block_time_ms": snap.GetFloat("avg_block_time_ms"),
+		"failed_tx_ratio":   snap.GetFloat("failed_tx_ratio"),
+		"snapshot_at":       snap.GetInt("snapshot_at"),
 	})
 }
 
@@ -808,16 +782,9 @@ func loadFeeColumn(app core.App, fromBlock any) []float64 {
 func analyticsVolumeHandler(c *core.RequestEvent) error {
 	window := qp(c, "window", "24h")
 	token := qp(c, "token", "")
-	_, wParams := windowBlockFilter(c.App, window)
-	fromBlock := wParams["from"]
-
-	where := "block_number >= {:from}"
-	params := dbx.Params{"from": fromBlock}
-	if token != "" {
-		where += " AND token_symbol = {:sym}"
-		params["sym"] = token
-	} else {
-		where += " AND token_symbol != 'OTHER'"
+	snap, ok := latestSnapshot(c.App, window)
+	if !ok {
+		return c.JSON(http.StatusOK, map[string]any{"window": window, "syncing": true})
 	}
 
 	type tokenStats struct {
@@ -825,46 +792,28 @@ func analyticsVolumeHandler(c *core.RequestEvent) error {
 		Count      int     `json:"count"`
 		WhaleCount int     `json:"whale_count"`
 	}
-
-	type groupRow struct {
-		Symbol string  `db:"token_symbol"`
-		Vol    float64 `db:"vol"`
-		Cnt    int     `db:"cnt"`
-		Whales int     `db:"whales"`
+	byToken := map[string]*tokenStats{
+		"USDC": {Volume: snap.GetFloat("usdc_volume"), Count: snap.GetInt("usdc_count")},
+		"EURC": {Volume: snap.GetFloat("eurc_volume"), Count: snap.GetInt("eurc_count")},
+		"USYC": {Volume: snap.GetFloat("usyc_volume"), Count: snap.GetInt("usyc_count")},
 	}
-	var groupRows []groupRow
-	_ = c.App.DB().NewQuery(
-		`SELECT token_symbol,
-		        COALESCE(SUM(CAST(amount_human AS REAL)), 0) AS vol,
-		        COUNT(*) AS cnt,
-		        SUM(CASE WHEN CAST(amount_human AS REAL) >= 10000 THEN 1 ELSE 0 END) AS whales
-		 FROM transfers WHERE ` + where + `
-		 GROUP BY token_symbol`).Bind(params).All(&groupRows)
-
-	byToken := map[string]*tokenStats{}
-	var totalTransfers, totalWhales int
-	for _, g := range groupRows {
-		byToken[g.Symbol] = &tokenStats{Volume: g.Vol, Count: g.Cnt, WhaleCount: g.Whales}
-		totalTransfers += g.Cnt
-		totalWhales += g.Whales
+	if token != "" {
+		filtered := map[string]*tokenStats{}
+		if ts, ok := byToken[token]; ok {
+			filtered[token] = ts
+		}
+		byToken = filtered
 	}
-
-	var addrs struct {
-		Senders   int `db:"senders"`
-		Receivers int `db:"receivers"`
-	}
-	_ = c.App.DB().NewQuery(
-		`SELECT COUNT(DISTINCT from_addr) AS senders, COUNT(DISTINCT to_addr) AS receivers
-		 FROM transfers WHERE ` + where).Bind(params).One(&addrs)
 
 	return c.JSON(http.StatusOK, map[string]any{
 		"window":           window,
 		"token":            token,
-		"total_transfers":  totalTransfers,
-		"unique_senders":   addrs.Senders,
-		"unique_receivers": addrs.Receivers,
-		"whale_transfers":  totalWhales,
+		"total_transfers":  snap.GetInt("total_transfers"),
+		"unique_senders":   snap.GetInt("unique_senders"),
+		"unique_receivers": snap.GetInt("unique_receivers"),
+		"whale_transfers":  snap.GetInt("whale_transfers"),
 		"by_token":         byToken,
+		"snapshot_at":      snap.GetInt("snapshot_at"),
 	})
 }
 
@@ -872,63 +821,25 @@ func analyticsVolumeHandler(c *core.RequestEvent) error {
 // API_TAGS CrossChain
 func analyticsBridgeFlowHandler(c *core.RequestEvent) error {
 	window := qp(c, "window", "24h")
-	_, wParams := windowBlockFilter(c.App, window)
-	fromBlock := wParams["from"]
-
-	type chainFlow struct {
-		InboundVol    float64 `json:"inbound_vol"`
-		InboundCount  int     `json:"inbound_count"`
-		OutboundVol   float64 `json:"outbound_vol"`
-		OutboundCount int     `json:"outbound_count"`
+	snap, ok := latestSnapshot(c.App, window)
+	if !ok {
+		return c.JSON(http.StatusOK, map[string]any{"window": window, "syncing": true})
 	}
 
-	type row struct {
-		Dir         string  `db:"dir"`
-		ChainDomain int     `db:"chain_domain"`
-		Cnt         int     `db:"cnt"`
-		Vol         float64 `db:"vol"`
-	}
-	var rows []row
-	_ = c.App.DB().NewQuery(
-		`SELECT
-			CASE WHEN destination_domain = 26 THEN 'in' ELSE 'out' END AS dir,
-			CASE WHEN destination_domain = 26 THEN source_domain ELSE destination_domain END AS chain_domain,
-			COUNT(*) AS cnt,
-			COALESCE(SUM(CAST(amount_usdc AS REAL)), 0) AS vol
-		 FROM crosschain_events
-		 WHERE block_number >= {:from} AND (destination_domain = 26 OR source_domain = 26)
-		 GROUP BY dir, chain_domain`).
-		Bind(dbx.Params{"from": fromBlock}).All(&rows)
-
-	byChain := map[string]*chainFlow{}
-	var totalIn, totalOut float64
-	var countIn, countOut int
-	for _, r := range rows {
-		k := domainName(r.ChainDomain)
-		if byChain[k] == nil {
-			byChain[k] = &chainFlow{}
-		}
-		if r.Dir == "in" {
-			byChain[k].InboundVol += r.Vol
-			byChain[k].InboundCount += r.Cnt
-			totalIn += r.Vol
-			countIn += r.Cnt
-		} else {
-			byChain[k].OutboundVol += r.Vol
-			byChain[k].OutboundCount += r.Cnt
-			totalOut += r.Vol
-			countOut += r.Cnt
-		}
+	var byChain any
+	if s := snap.GetString("bridge_by_chain"); s != "" {
+		_ = json.Unmarshal([]byte(s), &byChain)
 	}
 
 	return c.JSON(http.StatusOK, map[string]any{
 		"window":         window,
-		"inbound_vol":    totalIn,
-		"inbound_count":  countIn,
-		"outbound_vol":   totalOut,
-		"outbound_count": countOut,
-		"net_flow":       totalIn - totalOut,
+		"inbound_vol":    snap.GetFloat("bridge_inbound_vol"),
+		"inbound_count":  snap.GetInt("bridge_inbound_count"),
+		"outbound_vol":   snap.GetFloat("bridge_outbound_vol"),
+		"outbound_count": snap.GetInt("bridge_outbound_count"),
+		"net_flow":       snap.GetFloat("bridge_net_flow"),
 		"by_chain":       byChain,
+		"snapshot_at":    snap.GetInt("snapshot_at"),
 	})
 }
 
@@ -936,94 +847,74 @@ func analyticsBridgeFlowHandler(c *core.RequestEvent) error {
 // API_TAGS Stats
 func analyticsOverviewHandler(c *core.RequestEvent) error {
 	window := qp(c, "window", "24h")
-	_, wParams := windowBlockFilter(c.App, window)
-	fromBlock := wParams["from"]
-
-	// Exact transfer count + volume + largest single transfer — no row cap
-	var tStats struct {
-		Count  int     `db:"cnt"`
-		Volume float64 `db:"vol"`
+	snap, ok := latestSnapshot(c.App, window)
+	if !ok {
+		return c.JSON(http.StatusOK, map[string]any{"window": window, "syncing": true})
 	}
-	_ = c.App.DB().NewQuery(
-		`SELECT COUNT(*) AS cnt, COALESCE(SUM(CAST(amount_human AS REAL)), 0) AS vol
-		 FROM transfers WHERE block_number >= {:from} AND token_symbol != 'OTHER'`).
-		Bind(dbx.Params{"from": fromBlock}).One(&tStats)
+	return c.JSON(http.StatusOK, map[string]any{
+		"window":                 window,
+		"snapshot_at":            snap.GetInt("snapshot_at"),
+		"transfers_count":        snap.GetInt("transfers_count"),
+		"transfer_volume":        snap.GetFloat("transfer_volume"),
+		"largest_transfer":       snap.GetFloat("largest_transfer"),
+		"largest_transfer_block": snap.GetInt("largest_transfer_block"),
+		"fees_total":             snap.GetFloat("fees_total"),
+		"fee_p50":                snap.GetFloat("fee_p50"),
+		"fee_p95":                snap.GetFloat("fee_p95"),
+		"failed_tx_ratio":        snap.GetFloat("failed_tx_ratio"),
+		"bridge_inbound_vol":     snap.GetFloat("bridge_inbound_vol"),
+		"bridge_inbound_count":   snap.GetInt("bridge_inbound_count"),
+		"bridge_outbound_vol":    snap.GetFloat("bridge_outbound_vol"),
+		"bridge_outbound_count":  snap.GetInt("bridge_outbound_count"),
+		"bridge_net_flow":        snap.GetFloat("bridge_net_flow"),
+		"agent_count":            snap.GetInt("agent_count"),
+	})
+}
 
-	var largest struct {
-		Amount float64 `db:"amt"`
-		Block  int     `db:"block_number"`
+// API_DESC Historical analytics snapshots for time-series charting
+// API_TAGS Stats
+func analyticsHistoryHandler(c *core.RequestEvent) error {
+	window := qp(c, "window", "24h")
+	limit, _ := limitOffset(c)
+	if limit > 1000 {
+		limit = 1000
 	}
-	_ = c.App.DB().NewQuery(
-		`SELECT CAST(amount_human AS REAL) AS amt, block_number
-		 FROM transfers WHERE block_number >= {:from} AND token_symbol != 'OTHER'
-		 ORDER BY CAST(amount_human AS REAL) DESC LIMIT 1`).
-		Bind(dbx.Params{"from": fromBlock}).One(&largest)
+	rows, _ := c.App.FindRecordsByFilter("analytics_snapshots",
+		"window = {:w}", "-snapshot_at", limit, 0, map[string]any{"w": window})
 
-	// Exact fee aggregates across the full window
-	var fAgg struct {
-		FeesTotal float64 `db:"fees_total"`
-		TotalTxs  int64   `db:"total_txs"`
-		FailedTxs int64   `db:"failed_txs"`
-	}
-	_ = c.App.DB().NewQuery(
-		`SELECT
-			COALESCE(SUM(CAST(total_fee_usdc AS REAL)), 0) AS fees_total,
-			COALESCE(SUM(tx_count), 0) AS total_txs,
-			COALESCE(SUM(failed_tx_count), 0) AS failed_txs
-		 FROM block_stats WHERE block_number >= {:from}`).
-		Bind(dbx.Params{"from": fromBlock}).One(&fAgg)
-
-	fees := loadFeeColumn(c.App, fromBlock)
-	sort.Float64s(fees)
-
-	var failedRatio float64
-	if fAgg.TotalTxs > 0 {
-		failedRatio = float64(fAgg.FailedTxs) / float64(fAgg.TotalTxs)
+	// reverse to ascending order (oldest first) for chart rendering
+	for i, j := 0, len(rows)-1; i < j; i, j = i+1, j-1 {
+		rows[i], rows[j] = rows[j], rows[i]
 	}
 
-	// Bridge inbound (arriving on Arc)
-	var bridgeIn struct {
-		Vol   float64 `db:"vol"`
-		Count int     `db:"cnt"`
+	out := make([]map[string]any, len(rows))
+	for i, r := range rows {
+		m := r.PublicExport()
+		if s, ok := m["bridge_by_chain"].(string); ok && s != "" {
+			var parsed any
+			if err := json.Unmarshal([]byte(s), &parsed); err == nil {
+				m["bridge_by_chain"] = parsed
+			}
+		}
+		out[i] = m
 	}
-	_ = c.App.DB().NewQuery(
-		`SELECT COALESCE(SUM(CAST(amount_usdc AS REAL)), 0) AS vol, COUNT(*) AS cnt
-		 FROM crosschain_events WHERE block_number >= {:from} AND destination_domain = 26`).
-		Bind(dbx.Params{"from": fromBlock}).One(&bridgeIn)
-
-	// Bridge outbound (leaving Arc)
-	var bridgeOut struct {
-		Vol   float64 `db:"vol"`
-		Count int     `db:"cnt"`
-	}
-	_ = c.App.DB().NewQuery(
-		`SELECT COALESCE(SUM(CAST(amount_usdc AS REAL)), 0) AS vol, COUNT(*) AS cnt
-		 FROM crosschain_events WHERE block_number >= {:from} AND source_domain = 26 AND destination_domain != 26`).
-		Bind(dbx.Params{"from": fromBlock}).One(&bridgeOut)
-
-	// Total registered agents (not window-scoped — total count)
-	var agentCount struct {
-		Count int `db:"cnt"`
-	}
-	_ = c.App.DB().NewQuery(`SELECT COUNT(*) AS cnt FROM agents`).One(&agentCount)
 
 	return c.JSON(http.StatusOK, map[string]any{
-		"window":                window,
-		"transfers_count":       tStats.Count,
-		"transfer_volume":       tStats.Volume,
-		"largest_transfer":      largest.Amount,
-		"largest_transfer_block": largest.Block,
-		"fees_total":            fAgg.FeesTotal,
-		"fee_p50":               percentileFloat(fees, 50),
-		"fee_p95":               percentileFloat(fees, 95),
-		"failed_tx_ratio":       failedRatio,
-		"bridge_inbound_vol":    bridgeIn.Vol,
-		"bridge_inbound_count":  bridgeIn.Count,
-		"bridge_outbound_vol":   bridgeOut.Vol,
-		"bridge_outbound_count": bridgeOut.Count,
-		"bridge_net_flow":       bridgeIn.Vol - bridgeOut.Vol,
-		"agent_count":           agentCount.Count,
+		"window":    window,
+		"snapshots": out,
+		"count":     len(out),
 	})
+}
+
+// latestSnapshot returns the most recent analytics_snapshots row for the given
+// window, or (nil, false) if none exists yet (e.g. fresh install before first job run).
+func latestSnapshot(app core.App, window string) (*core.Record, bool) {
+	rows, err := app.FindRecordsByFilter("analytics_snapshots",
+		"window = {:w}", "-snapshot_at", 1, 0, map[string]any{"w": window})
+	if err != nil || len(rows) == 0 {
+		return nil, false
+	}
+	return rows[0], true
 }
 
 // API_DESC Agent leaderboard ranked by stablecoin volume transferred

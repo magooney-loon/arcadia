@@ -20,6 +20,7 @@ func registerCollections(app core.App) {
 			agentJobsCollection,
 			blockStatsCollection,
 			walletEdgesCollection,
+			analyticsSnapshotsCollection,
 		} {
 			if err := fn(e.App); err != nil {
 				app.Logger().Error("Collection setup error", "error", err)
@@ -443,6 +444,61 @@ func blockStatsCollection(app core.App) error {
 		return err
 	}
 	app.Logger().Info("Created block_stats collection")
+	return nil
+}
+
+// analyticsSnapshotsCollection — Layer 9: pre-aggregated window analytics.
+// One row per window per snapshot time. Handlers read the latest row; history
+// endpoint returns all rows for time-series charting.
+func analyticsSnapshotsCollection(app core.App) error {
+	if collectionExists(app, "analytics_snapshots") {
+		return nil
+	}
+	c := core.NewBaseCollection("analytics_snapshots")
+	c.Fields.Add(&core.NumberField{Name: "snapshot_at", Required: true})
+	c.Fields.Add(&core.NumberField{Name: "block_number"})
+	c.Fields.Add(&core.TextField{Name: "window", Required: true, Max: 10})
+	// transfers / volume
+	c.Fields.Add(&core.NumberField{Name: "transfers_count"})
+	c.Fields.Add(&core.NumberField{Name: "transfer_volume"})
+	c.Fields.Add(&core.NumberField{Name: "largest_transfer"})
+	c.Fields.Add(&core.NumberField{Name: "largest_transfer_block"})
+	c.Fields.Add(&core.NumberField{Name: "usdc_volume"})
+	c.Fields.Add(&core.NumberField{Name: "eurc_volume"})
+	c.Fields.Add(&core.NumberField{Name: "usyc_volume"})
+	c.Fields.Add(&core.NumberField{Name: "usdc_count"})
+	c.Fields.Add(&core.NumberField{Name: "eurc_count"})
+	c.Fields.Add(&core.NumberField{Name: "usyc_count"})
+	c.Fields.Add(&core.NumberField{Name: "whale_transfers"})
+	c.Fields.Add(&core.NumberField{Name: "unique_senders"})
+	c.Fields.Add(&core.NumberField{Name: "unique_receivers"})
+	c.Fields.Add(&core.NumberField{Name: "total_transfers"})
+	// fees / tx stats
+	c.Fields.Add(&core.NumberField{Name: "fees_total"})
+	c.Fields.Add(&core.NumberField{Name: "fee_p25"})
+	c.Fields.Add(&core.NumberField{Name: "fee_p50"})
+	c.Fields.Add(&core.NumberField{Name: "fee_p75"})
+	c.Fields.Add(&core.NumberField{Name: "fee_p95"})
+	c.Fields.Add(&core.NumberField{Name: "failed_tx_ratio"})
+	c.Fields.Add(&core.NumberField{Name: "total_txs"})
+	c.Fields.Add(&core.NumberField{Name: "failed_txs"})
+	c.Fields.Add(&core.NumberField{Name: "avg_block_time_ms"})
+	c.Fields.Add(&core.NumberField{Name: "block_count"})
+	// bridge
+	c.Fields.Add(&core.NumberField{Name: "bridge_inbound_vol"})
+	c.Fields.Add(&core.NumberField{Name: "bridge_inbound_count"})
+	c.Fields.Add(&core.NumberField{Name: "bridge_outbound_vol"})
+	c.Fields.Add(&core.NumberField{Name: "bridge_outbound_count"})
+	c.Fields.Add(&core.NumberField{Name: "bridge_net_flow"})
+	c.Fields.Add(&core.TextField{Name: "bridge_by_chain", Required: false, Max: 8000})
+	// agents
+	c.Fields.Add(&core.NumberField{Name: "agent_count"})
+	c.AddIndex("idx_snapshots_window_at", false, "window, snapshot_at", "")
+	c.ViewRule = nil
+	if err := app.Save(c); err != nil {
+		return err
+	}
+	app.Logger().Info("Created analytics_snapshots collection")
 	return nil
 }
 

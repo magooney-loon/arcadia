@@ -20,19 +20,30 @@
 	import TxLink from '$lib/components/TxLink.svelte';
 
 	onMount(() => {
-		const refresh = () => {
+		// Fast pool: live chain data (6s)
+		const refreshLive = () => {
 			fetchStats();
 			fetchBlocks(10);
 			fetchTransactions({ limit: 10 });
 		};
-		refresh();
-		fetchBlockStats(200);
-		fetchAgentLeaderboard(5);
-		fetchAnalyticsOverview();
-		fetchAnalyticsBridgeFlow();
-		fetchAnalyticsVolume();
-		const id = setInterval(refresh, 6000);
-		return () => clearInterval(id);
+		// Slow pool: snapshot-backed analytics (30s)
+		const refreshAnalytics = () => {
+			fetchBlockStats(200);
+			fetchAnalyticsOverview();
+			fetchAnalyticsBridgeFlow();
+			fetchAnalyticsVolume();
+			fetchAgentLeaderboard(5);
+		};
+
+		refreshLive();
+		refreshAnalytics();
+
+		const liveId = setInterval(refreshLive, 6000);
+		const analyticsId = setInterval(refreshAnalytics, 30000);
+		return () => {
+			clearInterval(liveId);
+			clearInterval(analyticsId);
+		};
 	});
 
 	const bridgeFlow = $derived(analyticsBridgeFlow.data);

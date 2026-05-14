@@ -95,6 +95,7 @@ export interface OverviewFilter {
 
 export interface OverviewResponse {
 	window: string;
+	snapshot_at: number;
 	transfers_count: number;
 	transfer_volume: number;
 	largest_transfer: number;
@@ -109,4 +110,55 @@ export interface OverviewResponse {
 	bridge_outbound_count: number;
 	bridge_net_flow: number;
 	agent_count: number;
+}
+
+// ── /analytics/history ────────────────────────────────────────────────────────
+
+export interface HistoryFilter {
+	window?: Window;
+	limit?: number;
+}
+
+export interface AnalyticsSnapshot {
+	id: string;
+	snapshot_at: number;
+	block_number: number;
+	window: string;
+	transfers_count: number;
+	transfer_volume: number;
+	largest_transfer: number;
+	largest_transfer_block: number;
+	usdc_volume: number;
+	eurc_volume: number;
+	usyc_volume: number;
+	usdc_count: number;
+	eurc_count: number;
+	usyc_count: number;
+	whale_transfers: number;
+	unique_senders: number;
+	unique_receivers: number;
+	total_transfers: number;
+	fees_total: number;
+	fee_p25: number;
+	fee_p50: number;
+	fee_p75: number;
+	fee_p95: number;
+	failed_tx_ratio: number;
+	total_txs: number;
+	failed_txs: number;
+	avg_block_time_ms: number;
+	block_count: number;
+	bridge_inbound_vol: number;
+	bridge_inbound_count: number;
+	bridge_outbound_vol: number;
+	bridge_outbound_count: number;
+	bridge_net_flow: number;
+	bridge_by_chain: Record<string, ChainFlow>;
+	agent_count: number;
+}
+
+export interface HistoryResponse {
+	window: string;
+	snapshots: AnalyticsSnapshot[];
+	count: number;
 }
