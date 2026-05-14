@@ -8,7 +8,9 @@ import type {
 	BridgeFlowResponse,
 	AgentLeaderboardResponse,
 	OverviewFilter,
-	OverviewResponse
+	OverviewResponse,
+	HistoryFilter,
+	HistoryResponse
 } from '../api/analytics/types.js';
 
 const client = new AnalyticsCrudClient();
@@ -43,7 +45,14 @@ export interface OverviewState {
 	error: string | null;
 }
 
+export interface HistoryState {
+	data: HistoryResponse | null;
+	loading: boolean;
+	error: string | null;
+}
+
 export const analyticsOverview = $state<OverviewState>({ data: null, loading: false, error: null });
+export const analyticsHistory = $state<HistoryState>({ data: null, loading: false, error: null });
 export const analyticsFees = $state<FeesState>({ data: null, loading: false, error: null });
 export const analyticsVolume = $state<VolumeState>({ data: null, loading: false, error: null });
 export const analyticsBridgeFlow = $state<BridgeFlowState>({ data: null, loading: false, error: null });
@@ -94,6 +103,18 @@ export async function fetchAnalyticsOverview(filter: OverviewFilter = {}) {
 		analyticsOverview.error = String(e);
 	} finally {
 		analyticsOverview.loading = false;
+	}
+}
+
+export async function fetchAnalyticsHistory(filter: HistoryFilter = {}) {
+	analyticsHistory.loading = true;
+	analyticsHistory.error = null;
+	try {
+		analyticsHistory.data = await client.history(filter);
+	} catch (e) {
+		analyticsHistory.error = String(e);
+	} finally {
+		analyticsHistory.loading = false;
 	}
 }
 

@@ -34,10 +34,14 @@
 		analyticsVolume,
 		analyticsBridgeFlow,
 		analyticsAgentLeaderboard,
+		analyticsOverview,
+		analyticsHistory,
 		fetchAnalyticsFees,
 		fetchAnalyticsVolume,
 		fetchAnalyticsBridgeFlow,
-		fetchAgentLeaderboard
+		fetchAgentLeaderboard,
+		fetchAnalyticsOverview,
+		fetchAnalyticsHistory
 	} from '$lib/stores/analytics.svelte';
 
 	// existing filters
@@ -75,6 +79,9 @@
 	let volumeWindow = $state('24h');
 	let volumeToken = $state('');
 	let bridgeWindow = $state('24h');
+	let overviewWindow = $state('24h');
+	let historyWindow = $state('24h');
+	let historyLimit = $state('');
 	let leaderboardLimit = $state('');
 
 	onMount(() => {
@@ -90,6 +97,7 @@
 		fetchAgentJobs();
 		fetchEdges();
 		fetchHealth();
+		fetchAnalyticsOverview();
 		fetchAnalyticsFees();
 		fetchAnalyticsVolume();
 		fetchAnalyticsBridgeFlow();
@@ -189,6 +197,64 @@
 			{#if blockDetail.loading}<p class="mono muted">loading…</p>{/if}
 			{#if blockDetail.error}<p class="mono err-text">{blockDetail.error}</p>{/if}
 			{#if blockDetail.data}<pre>{JSON.stringify(blockDetail.data, null, 2)}</pre>{/if}
+		</div>
+	</div>
+
+	<!-- ANALYTICS: OVERVIEW -->
+	<div class="card">
+		<div class="card-head">
+			<div class="card-title">Analytics · Overview</div>
+			<div class="card-sub">GET /api/v1/analytics/overview</div>
+		</div>
+		<div class="card-body">
+			<div class="filter-bar">
+				<label class="dim"
+					>window
+					<select bind:value={overviewWindow}>
+						<option>1h</option><option>24h</option><option>7d</option>
+					</select>
+				</label>
+				<button
+					class="btn acc"
+					onclick={() =>
+						fetchAnalyticsOverview({ window: overviewWindow as '1h' | '24h' | '7d' })}>fetch</button
+				>
+			</div>
+			{#if analyticsOverview.loading}<p class="mono muted">loading…</p>{/if}
+			{#if analyticsOverview.error}<p class="mono err-text">{analyticsOverview.error}</p>{/if}
+			{#if analyticsOverview.data}<pre>{JSON.stringify(analyticsOverview.data, null, 2)}</pre>{/if}
+		</div>
+	</div>
+
+	<!-- ANALYTICS: HISTORY -->
+	<div class="card">
+		<div class="card-head">
+			<div class="card-title">Analytics · History</div>
+			<div class="card-sub">GET /api/v1/analytics/history</div>
+		</div>
+		<div class="card-body">
+			<div class="filter-bar">
+				<label class="dim"
+					>window
+					<select bind:value={historyWindow}>
+						<option>1h</option><option>24h</option><option>7d</option>
+					</select>
+				</label>
+				<label class="dim"
+					>limit <input bind:value={historyLimit} placeholder="50" style="width:60px" /></label
+				>
+				<button
+					class="btn acc"
+					onclick={() =>
+						fetchAnalyticsHistory({
+							window: historyWindow as '1h' | '24h' | '7d',
+							limit: historyLimit ? Number(historyLimit) : undefined
+						})}>fetch</button
+				>
+			</div>
+			{#if analyticsHistory.loading}<p class="mono muted">loading…</p>{/if}
+			{#if analyticsHistory.error}<p class="mono err-text">{analyticsHistory.error}</p>{/if}
+			{#if analyticsHistory.data}<pre>{JSON.stringify(analyticsHistory.data, null, 2)}</pre>{/if}
 		</div>
 	</div>
 

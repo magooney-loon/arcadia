@@ -8,7 +8,9 @@ import type {
 	BridgeFlowResponse,
 	AgentLeaderboardResponse,
 	OverviewFilter,
-	OverviewResponse
+	OverviewResponse,
+	HistoryFilter,
+	HistoryResponse
 } from './types.js';
 
 function qs(params: Record<string, string | number | undefined | null>): string {
@@ -48,6 +50,12 @@ export class AnalyticsCrudClient {
 	async overview(filter: OverviewFilter = {}): Promise<OverviewResponse> {
 		const res = await fetch(`${getApiUrl()}/api/v1/analytics/overview${qs(filter as Record<string, string | number | undefined | null>)}`);
 		if (!res.ok) throw new Error(`analytics/overview: ${res.status}`);
+		return res.json();
+	}
+
+	async history(filter: HistoryFilter = {}): Promise<HistoryResponse> {
+		const res = await fetch(`${getApiUrl()}/api/v1/analytics/history${qs(filter as Record<string, string | number | undefined | null>)}`);
+		if (!res.ok) throw new Error(`analytics/history: ${res.status}`);
 		return res.json();
 	}
 }

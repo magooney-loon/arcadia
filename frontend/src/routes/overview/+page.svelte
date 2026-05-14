@@ -19,6 +19,17 @@
 	import AddrLink from '$lib/components/AddrLink.svelte';
 	import TxLink from '$lib/components/TxLink.svelte';
 
+	type Window = '1h' | '24h' | '7d';
+	let selectedWindow = $state<Window>('24h');
+
+	function refreshAnalytics() {
+		fetchBlockStats(200);
+		fetchAnalyticsOverview({ window: selectedWindow });
+		fetchAnalyticsBridgeFlow({ window: selectedWindow });
+		fetchAnalyticsVolume({ window: selectedWindow });
+		fetchAgentLeaderboard(5);
+	}
+
 	onMount(() => {
 		// Fast pool: live chain data (6s)
 		const refreshLive = () => {
@@ -26,20 +37,12 @@
 			fetchBlocks(10);
 			fetchTransactions({ limit: 10 });
 		};
-		// Slow pool: snapshot-backed analytics (30s)
-		const refreshAnalytics = () => {
-			fetchBlockStats(200);
-			fetchAnalyticsOverview();
-			fetchAnalyticsBridgeFlow();
-			fetchAnalyticsVolume();
-			fetchAgentLeaderboard(5);
-		};
 
 		refreshLive();
 		refreshAnalytics();
 
-		const liveId = setInterval(refreshLive, 6000);
-		const analyticsId = setInterval(refreshAnalytics, 30000);
+		const liveId = setInterval(refreshLive, 2000);
+		const analyticsId = setInterval(refreshAnalytics, 10000);
 		return () => {
 			clearInterval(liveId);
 			clearInterval(analyticsId);
@@ -107,6 +110,14 @@
 			<div class="view-title">Overview</div>
 			<div class="view-sub">Live chain state · arc testnet</div>
 		</div>
+		<div class="view-actions">
+			{#each (['1h', '24h', '7d'] as Window[]) as w (w)}
+				<button
+					class="btn ghost {selectedWindow === w ? 'active' : ''}"
+					onclick={() => { selectedWindow = w; refreshAnalytics(); }}
+				>{w}</button>
+			{/each}
+		</div>
 	</div>
 
 	<!-- Stats row -->
@@ -116,19 +127,19 @@
 			<div class="value">{fmt.tps(stats.data?.tps)}<span class="unit">tx/s</span></div>
 		</div>
 		<div class="stat">
-			<div class="label">Transfers 24h</div>
+			<div class="label">Transfers · {selectedWindow}</div>
 			<div class="value">{fmt.num(analyticsOverview.data?.transfers_count)}</div>
 		</div>
 		<div class="stat">
-			<div class="label">Volume 24h</div>
+			<div class="label">Volume · {selectedWindow}</div>
 			<div class="value">{fmt.usdc(analyticsOverview.data?.transfer_volume)}</div>
 		</div>
 		<div class="stat">
-			<div class="label">Fees 24h</div>
+			<div class="label">Fees · {selectedWindow}</div>
 			<div class="value">{fmt.usdc(analyticsOverview.data?.fees_total)}</div>
 		</div>
 		<div class="stat">
-			<div class="label">Bridge net flow 24h</div>
+			<div class="label">Bridge net flow · {selectedWindow}</div>
 			<div class="value {(analyticsOverview.data?.bridge_net_flow ?? 0) >= 0 ? '' : 'err'}">
 				{fmt.usdc(analyticsOverview.data?.bridge_net_flow)}
 			</div>
@@ -170,21 +181,21 @@
 	{#if volume}
 		<div class="grid" style="grid-template-columns:repeat(5,1fr);margin-top:12px">
 			<div class="stat">
-				<div class="label" style="color:var(--ok)">USDC vol 24h</div>
+				<div class="label" style="color:var(--ok)">USDC vol · {selectedWindow}</div>
 				<div class="value">{fmt.usdc(tokenStats.USDC.volume)}</div>
 				<div class="mono dim" style="font-size:10px">
 					{fmt.num(tokenStats.USDC.count)} transfers
 				</div>
 			</div>
 			<div class="stat">
-				<div class="label" style="color:var(--info)">EURC vol 24h</div>
+				<div class="label" style="color:var(--info)">EURC vol · {selectedWindow}</div>
 				<div class="value">{fmt.usdc(tokenStats.EURC.volume)}</div>
 				<div class="mono dim" style="font-size:10px">
 					{fmt.num(tokenStats.EURC.count)} transfers
 				</div>
 			</div>
 			<div class="stat">
-				<div class="label" style="color:var(--warn)">USYC vol 24h</div>
+				<div class="label" style="color:var(--warn)">USYC vol · {selectedWindow}</div>
 				<div class="value">{fmt.usdc(tokenStats.USYC.volume)}</div>
 				<div class="mono dim" style="font-size:10px">
 					{fmt.num(tokenStats.USYC.count)} transfers
