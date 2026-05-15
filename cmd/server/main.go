@@ -99,19 +99,8 @@ func initApp(devMode bool) {
 	}
 }
 
-// Example models in cmd/server/collections.go
-// Example routes in cmd/server/routes.go
-// Example handlers in cmd/server/handlers.go
-// Example cron jobs in cmd/server/jobs.go
-//
-// You can restructure Your project as You wish,
-// just keep this main.go in cmd/server/main.go
-//
 // Build toolchain (pb-cli):
 // go install github.com/magooney-loon/pb-ext/cmd/pb-cli@latest
-//
-// Need a pre-built Svelte5Kit starter template?
-// https://github.com/magooney-loon/svelte-gui
 //
 // Ready for a production build deployment?
 // https://github.com/magooney-loon/pb-deployer
