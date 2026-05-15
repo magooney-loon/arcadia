@@ -105,6 +105,22 @@ func startIndexerEventWriter(app core.App) {
 	})
 }
 
+// Field caps mirror the indexer_events collection schema. HyperSync
+// 429 responses can carry response bodies well past these, so truncate
+// before insert — otherwise Save() rejects the whole row and we lose
+// the diagnostic record entirely.
+const (
+	maxIndexerEventMessage = 500
+	maxIndexerEventError   = 1000
+)
+
+func truncate(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	return s[:max-1] + "…"
+}
+
 func writeIndexerEvent(app core.App, ev indexerEvent) {
 	c, err := app.FindCollectionByNameOrId("indexer_events")
 	if err != nil {
@@ -115,13 +131,13 @@ func writeIndexerEvent(app core.App, ev indexerEvent) {
 	r.Set("timestamp", ev.ts)
 	r.Set("level", ev.level)
 	r.Set("event", ev.event)
-	r.Set("message", ev.message)
+	r.Set("message", truncate(ev.message, maxIndexerEventMessage))
 	for key, val := range ev.fields {
 		switch key {
 		case "attempt", "batch", "block", "tip", "lag", "duration_ms", "blocks", "transactions", "logs", "error":
 			if key == "error" {
 				if val != nil {
-					r.Set("error", fmt.Sprint(val))
+					r.Set("error", truncate(fmt.Sprint(val), maxIndexerEventError))
 				}
 				continue
 			}
