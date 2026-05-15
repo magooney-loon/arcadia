@@ -14,6 +14,7 @@ import (
 	"github.com/pocketbase/pocketbase/core"
 
 	"arcadia/internal/chain"
+	"arcadia/internal/server/realtime"
 	"arcadia/internal/utils"
 )
 
@@ -236,6 +237,11 @@ func runIndexer(ctx context.Context, app core.App, attempt int) error {
 			"transactions": len(res.Data.Transactions),
 			"logs":         len(res.Data.Logs),
 		})
+
+		// Push live dashboard payload to SSE subscribers. Fire-and-forget
+		// so it never blocks the indexer loop; the broadcaster also self-
+		// throttles to ~1Hz when catching up.
+		go realtime.BroadcastIndexerUpdate(app)
 
 		// Adaptive pacing: sprint when behind, ease off near the tip.
 		// The prefetch goroutine is already running — the sleep here just

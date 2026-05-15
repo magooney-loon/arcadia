@@ -15,6 +15,7 @@
 		fetchAgentLeaderboard
 	} from '$lib/stores/analytics.svelte';
 	import * as fmt from '$lib/fmt.js';
+	import { setRealtimeWindow, connectCharts, disconnectCharts } from '$lib/realtime';
 	import Chart from '$lib/components/Chart.svelte';
 	import AddrLink from '$lib/components/AddrLink.svelte';
 	import TxLink from '$lib/components/TxLink.svelte';
@@ -31,21 +32,26 @@
 	}
 
 	onMount(() => {
-		// Fast pool: live chain data (6s)
-		const refreshLive = () => {
-			fetchStats();
-			fetchBlocks(10);
-			fetchTransactions({ limit: 10 });
-		};
-
-		refreshLive();
+		// Initial REST fetch for instant first paint. After this, the
+		// `indexer` SSE topic (subscribed in +layout.svelte) keeps stats,
+		// blocks, transactions, and block_stats fresh — and the
+		// `analytics` SSE topic refreshes overview/bridge/volume on each
+		// snapshot job tick (every 5 min).
+		setRealtimeWindow(selectedWindow);
+		fetchStats();
+		fetchBlocks(10);
+		fetchTransactions({ limit: 10 });
 		refreshAnalytics();
-
-		const liveId = setInterval(refreshLive, 2000);
-		const analyticsId = setInterval(refreshAnalytics, 10000);
+		// Chart data is on its own SSE topic — only subscribe while the
+		// overview page is mounted, so other tabs don't receive the big
+		// 200-row block_stats payload.
+		connectCharts();
+		// Agent leaderboard isn't on a realtime topic — refresh on a slow
+		// poll so it doesn't grow stale on long-lived tabs.
+		const lbId = setInterval(() => fetchAgentLeaderboard(5), 60000);
 		return () => {
-			clearInterval(liveId);
-			clearInterval(analyticsId);
+			clearInterval(lbId);
+			disconnectCharts();
 		};
 	});
 
@@ -114,7 +120,7 @@
 			{#each (['1h', '24h', '7d'] as Window[]) as w (w)}
 				<button
 					class="btn ghost {selectedWindow === w ? 'active' : ''}"
-					onclick={() => { selectedWindow = w; refreshAnalytics(); }}
+					onclick={() => { selectedWindow = w; setRealtimeWindow(w); refreshAnalytics(); }}
 				>{w}</button>
 			{/each}
 		</div>

@@ -9,6 +9,7 @@
 	import * as fmt from '$lib/fmt.js';
 	import { search, runSearch, clearSearch } from '$lib/stores/search.svelte';
 	import { getApiUrl } from '$lib/stores/config.svelte';
+	import { connectRealtime, disconnectRealtime } from '$lib/realtime';
 
 	let { children } = $props();
 	let drawerOpen = $state(false);
@@ -137,13 +138,13 @@
 	});
 
 	onMount(() => {
+		// One-shot REST fetch for instant first paint; SSE takes over after.
 		fetchStats();
 		fetchHealth();
-		const id = setInterval(() => {
-			fetchStats();
-			fetchHealth();
-		}, 8000);
-		return () => clearInterval(id);
+		connectRealtime();
+		return () => {
+			disconnectRealtime();
+		};
 	});
 
 	interface NavItem {

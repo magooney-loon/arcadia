@@ -11,6 +11,7 @@ import (
 	"github.com/pocketbase/pocketbase/core"
 
 	"arcadia/internal/repo"
+	"arcadia/internal/server/realtime"
 	"arcadia/internal/utils"
 )
 
@@ -33,6 +34,11 @@ func analyticsSnapshotJob(app core.App) error {
 					el.Info("snapshot %s failed: %s", win, err)
 				} else {
 					n++
+					// Push the freshly-computed window aggregates to any
+					// dashboard subscribers. The default window the UI
+					// shows is 24h; broadcast all three so clients can
+					// pick the active one via the message payload.
+					go realtime.BroadcastAnalyticsUpdate(app, win)
 				}
 			}
 			el.Statistics(map[string]interface{}{"windows": n})

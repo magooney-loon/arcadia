@@ -319,12 +319,13 @@ See the Swagger UI at `/api/v1/swagger` for the full endpoint reference, request
 
 ### Realtime (SSE)
 
-Custom PocketBase subscriptions broadcast pre-computed payloads to connected clients via SSE, replacing the frontend's HTTP polling. Two topics cover the entire dashboard:
+Custom PocketBase subscriptions broadcast pre-computed payloads to connected clients via SSE, replacing the frontend's HTTP polling. Three topics cover the entire dashboard:
 
-| Topic | Trigger | Payload |
-|---|---|---|
-| `indexer` | After each indexer batch commit | `{stats, health, blocks[], transactions[], blockStats[]}` |
-| `analytics` | After each analytics snapshot job (every 5 min) | `{overview, bridgeFlow, volume, window}` |
+| Topic | Trigger | Payload | Who subscribes |
+|---|---|---|---|
+| `indexer` | After each indexer batch commit (~1Hz throttle) | `{stats, health, blocks[], transactions[]}` | Every tab (subscribed in `+layout.svelte`) |
+| `charts` | After each indexer batch commit (~1Hz throttle) | `{block_stats[]}` (200 rows) | Only tabs rendering the overview charts |
+| `analytics` | After each analytics snapshot job (every 5 min) | `{overview, bridgeFlow, volume, window}` | Every tab |
 
 See [`docs/Realtime.md`](docs/Realtime.md) for the full implementation plan.
 
