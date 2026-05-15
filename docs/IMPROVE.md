@@ -34,7 +34,7 @@ Legend: ✅ done · 🔄 in progress · ⬜ pending · ⏭ skipped
 | R2 | Split `collections.go` into `collections/*.go` | ✅ |
 | R3 | Move `utils/tokens.go` → `internal/rpc/erc.go` | ✅ |
 | R4 | Move `utils/config.go` → `internal/chain/arc.go` | ✅ |
-| R5 | Introduce `internal/repo/` | ⬜ |
+| R5 | Introduce `internal/repo/` | ✅ |
 | R6 | Extract indexer aggregator | ✅ |
 
 ### SQLite snapshot (probed 2026-05-15 on `pb_data/data.db`)

@@ -10,6 +10,7 @@ import (
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/core"
 
+	"arcadia/internal/repo"
 	"arcadia/internal/utils"
 )
 
@@ -44,11 +45,14 @@ func takeAnalyticsSnapshot(app core.App, window string) error {
 	_, wParams := utils.WindowBlockFilter(app, window)
 	fromBlock := wParams["from"]
 
-	latest, _ := app.FindRecordsByFilter("block_stats", "", "-block_number", 1, 0)
-	if len(latest) == 0 {
+	latest, err := repo.LatestBlockStats(app)
+	if err != nil {
+		return fmt.Errorf("block_stats query: %w", err)
+	}
+	if latest == nil {
 		return fmt.Errorf("no block_stats yet")
 	}
-	blockNumber := latest[0].GetInt("block_number")
+	blockNumber := latest.GetInt("block_number")
 
 	// ── transfers / volume ────────────────────────────────────────────────────
 	//

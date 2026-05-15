@@ -7,6 +7,7 @@ import (
 	"github.com/magooney-loon/pb-ext/core/jobs"
 	"github.com/pocketbase/pocketbase/core"
 
+	"arcadia/internal/repo"
 	"arcadia/internal/utils"
 )
 
@@ -33,13 +34,11 @@ func indexerHealthJob(app core.App) error {
 
 			counts := make(map[string]interface{})
 			for _, name := range collections {
-				var row struct {
-					N int `db:"n"`
-				}
-				if err := app.DB().NewQuery("SELECT COUNT(*) AS n FROM " + name).One(&row); err != nil {
+				n, err := repo.RowCount(app, name)
+				if err != nil {
 					counts[name] = "error"
 				} else {
-					counts[name] = row.N
+					counts[name] = n
 				}
 			}
 

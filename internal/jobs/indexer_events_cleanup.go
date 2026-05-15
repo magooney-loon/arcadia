@@ -5,8 +5,9 @@ import (
 	"time"
 
 	"github.com/magooney-loon/pb-ext/core/jobs"
-	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/core"
+
+	"arcadia/internal/repo"
 )
 
 func indexerEventsCleanupJob(app core.App) error {
@@ -24,16 +25,12 @@ func indexerEventsCleanupJob(app core.App) error {
 			el.Start("Indexer Events Cleanup")
 
 			cutoff := time.Now().Add(-2 * time.Hour).Unix()
-			res, err := app.DB().
-				NewQuery("DELETE FROM indexer_events WHERE timestamp < {:c}").
-				Bind(dbx.Params{"c": cutoff}).
-				Execute()
+			deleted, err := repo.DeleteEventsBefore(app, cutoff)
 			if err != nil {
 				el.Info("Failed to delete old events: %s", err)
 				el.Complete("Cleanup failed")
 				return
 			}
-			deleted, _ := res.RowsAffected()
 
 			el.Statistics(map[string]interface{}{"deleted": deleted})
 			el.Complete(fmt.Sprintf("Deleted %d events older than 2 hours", deleted))

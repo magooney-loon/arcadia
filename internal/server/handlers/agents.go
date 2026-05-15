@@ -5,6 +5,8 @@ package handlers
 import (
 	"net/http"
 
+	"arcadia/internal/repo"
+
 	"github.com/pocketbase/pocketbase/core"
 )
 
@@ -12,7 +14,7 @@ import (
 // API_TAGS Agents
 func agentsHandler(c *core.RequestEvent) error {
 	limit, offset := limitOffset(c)
-	records, err := c.App.FindRecordsByFilter("agents", "", "-registered_at_block", limit, offset)
+	records, err := repo.ListAgents(c.App, limit, offset)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error()})
 	}
@@ -34,17 +36,15 @@ func agentHandler(c *core.RequestEvent) error {
 		return c.JSON(http.StatusBadRequest, map[string]any{"error": "address required"})
 	}
 
-	agentRows, _ := c.App.FindRecordsByFilter("agents", "agent_address = {:a}", "", 1, 0, map[string]any{"a": address})
-	if len(agentRows) == 0 {
+	agentRow, err := repo.AgentByAddress(c.App, address)
+	if err != nil || agentRow == nil {
 		return c.JSON(http.StatusNotFound, map[string]any{"error": "agent not found"})
 	}
 
-	jobs, _ := c.App.FindRecordsByFilter("agent_jobs",
-		"employer_address = {:a} || worker_address = {:a}", "-created_at_block", 50, 0,
-		map[string]any{"a": address})
+	jobs, _ := repo.JobsByAddress(c.App, address, 50, 0)
 
 	return c.JSON(http.StatusOK, map[string]any{
-		"agent": enrichAgentRecord(agentRows[0]),
+		"agent": enrichAgentRecord(agentRow),
 		"jobs":  recordsToMaps(jobs),
 	})
 }
@@ -54,28 +54,18 @@ func agentHandler(c *core.RequestEvent) error {
 func agentJobsHandler(c *core.RequestEvent) error {
 	limit, offset := limitOffset(c)
 
-	filter := ""
-	params := map[string]any{}
+	f := repo.JobFilter{}
 	if status := qp(c, "status", ""); status != "" {
-		filter = "status = {:s}"
-		params["s"] = status
+		f.Status = status
 	}
 	if employer := qp(c, "employer", ""); employer != "" {
-		if filter != "" {
-			filter += " && "
-		}
-		filter += "employer_address = {:e}"
-		params["e"] = employer
+		f.Employer = employer
 	}
 	if worker := qp(c, "worker", ""); worker != "" {
-		if filter != "" {
-			filter += " && "
-		}
-		filter += "worker_address = {:w}"
-		params["w"] = worker
+		f.Worker = worker
 	}
 
-	records, err := c.App.FindRecordsByFilter("agent_jobs", filter, "-created_at_block", limit, offset, params)
+	records, err := repo.ListJobs(c.App, f, limit, offset)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error()})
 	}
@@ -96,39 +86,16 @@ func analyticsAgentLeaderboardHandler(c *core.RequestEvent) error {
 
 	// Batch query: get job stats for ALL agents in a single SQL aggregation
 	// instead of N+1 queries per agent.
-	type jobAgg struct {
-		Addr         string  `db:"addr"`
-		JobCount     int     `db:"job_count"`
-		TotalEscrow  float64 `db:"total_escrow"`
-		PaidJobs     int     `db:"paid_jobs"`
-		RejectedJobs int     `db:"rejected_jobs"`
-	}
-	var jobStats []jobAgg
-	_ = c.App.DB().NewQuery(`
-		SELECT addr, SUM(job_count) as job_count, SUM(total_escrow) as total_escrow,
-		       SUM(paid_jobs) as paid_jobs, SUM(rejected_jobs) as rejected_jobs
-		FROM (
-		    SELECT employer_address as addr, COUNT(*) as job_count,
-		           COALESCE(SUM(CAST(payment_usdc AS REAL)), 0) as total_escrow,
-		           SUM(CASE WHEN status = 'paid' THEN 1 ELSE 0 END) as paid_jobs,
-		           SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected_jobs
-		    FROM agent_jobs GROUP BY employer_address
-		    UNION ALL
-		    SELECT worker_address as addr, COUNT(*) as job_count,
-		           COALESCE(SUM(CAST(payment_usdc AS REAL)), 0) as total_escrow,
-		           SUM(CASE WHEN status = 'paid' THEN 1 ELSE 0 END) as paid_jobs,
-		           SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected_jobs
-		    FROM agent_jobs GROUP BY worker_address
-		) GROUP BY addr`).All(&jobStats)
+	jobStats, _ := repo.AgentJobStats(c.App)
 
-	statsMap := make(map[string]*jobAgg, len(jobStats))
+	statsMap := make(map[string]*repo.JobAgg, len(jobStats))
 	for i := range jobStats {
 		statsMap[jobStats[i].Addr] = &jobStats[i]
 	}
 
 	// Index-backed sort on the numeric mirror column avoids the old in-memory
 	// sprintf+ParseFloat-per-agent pass and lets us cap the result set in SQL.
-	agents, err := c.App.FindRecordsByFilter("agents", "", "-usdc_transferred_num", limit, 0)
+	agents, err := repo.AgentLeaderboard(c.App, limit, 0)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error()})
 	}

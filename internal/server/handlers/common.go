@@ -9,6 +9,7 @@ import (
 
 	"github.com/pocketbase/pocketbase/core"
 
+	"arcadia/internal/repo"
 	"arcadia/internal/utils"
 )
 
@@ -31,6 +32,8 @@ func limitOffset(c *core.RequestEvent) (int, int) {
 	return limit, offset
 }
 
+// recordsToMaps converts a slice of records to public-exported maps.
+// Equivalent to repo.RecordMaps; kept here for convenience since many handlers call it.
 func recordsToMaps(records []*core.Record) []map[string]any {
 	out := make([]map[string]any, len(records))
 	for i, r := range records {
@@ -97,10 +100,9 @@ func isNumeric(s string) bool {
 // latestSnapshot returns the most recent analytics_snapshots row for the given
 // window, or (nil, false) if none exists yet (e.g. fresh install before first job run).
 func latestSnapshot(app core.App, window string) (*core.Record, bool) {
-	rows, err := app.FindRecordsByFilter("analytics_snapshots",
-		"window = {:w}", "-snapshot_at", 1, 0, map[string]any{"w": window})
-	if err != nil || len(rows) == 0 {
+	row, err := repo.LatestSnapshot(app, window)
+	if err != nil || row == nil {
 		return nil, false
 	}
-	return rows[0], true
+	return row, true
 }

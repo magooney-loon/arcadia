@@ -8,13 +8,15 @@ import (
 	"strings"
 
 	"github.com/pocketbase/pocketbase/core"
+
+	"arcadia/internal/repo"
 )
 
 // API_DESC Recent blocks with derived stats
 // API_TAGS Chain
 func blocksHandler(c *core.RequestEvent) error {
 	limit, offset := limitOffset(c)
-	records, err := c.App.FindRecordsByFilter("blocks", "", "-number", limit, offset)
+	records, err := repo.ListBlocks(c.App, limit, offset)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error()})
 	}
@@ -29,29 +31,20 @@ func blocksHandler(c *core.RequestEvent) error {
 func transactionsHandler(c *core.RequestEvent) error {
 	limit, offset := limitOffset(c)
 
-	filter := ""
-	params := map[string]any{}
-
+	f := repo.TransactionFilter{}
 	if block := qp(c, "block", ""); block != "" {
-		filter = "block_number = {:b}"
-		params["b"] = block
+		if n, err := strconv.ParseInt(block, 10, 64); err == nil {
+			f.BlockNumber = n
+		}
 	}
 	if from := qp(c, "from", ""); from != "" {
-		if filter != "" {
-			filter += " && "
-		}
-		filter += "from_addr = {:f}"
-		params["f"] = from
+		f.FromAddr = from
 	}
 	if to := qp(c, "to", ""); to != "" {
-		if filter != "" {
-			filter += " && "
-		}
-		filter += "to_addr = {:t}"
-		params["t"] = to
+		f.ToAddr = to
 	}
 
-	records, err := c.App.FindRecordsByFilter("transactions", filter, "-block_number", limit, offset, params)
+	records, err := repo.ListTransactions(c.App, f, limit, offset)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error()})
 	}
@@ -66,28 +59,18 @@ func transactionsHandler(c *core.RequestEvent) error {
 func tracesHandler(c *core.RequestEvent) error {
 	limit, offset := limitOffset(c)
 
-	filter := ""
-	params := map[string]any{}
+	f := repo.TraceFilter{}
 	if tx := qp(c, "tx_hash", ""); tx != "" {
-		filter = "tx_hash = {:tx}"
-		params["tx"] = tx
+		f.TxHash = tx
 	}
 	if from := qp(c, "from", ""); from != "" {
-		if filter != "" {
-			filter += " && "
-		}
-		filter += "from_addr = {:f}"
-		params["f"] = from
+		f.FromAddr = from
 	}
 	if to := qp(c, "to", ""); to != "" {
-		if filter != "" {
-			filter += " && "
-		}
-		filter += "to_addr = {:t}"
-		params["t"] = to
+		f.ToAddr = to
 	}
 
-	records, err := c.App.FindRecordsByFilter("traces", filter, "-block_number", limit, offset, params)
+	records, err := repo.ListTraces(c.App, f, limit, offset)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error()})
 	}
@@ -106,19 +89,19 @@ func searchHandler(c *core.RequestEvent) error {
 	}
 
 	if len(q) == 66 && strings.HasPrefix(q, "0x") {
-		rows, _ := c.App.FindRecordsByFilter("transactions", "hash = {:h}", "", 1, 0, map[string]any{"h": q})
-		if len(rows) > 0 {
-			return c.JSON(http.StatusOK, map[string]any{"type": "tx", "result": rows[0].PublicExport()})
+		tx, _ := repo.TransactionByHash(c.App, q)
+		if tx != nil {
+			return c.JSON(http.StatusOK, map[string]any{"type": "tx", "result": tx.PublicExport()})
 		}
 		return c.JSON(http.StatusOK, map[string]any{"type": "not_found"})
 	}
 
 	if len(q) == 42 && strings.HasPrefix(q, "0x") {
-		agents, _ := c.App.FindRecordsByFilter("agents", "agent_address = {:a}", "", 1, 0, map[string]any{"a": q})
-		if len(agents) > 0 {
+		agent, _ := repo.AgentByAddress(c.App, q)
+		if agent != nil {
 			return c.JSON(http.StatusOK, map[string]any{
 				"type":   "agent",
-				"result": map[string]any{"address": q, "is_agent": true, "agent": agents[0].PublicExport()},
+				"result": map[string]any{"address": q, "is_agent": true, "agent": agent.PublicExport()},
 			})
 		}
 		return c.JSON(http.StatusOK, map[string]any{
@@ -129,9 +112,9 @@ func searchHandler(c *core.RequestEvent) error {
 
 	if isNumeric(q) {
 		num, _ := strconv.Atoi(q)
-		rows, _ := c.App.FindRecordsByFilter("blocks", "number = {:n}", "", 1, 0, map[string]any{"n": num})
-		if len(rows) > 0 {
-			return c.JSON(http.StatusOK, map[string]any{"type": "block", "result": rows[0].PublicExport()})
+		block, _ := repo.BlockByNumber(c.App, int64(num))
+		if block != nil {
+			return c.JSON(http.StatusOK, map[string]any{"type": "block", "result": block.PublicExport()})
 		}
 		return c.JSON(http.StatusOK, map[string]any{"type": "not_found"})
 	}
@@ -147,16 +130,16 @@ func txDetailHandler(c *core.RequestEvent) error {
 		return c.JSON(http.StatusBadRequest, map[string]any{"error": "hash required"})
 	}
 
-	txs, _ := c.App.FindRecordsByFilter("transactions", "hash = {:h}", "", 1, 0, map[string]any{"h": hash})
-	if len(txs) == 0 {
+	tx, err := repo.TransactionByHash(c.App, hash)
+	if err != nil || tx == nil {
 		return c.JSON(http.StatusNotFound, map[string]any{"error": "transaction not found"})
 	}
 
-	transfers, _ := c.App.FindRecordsByFilter("transfers", "tx_hash = {:h}", "-block_number", 50, 0, map[string]any{"h": hash})
-	traces, _ := c.App.FindRecordsByFilter("traces", "tx_hash = {:h}", "", 50, 0, map[string]any{"h": hash})
+	transfers, _ := repo.TransfersByTxHash(c.App, hash)
+	traces, _ := repo.TracesByTxHash(c.App, hash)
 
 	return c.JSON(http.StatusOK, map[string]any{
-		"transaction": txs[0].PublicExport(),
+		"transaction": tx.PublicExport(),
 		"transfers":   recordsToMaps(transfers),
 		"traces":      recordsToMaps(traces),
 	})
@@ -171,20 +154,20 @@ func blockDetailHandler(c *core.RequestEvent) error {
 		return c.JSON(http.StatusBadRequest, map[string]any{"error": "block number required"})
 	}
 
-	blocks, _ := c.App.FindRecordsByFilter("blocks", "number = {:n}", "", 1, 0, map[string]any{"n": num})
-	if len(blocks) == 0 {
+	block, err := repo.BlockByNumber(c.App, int64(num))
+	if err != nil || block == nil {
 		return c.JSON(http.StatusNotFound, map[string]any{"error": "block not found"})
 	}
 
-	txs, _ := c.App.FindRecordsByFilter("transactions", "block_number = {:n}", "", 500, 0, map[string]any{"n": num})
-	stats, _ := c.App.FindRecordsByFilter("block_stats", "block_number = {:n}", "", 1, 0, map[string]any{"n": num})
+	txs, _ := repo.TransactionsByBlock(c.App, int64(num))
+	stat, _ := repo.BlockStatsByNumber(c.App, int64(num))
 
 	result := map[string]any{
-		"block":        blocks[0].PublicExport(),
+		"block":        block.PublicExport(),
 		"transactions": recordsToMaps(txs),
 	}
-	if len(stats) > 0 {
-		result["stats"] = stats[0].PublicExport()
+	if stat != nil {
+		result["stats"] = stat.PublicExport()
 	}
 	return c.JSON(http.StatusOK, result)
 }

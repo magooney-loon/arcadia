@@ -8,6 +8,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/pocketbase/pocketbase/core"
 
+	"arcadia/internal/repo"
 	"arcadia/internal/rpc"
 	"arcadia/internal/utils"
 )
@@ -54,7 +55,7 @@ func RunTokenAnalytics(app core.App) {
 	}
 
 	// Single-pass preload: one query instead of N FindRecordsByFilter calls.
-	existing, err := app.FindRecordsByFilter("token_analytics", "", "", 0, 0)
+	existing, err := repo.AllTokenAnalytics(app)
 	if err != nil {
 		log.Printf("[token-analytics] preload failed: %v", err)
 		return

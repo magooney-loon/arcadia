@@ -7,6 +7,8 @@ import (
 	"net/http"
 
 	"github.com/pocketbase/pocketbase/core"
+
+	"arcadia/internal/repo"
 )
 
 // API_DESC Fee analytics: P25/P50/P75/P95 percentiles, failed tx ratio, avg block time
@@ -138,8 +140,7 @@ func analyticsHistoryHandler(c *core.RequestEvent) error {
 	if limit > 1000 {
 		limit = 1000
 	}
-	rows, _ := c.App.FindRecordsByFilter("analytics_snapshots",
-		"window = {:w}", "-snapshot_at", limit, 0, map[string]any{"w": window})
+	rows, _ := repo.SnapshotHistory(c.App, window, limit, 0)
 
 	// reverse to ascending order (oldest first) for chart rendering
 	for i, j := 0, len(rows)-1; i < j; i, j = i+1, j-1 {

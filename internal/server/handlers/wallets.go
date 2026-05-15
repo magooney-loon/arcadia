@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"sync"
 
+	"arcadia/internal/repo"
+
 	"github.com/pocketbase/pocketbase/core"
 )
 
@@ -27,39 +29,38 @@ func walletHandler(c *core.RequestEvent) error {
 		sent, received       []*core.Record
 		outEdges, inEdges    []*core.Record
 		txsSent, txsReceived []*core.Record
-		agentRecords         []*core.Record
+		agentRecord          *core.Record
 	)
-	params := map[string]any{"a": address}
 	run := func(fn func()) {
 		wg.Add(1)
 		go func() { defer wg.Done(); fn() }()
 	}
 	run(func() {
-		sent, _ = c.App.FindRecordsByFilter("transfers", "from_addr = {:a}", "-block_number", limit, offset, params)
+		sent, _ = repo.TransfersBySender(c.App, address, limit, offset)
 	})
 	run(func() {
-		received, _ = c.App.FindRecordsByFilter("transfers", "to_addr = {:a}", "-block_number", limit, offset, params)
+		received, _ = repo.TransfersByReceiver(c.App, address, limit, offset)
 	})
 	run(func() {
-		outEdges, _ = c.App.FindRecordsByFilter("wallet_edges", "from_wallet = {:a}", "-tx_count", 20, 0, params)
+		outEdges, _ = repo.EdgesByFromWallet(c.App, address, 20, 0)
 	})
 	run(func() {
-		inEdges, _ = c.App.FindRecordsByFilter("wallet_edges", "to_wallet = {:a}", "-tx_count", 20, 0, params)
+		inEdges, _ = repo.EdgesByToWallet(c.App, address, 20, 0)
 	})
 	run(func() {
-		txsSent, _ = c.App.FindRecordsByFilter("transactions", "from_addr = {:a}", "-block_number", limit, offset, params)
+		txsSent, _ = repo.TransactionsBySender(c.App, address, limit, offset)
 	})
 	run(func() {
-		txsReceived, _ = c.App.FindRecordsByFilter("transactions", "to_addr = {:a}", "-block_number", limit, offset, params)
+		txsReceived, _ = repo.TransactionsByReceiver(c.App, address, limit, offset)
 	})
 	run(func() {
-		agentRecords, _ = c.App.FindRecordsByFilter("agents", "agent_address = {:a}", "", 1, 0, params)
+		agentRecord, _ = repo.AgentByAddress(c.App, address)
 	})
 	wg.Wait()
 
 	var agentData any
-	if len(agentRecords) > 0 {
-		agentData = enrichAgentRecord(agentRecords[0])
+	if agentRecord != nil {
+		agentData = enrichAgentRecord(agentRecord)
 	}
 
 	enrichEdges := func(recs []*core.Record) []map[string]any {
@@ -87,15 +88,9 @@ func walletHandler(c *core.RequestEvent) error {
 // API_TAGS Graph
 func edgesHandler(c *core.RequestEvent) error {
 	limit, offset := limitOffset(c)
+	wallet := qp(c, "wallet", "")
 
-	filter := ""
-	params := map[string]any{}
-	if wallet := qp(c, "wallet", ""); wallet != "" {
-		filter = "from_wallet = {:w} || to_wallet = {:w}"
-		params["w"] = wallet
-	}
-
-	records, err := c.App.FindRecordsByFilter("wallet_edges", filter, "-tx_count", limit, offset, params)
+	records, err := repo.EdgesByWallet(c.App, wallet, limit, offset)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error()})
 	}

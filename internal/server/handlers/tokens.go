@@ -4,7 +4,10 @@ package handlers
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
+
+	"arcadia/internal/repo"
 
 	"github.com/pocketbase/pocketbase/core"
 )
@@ -14,36 +17,23 @@ import (
 func transfersHandler(c *core.RequestEvent) error {
 	limit, offset := limitOffset(c)
 
-	filter := ""
-	params := map[string]any{}
-
+	f := repo.TransferFilter{}
 	if block := qp(c, "block", ""); block != "" {
-		filter = "block_number = {:b}"
-		params["b"] = block
+		if bn, err := strconv.ParseInt(block, 10, 64); err == nil {
+			f.BlockNumber = bn
+		}
 	}
 	if token := qp(c, "token", ""); token != "" {
-		if filter != "" {
-			filter += " && "
-		}
-		filter += "token_symbol = {:sym}"
-		params["sym"] = strings.ToUpper(token)
+		f.TokenSymbol = strings.ToUpper(token)
 	}
 	if from := qp(c, "from", ""); from != "" {
-		if filter != "" {
-			filter += " && "
-		}
-		filter += "from_addr = {:f}"
-		params["f"] = from
+		f.FromAddr = from
 	}
 	if to := qp(c, "to", ""); to != "" {
-		if filter != "" {
-			filter += " && "
-		}
-		filter += "to_addr = {:t}"
-		params["t"] = to
+		f.ToAddr = to
 	}
 
-	records, err := c.App.FindRecordsByFilter("transfers", filter, "-block_number", limit, offset, params)
+	records, err := repo.ListTransfers(c.App, f, limit, offset)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error()})
 	}
@@ -57,16 +47,9 @@ func transfersHandler(c *core.RequestEvent) error {
 // API_TAGS Tokens
 func tokensHandler(c *core.RequestEvent) error {
 	limit, offset := limitOffset(c)
+	search := qp(c, "search", "")
 
-	filter := ""
-	params := map[string]any{}
-
-	if search := qp(c, "search", ""); search != "" {
-		filter = "(LOWER(symbol) LIKE {:s} OR LOWER(name) LIKE {:s} OR LOWER(token_address) LIKE {:s})"
-		params["s"] = "%" + strings.ToLower(search) + "%"
-	}
-
-	records, err := c.App.FindRecordsByFilter("token_analytics", filter, "-transfer_count", limit, offset, params)
+	records, err := repo.ListTokens(c.App, search, limit, offset)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error()})
 	}
@@ -87,25 +70,21 @@ func tokenDetailHandler(c *core.RequestEvent) error {
 
 	lower := strings.ToLower(address)
 
-	tokenRows, err := c.App.FindRecordsByFilter("token_analytics",
-		"token_address = {:a}", "", 1, 0,
-		map[string]any{"a": lower})
-	if err != nil || len(tokenRows) == 0 {
+	tokenRow, err := repo.TokenByAddress(c.App, lower)
+	if err != nil || tokenRow == nil {
 		return c.JSON(http.StatusNotFound, map[string]any{"error": "token not found"})
 	}
 
-	tokenAddr := strings.ToLower(tokenRows[0].GetString("token_address"))
+	tokenAddr := strings.ToLower(tokenRow.GetString("token_address"))
 
 	// Fetch recent transfers for this token
-	transfers, err := c.App.FindRecordsByFilter("transfers",
-		"token_address = {:a}", "-block_number", 50, 0,
-		map[string]any{"a": tokenAddr})
+	transfers, err := repo.TransfersByTokenAddress(c.App, tokenAddr, 50, 0)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error()})
 	}
 
 	return c.JSON(http.StatusOK, map[string]any{
-		"token":     tokenRows[0].PublicExport(),
+		"token":     tokenRow.PublicExport(),
 		"transfers": recordsToMaps(transfers),
 	})
 }
