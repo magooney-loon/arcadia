@@ -17,12 +17,13 @@ import (
 	"github.com/pocketbase/pocketbase/core"
 )
 
-// TokenInfo describes an ERC-20 token's display metadata.
+// TokenInfo describes an ERC-20/ERC-721/ERC-1155 token's display metadata.
 type TokenInfo struct {
 	Address      common.Address
 	Symbol       string
 	Name         string
 	Decimals     uint8
+	TokenType    string // "ERC-20", "ERC-721", "ERC-1155", or ""
 	LookupFailed bool
 }
 
@@ -47,7 +48,7 @@ func SeedKnownTokens() {
 	tokenInfoMu.Lock()
 	defer tokenInfoMu.Unlock()
 	for addr, sym := range KnownTokens {
-		tokenInfoCache[addr] = TokenInfo{Address: addr, Symbol: sym, Decimals: 6}
+		tokenInfoCache[addr] = TokenInfo{Address: addr, Symbol: sym, Decimals: 6, TokenType: "ERC-20"}
 	}
 }
 
@@ -71,6 +72,7 @@ func LookupTokenInfo(app core.App, addr common.Address, firstSeenBlock uint64) T
 			Symbol:       r.GetString("symbol"),
 			Name:         r.GetString("name"),
 			Decimals:     uint8(r.GetInt("decimals")),
+			TokenType:    r.GetString("token_type"),
 			LookupFailed: r.GetBool("lookup_failed"),
 		}
 		tokenInfoMu.Lock()
@@ -79,7 +81,7 @@ func LookupTokenInfo(app core.App, addr common.Address, firstSeenBlock uint64) T
 		return info
 	}
 
-	// Fetch from RPC (decimals + symbol + name in one pass).
+	// Fetch from RPC (detects ERC-20, ERC-721, ERC-1155 automatically).
 	info := fetchTokenInfoFromRPC(addr)
 	info.Address = addr
 
@@ -91,6 +93,7 @@ func LookupTokenInfo(app core.App, addr common.Address, firstSeenBlock uint64) T
 		r.Set("symbol", info.Symbol)
 		r.Set("name", info.Name)
 		r.Set("decimals", int(info.Decimals))
+		r.Set("token_type", info.TokenType)
 		r.Set("first_seen_block", firstSeenBlock)
 		r.Set("lookup_failed", info.LookupFailed)
 		_ = app.Save(r)
@@ -102,21 +105,125 @@ func LookupTokenInfo(app core.App, addr common.Address, firstSeenBlock uint64) T
 	return info
 }
 
+// ── ERC-165 interface IDs ────────────────────────────────────────────────────
+
+const (
+	// supportsInterface(bytes4) selector
+	sigSupportsInterface = "0x01ffc9a7"
+	// ERC-721 metadata interface (does NOT include ERC-721Enumerable)
+	erc721InterfaceID = "80ac58cd"
+	// ERC-1155 core interface
+	erc1155InterfaceID = "d9b67a26"
+)
+
+// ── RPC call helpers ─────────────────────────────────────────────────────────
+
+const sigDecimals = "0x313ce567"
+const sigSymbol = "0x95d89b41"
+const sigName = "0x06fdde03"
+const sigTotalSupply = "0x18160ddd"
+
+// fetchTokenInfoFromRPC tries to classify a contract as ERC-20, ERC-721, or
+// ERC-1155 using the following heuristic chain per RPC endpoint:
+//
+//  1. decimals() succeeds → ERC-20 (fetch symbol, name as well)
+//  2. supportsInterface(ERC-721) → ERC-721
+//  3. supportsInterface(ERC-1155) → ERC-1155
+//  4. symbol() or name() work without decimals → assume ERC-721 (heuristic)
+//
+// Falls through to the next RPC on any transport error.
 func fetchTokenInfoFromRPC(addr common.Address) TokenInfo {
 	for _, rpcURL := range arcRPCPool {
+		// ── ERC-20 path ──
 		dec, ok := callDecimals(rpcURL, addr)
-		if !ok {
-			continue
+		if ok {
+			sym, _ := callSymbol(rpcURL, addr)
+			nm, _ := callName(rpcURL, addr)
+			return TokenInfo{Symbol: sym, Name: nm, Decimals: dec, TokenType: "ERC-20"}
 		}
-		sym, _ := callSymbol(rpcURL, addr)
-		nm, _ := callName(rpcURL, addr)
-		return TokenInfo{Symbol: sym, Name: nm, Decimals: dec}
+
+		// ── NFT detection via ERC-165 ──
+		if callSupportsInterface(rpcURL, addr, erc721InterfaceID) {
+			sym, _ := callSymbol(rpcURL, addr)
+			nm, _ := callName(rpcURL, addr)
+			return TokenInfo{Symbol: sym, Name: nm, TokenType: "ERC-721"}
+		}
+		if callSupportsInterface(rpcURL, addr, erc1155InterfaceID) {
+			sym, _ := callSymbol(rpcURL, addr)
+			nm, _ := callName(rpcURL, addr)
+			return TokenInfo{Symbol: sym, Name: nm, TokenType: "ERC-1155"}
+		}
+
+		// ── Heuristic: no ERC-165 but symbol/name exist → likely ERC-721 ──
+		sym, symOk := callSymbol(rpcURL, addr)
+		nm, nmOk := callName(rpcURL, addr)
+		if symOk || nmOk {
+			return TokenInfo{Symbol: sym, Name: nm, TokenType: "ERC-721"}
+		}
 	}
 	return TokenInfo{LookupFailed: true}
 }
 
-const sigDecimals = "0x313ce567"
-const sigSymbol = "0x95d89b41"
+// FetchFullTokenInfo calls name(), symbol(), decimals(), totalSupply() on the
+// contract and classifies it as ERC-20, ERC-721, or ERC-1155.
+func FetchFullTokenInfo(addr common.Address) FullTokenInfo {
+	for _, rpcURL := range arcRPCPool {
+		// ── ERC-20 path ──
+		dec, ok := callDecimals(rpcURL, addr)
+		if ok {
+			sym, _ := callSymbol(rpcURL, addr)
+			nm, _ := callName(rpcURL, addr)
+			ts, _ := callTotalSupply(rpcURL, addr)
+			return FullTokenInfo{
+				Name: nm, Symbol: sym, Decimals: dec,
+				TotalSupply: ts, TokenType: "ERC-20",
+			}
+		}
+
+		// ── NFT detection ──
+		if callSupportsInterface(rpcURL, addr, erc721InterfaceID) {
+			sym, _ := callSymbol(rpcURL, addr)
+			nm, _ := callName(rpcURL, addr)
+			return FullTokenInfo{Name: nm, Symbol: sym, TokenType: "ERC-721"}
+		}
+		if callSupportsInterface(rpcURL, addr, erc1155InterfaceID) {
+			sym, _ := callSymbol(rpcURL, addr)
+			nm, _ := callName(rpcURL, addr)
+			return FullTokenInfo{Name: nm, Symbol: sym, TokenType: "ERC-1155"}
+		}
+
+		// ── Heuristic fallback ──
+		sym, symOk := callSymbol(rpcURL, addr)
+		nm, nmOk := callName(rpcURL, addr)
+		if symOk || nmOk {
+			return FullTokenInfo{Name: nm, Symbol: sym, TokenType: "ERC-721"}
+		}
+	}
+	return FullTokenInfo{LookupFailed: true}
+}
+
+// FullTokenInfo holds all ERC-20/721/1155 metadata retrieved from onchain calls.
+type FullTokenInfo struct {
+	Name         string
+	Symbol       string
+	Decimals     uint8
+	TotalSupply  *big.Int
+	TokenType    string // "ERC-20", "ERC-721", "ERC-1155"
+	LookupFailed bool
+}
+
+// callSupportsInterface calls ERC-165 supportsInterface(bytes4) on the contract.
+// interfaceIDHex is the 4-byte hex ID without "0x" prefix (e.g. "80ac58cd").
+func callSupportsInterface(rpcURL string, addr common.Address, interfaceIDHex string) bool {
+	// ABI: supportsInterface(bytes4) → bool
+	// Calldata = selector (4 bytes) + padded arg (32 bytes)
+	data := sigSupportsInterface + interfaceIDHex + "00000000000000000000000000000000000000000000000000000000"
+	raw, err := ethCall(rpcURL, addr, data)
+	if err != nil || len(raw) < 32 {
+		return false
+	}
+	return raw[31] == 1
+}
 
 func callDecimals(rpcURL string, addr common.Address) (uint8, bool) {
 	raw, err := ethCall(rpcURL, addr, sigDecimals)
@@ -146,9 +253,6 @@ func callSymbol(rpcURL string, addr common.Address) (string, bool) {
 	return s, s != ""
 }
 
-const sigName = "0x06fdde03"
-const sigTotalSupply = "0x18160ddd"
-
 func callName(rpcURL string, addr common.Address) (string, bool) {
 	raw, err := ethCall(rpcURL, addr, sigName)
 	if err != nil || len(raw) == 0 {
@@ -172,35 +276,6 @@ func callTotalSupply(rpcURL string, addr common.Address) (*big.Int, bool) {
 	}
 	n := new(big.Int).SetBytes(raw)
 	return n, true
-}
-
-// FetchFullTokenInfo calls name(), symbol(), decimals(), totalSupply() on the contract.
-func FetchFullTokenInfo(addr common.Address) FullTokenInfo {
-	for _, rpcURL := range arcRPCPool {
-		dec, ok := callDecimals(rpcURL, addr)
-		if !ok {
-			continue
-		}
-		sym, _ := callSymbol(rpcURL, addr)
-		nm, _ := callName(rpcURL, addr)
-		ts, _ := callTotalSupply(rpcURL, addr)
-		return FullTokenInfo{
-			Name:        nm,
-			Symbol:      sym,
-			Decimals:    dec,
-			TotalSupply: ts,
-		}
-	}
-	return FullTokenInfo{LookupFailed: true}
-}
-
-// FullTokenInfo holds all ERC-20 metadata retrieved from onchain calls.
-type FullTokenInfo struct {
-	Name         string
-	Symbol       string
-	Decimals     uint8
-	TotalSupply  *big.Int
-	LookupFailed bool
 }
 
 func ethCall(rpcURL string, addr common.Address, dataHex string) ([]byte, error) {

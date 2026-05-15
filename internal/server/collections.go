@@ -98,6 +98,10 @@ func tokenAnalyticsCollection(app core.App) error {
 	c.Fields.Add(&core.TextField{Name: "symbol", Required: false, Max: 64})
 	c.Fields.Add(&core.TextField{Name: "name", Required: false, Max: 128})
 	c.Fields.Add(&core.NumberField{Name: "decimals"})
+	c.Fields.Add(&core.SelectField{
+		Name:   "token_type",
+		Values: []string{"ERC-20", "ERC-721", "ERC-1155"},
+	})
 	c.Fields.Add(&core.TextField{Name: "total_supply_raw", Required: false, Max: 80})   // raw uint256 as string
 	c.Fields.Add(&core.TextField{Name: "total_supply_human", Required: false, Max: 80}) // formatted
 	c.Fields.Add(&core.NumberField{Name: "transfer_count"})
@@ -251,7 +255,11 @@ func transfersCollection(app core.App) error {
 		Values: []string{"USDC", "EURC", "USYC", "OTHER"},
 	})
 	c.Fields.Add(&core.TextField{Name: "token_name", Required: false, Max: 32}) // RPC symbol() result
-	c.Fields.Add(&core.NumberField{Name: "decimals"})                           // RPC decimals() result
+	c.Fields.Add(&core.SelectField{
+		Name:   "token_type",
+		Values: []string{"ERC-20", "ERC-721", "ERC-1155"},
+	})
+	c.Fields.Add(&core.NumberField{Name: "decimals"}) // RPC decimals() result
 	c.Fields.Add(&core.TextField{Name: "from_addr", Required: false, Max: 42})
 	c.Fields.Add(&core.TextField{Name: "to_addr", Required: false, Max: 42})
 	c.Fields.Add(&core.TextField{Name: "amount_raw", Required: false, Max: 80})

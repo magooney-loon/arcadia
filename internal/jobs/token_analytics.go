@@ -81,6 +81,7 @@ func RunTokenAnalytics(app core.App) {
 			r.Set("symbol", info.Symbol)
 			r.Set("name", info.Name)
 			r.Set("decimals", int(info.Decimals))
+			r.Set("token_type", info.TokenType)
 			r.Set("lookup_failed", info.LookupFailed)
 
 			if info.TotalSupply != nil {

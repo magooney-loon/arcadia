@@ -46,6 +46,8 @@ func saveTransfer(app core.App, log *types.Log) (*big.Int, error) {
 	}
 	info := utils.LookupTokenInfo(app, *log.Address, firstSeenBlock)
 
+	isNFT := info.TokenType == "ERC-721" || info.TokenType == "ERC-1155"
+
 	symbol := "OTHER"
 	if s, ok := utils.KnownTokens[*log.Address]; ok {
 		symbol = s
@@ -59,6 +61,7 @@ func saveTransfer(app core.App, log *types.Log) (*big.Int, error) {
 	r.Set("log_index", logIdx)
 	r.Set("token_address", strings.ToLower(log.Address.Hex()))
 	r.Set("token_symbol", symbol)
+	r.Set("token_type", info.TokenType)
 	r.Set("from_addr", from.Hex())
 	r.Set("to_addr", to.Hex())
 	r.Set("amount_raw", amountRaw.String())
@@ -66,12 +69,21 @@ func saveTransfer(app core.App, log *types.Log) (*big.Int, error) {
 	if info.Symbol != "" {
 		r.Set("token_name", info.Symbol)
 	}
-	if !info.LookupFailed {
+
+	if isNFT {
+		// For NFTs the value field is the token ID, not an amount — store as-is.
+		// amount_human is not meaningful for NFT transfers.
+	} else if !info.LookupFailed {
 		r.Set("amount_human", utils.TokenAmountHuman(amountRaw, info.Decimals))
 	}
 
 	if err := app.Save(r); err != nil {
 		return nil, fmt.Errorf("save transfer %s/%d: %w", txHash, logIdx, err)
+	}
+
+	// Only create wallet edges and return an aggregatable amount for fungible tokens.
+	if isNFT {
+		return nil, nil
 	}
 
 	if _, isStable := utils.KnownTokens[*log.Address]; isStable {
