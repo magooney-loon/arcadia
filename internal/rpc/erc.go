@@ -30,9 +30,16 @@ type TokenInfo struct {
 }
 
 // tokenInfoCache is an in-memory, process-wide cache of token metadata.
+// evictionOrder tracks insertion order for FIFO eviction once the cache
+// exceeds maxTokenCacheSize entries. The known stablecoins seeded by
+// SeedKnownTokens are never evicted.
+const maxTokenCacheSize = 5000
+
 var (
-	tokenInfoMu    sync.RWMutex
-	tokenInfoCache = map[common.Address]TokenInfo{}
+	tokenInfoMu     sync.RWMutex
+	tokenInfoCache  = map[common.Address]TokenInfo{}
+	evictionOrder   []common.Address
+	seededAddresses map[common.Address]struct{} // protected by tokenInfoMu
 )
 
 // rpcHTTPClient is a shared HTTP client with connection pooling for JSON-RPC calls.
@@ -45,12 +52,15 @@ var rpcHTTPClient = &http.Client{
 	},
 }
 
-// SeedKnownTokens primes the cache with the three Arc stablecoins.
+// SeedKnownTokens primes the cache with the Arc stablecoins. Seeded entries
+// are marked as non-evictable.
 func SeedKnownTokens() {
 	tokenInfoMu.Lock()
 	defer tokenInfoMu.Unlock()
+	seededAddresses = make(map[common.Address]struct{}, len(chain.KnownTokens))
 	for addr, sym := range chain.KnownTokens {
 		tokenInfoCache[addr] = TokenInfo{Address: addr, Symbol: sym, Decimals: 6, TokenType: "ERC-20"}
+		seededAddresses[addr] = struct{}{}
 	}
 }
 
@@ -77,9 +87,7 @@ func LookupTokenInfo(app core.App, addr common.Address, firstSeenBlock uint64) T
 			TokenType:    r.GetString("token_type"),
 			LookupFailed: r.GetBool("lookup_failed"),
 		}
-		tokenInfoMu.Lock()
-		tokenInfoCache[addr] = info
-		tokenInfoMu.Unlock()
+		cacheTokenInfo(addr, info)
 		return info
 	}
 
@@ -101,10 +109,31 @@ func LookupTokenInfo(app core.App, addr common.Address, firstSeenBlock uint64) T
 		_ = app.Save(r)
 	}
 
-	tokenInfoMu.Lock()
-	tokenInfoCache[addr] = info
-	tokenInfoMu.Unlock()
+	cacheTokenInfo(addr, info)
 	return info
+}
+
+// cacheTokenInfo adds an entry to the in-memory cache and evicts the oldest
+// non-seeded entry if the cache exceeds maxTokenCacheSize.
+func cacheTokenInfo(addr common.Address, info TokenInfo) {
+	tokenInfoMu.Lock()
+	defer tokenInfoMu.Unlock()
+
+	// If address is already cached, no need to add to eviction order.
+	if _, exists := tokenInfoCache[addr]; !exists {
+		evictionOrder = append(evictionOrder, addr)
+	}
+	tokenInfoCache[addr] = info
+
+	// Evict oldest non-seeded entries until we're under the limit.
+	for len(tokenInfoCache) > maxTokenCacheSize && len(evictionOrder) > 0 {
+		oldest := evictionOrder[0]
+		evictionOrder = evictionOrder[1:]
+		if _, isSeeded := seededAddresses[oldest]; isSeeded {
+			continue // never evict seeded stablecoins
+		}
+		delete(tokenInfoCache, oldest)
+	}
 }
 
 // ── ERC-165 interface IDs ────────────────────────────────────────────────────
