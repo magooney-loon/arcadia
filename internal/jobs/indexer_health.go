@@ -33,11 +33,13 @@ func indexerHealthJob(app core.App) error {
 
 			counts := make(map[string]interface{})
 			for _, name := range collections {
-				records, err := app.FindRecordsByFilter(name, "", "", 0, 0)
-				if err != nil {
+				var row struct {
+					N int `db:"n"`
+				}
+				if err := app.DB().NewQuery("SELECT COUNT(*) AS n FROM " + name).One(&row); err != nil {
 					counts[name] = "error"
 				} else {
-					counts[name] = len(records)
+					counts[name] = row.N
 				}
 			}
 

@@ -131,14 +131,8 @@ func runIndexer(app core.App, attempt int) error {
 		}
 		log.Printf("[indexer] batch #%d processing | current block %d | next_block=%s | blocks=%d txs=%d logs=%d",
 			nextBatch, start, nextBlock, len(res.Data.Blocks), len(res.Data.Transactions), len(res.Data.Logs))
-		recordIndexerEvent(app, "info", "batch_start", "started processing indexer batch", indexerEventFields{
-			"attempt":      attempt,
-			"batch":        nextBatch,
-			"block":        start,
-			"blocks":       len(res.Data.Blocks),
-			"transactions": len(res.Data.Transactions),
-			"logs":         len(res.Data.Logs),
-		})
+		// batch_start dropped — batch_done carries the same fields and twice the
+		// event-write pressure was hitting the same SQLite writer as the batch.
 		if err := processBatch(app, res); err != nil {
 			processingBatch.Store(0)
 			processingStartedAtUnixNano.Store(0)
@@ -195,6 +189,20 @@ func runIndexer(app core.App, attempt int) error {
 			"logs":         len(res.Data.Logs),
 		})
 
-		time.Sleep(400 * time.Millisecond)
+		// Adaptive pacing: sprint when behind, ease off at the tip.
+		// Arc averages ~380 ms/block; the indexer fetches 200-block batches.
+		newTip := next
+		remainingLag := uint64(0)
+		if tip > newTip {
+			remainingLag = tip - newTip
+		}
+		switch {
+		case remainingLag >= 200:
+			// no sleep — we're behind by at least one full batch
+		case remainingLag >= 50:
+			time.Sleep(100 * time.Millisecond)
+		default:
+			time.Sleep(400 * time.Millisecond)
+		}
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"math/big"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pocketbase/pocketbase/core"
@@ -20,6 +21,7 @@ func StartIndexer(app core.App) {
 	const startupDelay = 10 * time.Second
 	log.Printf("[indexer] scheduled Arcadia HyperSync indexer startup in %s", startupDelay)
 	utils.SeedKnownTokens()
+	startIndexerEventWriter(app)
 	go func() {
 		time.Sleep(startupDelay)
 		log.Println("[indexer] starting Arcadia HyperSync indexer")
@@ -45,21 +47,47 @@ func StartIndexer(app core.App) {
 }
 
 // ── Indexer event logging ────────────────────────────────────────────────────
+//
+// Events are buffered through a single-writer goroutine so calls from the hot
+// batch loop don't block on SQLite. The channel is sized generously; if it
+// fills (writer stuck or shutting down) events are dropped — they're logging,
+// not data.
 
 type indexerEventFields map[string]any
 
-func recordIndexerEvent(app core.App, level, event, message string, fields indexerEventFields) {
+type indexerEvent struct {
+	level, event, message string
+	fields                indexerEventFields
+	ts                    int64
+}
+
+var (
+	indexerEventCh   = make(chan indexerEvent, 256)
+	indexerEventOnce sync.Once
+)
+
+func startIndexerEventWriter(app core.App) {
+	indexerEventOnce.Do(func() {
+		go func() {
+			for ev := range indexerEventCh {
+				writeIndexerEvent(app, ev)
+			}
+		}()
+	})
+}
+
+func writeIndexerEvent(app core.App, ev indexerEvent) {
 	c, err := app.FindCollectionByNameOrId("indexer_events")
 	if err != nil {
 		return
 	}
 
 	r := core.NewRecord(c)
-	r.Set("timestamp", time.Now().Unix())
-	r.Set("level", level)
-	r.Set("event", event)
-	r.Set("message", message)
-	for key, val := range fields {
+	r.Set("timestamp", ev.ts)
+	r.Set("level", ev.level)
+	r.Set("event", ev.event)
+	r.Set("message", ev.message)
+	for key, val := range ev.fields {
 		switch key {
 		case "attempt", "batch", "block", "tip", "lag", "duration_ms", "blocks", "transactions", "logs", "error":
 			if key == "error" {
@@ -72,7 +100,22 @@ func recordIndexerEvent(app core.App, level, event, message string, fields index
 		}
 	}
 	if err := app.Save(r); err != nil {
-		log.Printf("[indexer] failed to persist indexer event %q: %v", event, err)
+		log.Printf("[indexer] failed to persist indexer event %q: %v", ev.event, err)
+	}
+}
+
+func recordIndexerEvent(_ core.App, level, event, message string, fields indexerEventFields) {
+	ev := indexerEvent{
+		level:   level,
+		event:   event,
+		message: message,
+		fields:  fields,
+		ts:      time.Now().Unix(),
+	}
+	select {
+	case indexerEventCh <- ev:
+	default:
+		// channel full — drop silently to keep the indexer running
 	}
 }
 
