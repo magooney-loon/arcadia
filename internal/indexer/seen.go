@@ -184,7 +184,7 @@ func loadEdgesFor(app core.App, keys []edgeKey) (map[edgeKey]*core.Record, error
 	if len(keys) == 0 {
 		return out, nil
 	}
-	// distinct from-wallets — query in one filter using IN-style OR.
+	// distinct from-wallets
 	froms := map[string]struct{}{}
 	for _, k := range keys {
 		froms[k.from] = struct{}{}
@@ -193,30 +193,44 @@ func loadEdgesFor(app core.App, keys []edgeKey) (map[edgeKey]*core.Record, error
 	for _, k := range keys {
 		want[k] = struct{}{}
 	}
-	fromList := make([]any, 0, len(froms))
-	for f := range froms {
-		fromList = append(fromList, f)
-	}
-	// PocketBase's filter DSL doesn't speak `IN`; the dbx layer underneath
-	// does. Use raw SQL with `IN` and quote-safe placeholders via dbx.
+
+	// PocketBase's filter DSL doesn't support IN, so use raw SQL via dbx
+	// to fetch matching record IDs, then hydrate into *core.Record.
 	params := dbx.Params{}
 	in := ""
-	for i, f := range fromList {
+	i := 0
+	for f := range froms {
 		key := fmt.Sprintf("f%d", i)
 		params[key] = f
 		if i > 0 {
 			in += ","
 		}
 		in += "{:" + key + "}"
+		i++
 	}
-	rows, err := app.FindRecordsByFilter(
-		"wallet_edges",
-		"from_wallet IN ("+in+")",
-		"", 0, 0, params)
-	if err != nil {
+
+	type idRow struct {
+		ID string `db:"id"`
+	}
+	var idRows []idRow
+	if err := app.DB().NewQuery(
+		"SELECT id FROM wallet_edges WHERE from_wallet IN (" + in + ")",
+	).Bind(params).All(&idRows); err != nil {
 		return nil, fmt.Errorf("load edges: %w", err)
 	}
-	for _, r := range rows {
+	if len(idRows) == 0 {
+		return out, nil
+	}
+
+	ids := make([]string, len(idRows))
+	for i, r := range idRows {
+		ids[i] = r.ID
+	}
+	records, err := app.FindRecordsByIds("wallet_edges", ids)
+	if err != nil {
+		return nil, fmt.Errorf("load edges by ids: %w", err)
+	}
+	for _, r := range records {
 		k := edgeKey{r.GetString("from_wallet"), r.GetString("to_wallet")}
 		if _, hit := want[k]; hit {
 			out[k] = r
@@ -224,4 +238,3 @@ func loadEdgesFor(app core.App, keys []edgeKey) (map[edgeKey]*core.Record, error
 	}
 	return out, nil
 }
-
