@@ -2,7 +2,7 @@ package jobs
 
 import (
 	"log"
-	"strings"
+	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -52,69 +52,118 @@ func RunTokenAnalytics(app core.App) {
 		return
 	}
 
-	rpcCalls := 0
+	// Single-pass preload: one query instead of N FindRecordsByFilter calls.
+	existing, err := app.FindRecordsByFilter("token_analytics", "", "", 0, 0)
+	if err != nil {
+		log.Printf("[token-analytics] preload failed: %v", err)
+		return
+	}
+	byAddr := make(map[string]*core.Record, len(existing))
+	for _, r := range existing {
+		byAddr[r.GetString("token_address")] = r
+	}
+
+	// Worker pool for concurrent RPC enrichment.
+	type workItem struct {
+		agg tokenAgg
+		r   *core.Record
+	}
+	type result struct {
+		r *core.Record
+	}
+
+	const workers = 6
+	workCh := make(chan workItem, len(aggResults))
+	resultCh := make(chan result, len(aggResults))
+
+	var wg sync.WaitGroup
+	// Per-worker throttle: each tracks its own rpc call count so we don't
+	// serialise a global counter; the 500 ms pause every 10 RPC calls
+	// distributes naturally across workers.
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			rpcCalls := 0
+			for item := range workCh {
+				r := item.r
+				agg := item.agg
+				addr := common.HexToAddress(agg.TokenAddress)
+				hasMetadata := r.GetString("symbol") != "" &&
+					r.GetInt("decimals") > 0 &&
+					!r.GetBool("lookup_failed")
+
+				if !hasMetadata {
+					info := utils.FetchFullTokenInfo(addr)
+					r.Set("symbol", info.Symbol)
+					r.Set("name", info.Name)
+					r.Set("decimals", int(info.Decimals))
+					r.Set("token_type", info.TokenType)
+					r.Set("lookup_failed", info.LookupFailed)
+					if info.TotalSupply != nil {
+						r.Set("total_supply_raw", info.TotalSupply.String())
+						if !info.LookupFailed && info.Decimals > 0 {
+							r.Set("total_supply_human", utils.TokenAmountHuman(info.TotalSupply, info.Decimals))
+						}
+					}
+					rpcCalls++
+					if rpcCalls%10 == 0 {
+						time.Sleep(500 * time.Millisecond)
+					}
+				}
+
+				r.Set("transfer_count", agg.TransferCount)
+				r.Set("first_seen_block", agg.FirstBlock)
+				r.Set("last_seen_block", agg.LastBlock)
+				r.Set("unique_senders", agg.UniqueSenders)
+				r.Set("unique_receivers", agg.UniqueReceivers)
+				resultCh <- result{r: r}
+			}
+		}()
+	}
+
+	// Feed workers.
 	for _, agg := range aggResults {
-		addr := strings.ToLower(agg.TokenAddress)
-
-		existing, _ := app.FindRecordsByFilter("token_analytics",
-			"token_address = {:a}", "", 1, 0,
-			map[string]any{"a": addr})
-
-		var r *core.Record
-		hasMetadata := false
-
-		if len(existing) > 0 {
-			r = existing[0]
-			// Skip RPC if we already have symbol, decimals, and the lookup didn't fail.
-			hasMetadata = r.GetString("symbol") != "" &&
-				r.GetInt("decimals") > 0 &&
-				!r.GetBool("lookup_failed")
-		} else {
+		addr := agg.TokenAddress
+		r, exists := byAddr[addr]
+		if !exists {
 			r = core.NewRecord(coll)
 			r.Set("token_address", addr)
 		}
+		workCh <- workItem{agg: agg, r: r}
+	}
+	close(workCh)
 
-		// Only hit RPC when metadata is missing or previous lookup failed.
-		if !hasMetadata {
-			info := utils.FetchFullTokenInfo(parseAddr(agg.TokenAddress))
+	// Close resultCh once all workers finish.
+	go func() {
+		wg.Wait()
+		close(resultCh)
+	}()
 
-			r.Set("symbol", info.Symbol)
-			r.Set("name", info.Name)
-			r.Set("decimals", int(info.Decimals))
-			r.Set("token_type", info.TokenType)
-			r.Set("lookup_failed", info.LookupFailed)
-
-			if info.TotalSupply != nil {
-				r.Set("total_supply_raw", info.TotalSupply.String())
-				if !info.LookupFailed && info.Decimals > 0 {
-					r.Set("total_supply_human", utils.TokenAmountHuman(info.TotalSupply, info.Decimals))
-				}
-			}
-
-			rpcCalls++
-			if rpcCalls%10 == 0 {
-				time.Sleep(500 * time.Millisecond)
-			}
-		}
-
-		// Always refresh aggregation stats from the latest transfers data.
-		r.Set("transfer_count", agg.TransferCount)
-		r.Set("first_seen_block", agg.FirstBlock)
-		r.Set("last_seen_block", agg.LastBlock)
-		r.Set("unique_senders", agg.UniqueSenders)
-		r.Set("unique_receivers", agg.UniqueReceivers)
-
-		if err := app.Save(r); err != nil {
-			log.Printf("[token-analytics] failed to save %s: %v", addr, err)
-			continue
-		}
+	// Drain results into a slice, then save in a single transaction.
+	records := make([]*core.Record, 0, len(aggResults))
+	for res := range resultCh {
+		records = append(records, res.r)
 	}
 
-	log.Printf("[token-analytics] completed: processed %d tokens (%d RPC lookups)", len(aggResults), rpcCalls)
-}
+	saved, failed := 0, 0
+	err = app.RunInTransaction(func(txApp core.App) error {
+		for _, r := range records {
+			if err := txApp.Save(r); err != nil {
+				log.Printf("[token-analytics] failed to save %s: %v", r.GetString("token_address"), err)
+				failed++
+			} else {
+				saved++
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		log.Printf("[token-analytics] transaction failed: %v", err)
+		return
+	}
 
-func parseAddr(hex string) common.Address {
-	return common.HexToAddress(hex)
+	log.Printf("[token-analytics] completed: %d saved, %d failed", saved, failed)
 }
 
 // StartTokenAnalyticsScheduler runs the analytics job periodically.

@@ -199,7 +199,10 @@ func processBatch(app core.App, res *types.QueryResponse) error {
 		// Insert block_stats for every block we just created. Blocks that
 		// already existed (in seen.blocks but not in seen.newBlocks) keep
 		// their stats — same behaviour as before, no re-query needed.
-		statsColl := utils.MustCollection(txApp, "block_stats")
+		statsColl, err := utils.FindCollection(txApp, "block_stats")
+		if err != nil {
+			return err
+		}
 		for _, blk := range res.Data.Blocks {
 			if blk.Number == nil || blk.Timestamp == nil {
 				continue

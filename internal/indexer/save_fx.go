@@ -20,7 +20,11 @@ func fxUpsert(app core.App, tradeID string, seen *batchSeen, update func(*core.R
 		if len(existing) > 0 {
 			r = existing[0]
 		} else {
-			r = core.NewRecord(utils.MustCollection(app, "fx_swaps"))
+			fxColl, ferr := utils.FindCollection(app, "fx_swaps")
+			if ferr != nil {
+				return ferr
+			}
+			r = core.NewRecord(fxColl)
 			r.Set("trade_id", tradeID)
 			r.Set("status", "created")
 		}

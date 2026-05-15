@@ -501,6 +501,7 @@ func tracesHandler(c *core.RequestEvent) error {
 // API_DESC Historical block stats for time-series charts (sorted newest first)
 // API_TAGS Stats
 func blockStatsHandler(c *core.RequestEvent) error {
+	cacheHeaders(c, 2)
 	limit, offset := limitOffset(c)
 	records, err := c.App.FindRecordsByFilter("block_stats", "", "-block_number", limit, offset)
 	if err != nil {

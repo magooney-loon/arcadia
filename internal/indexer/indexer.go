@@ -22,24 +22,52 @@ func StartIndexer(app core.App) {
 	log.Printf("[indexer] scheduled Arcadia HyperSync indexer startup in %s", startupDelay)
 	utils.SeedKnownTokens()
 	startIndexerEventWriter(app)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Cancel the indexer context on SIGTERM so the in-flight batch can finish
+	// cleanly rather than being abandoned mid-transaction.
+	app.OnTerminate().BindFunc(func(e *core.TerminateEvent) error {
+		log.Println("[indexer] shutdown signal received — draining in-flight batch")
+		cancel()
+		return e.Next()
+	})
+
 	go func() {
+		defer cancel()
 		time.Sleep(startupDelay)
 		log.Println("[indexer] starting Arcadia HyperSync indexer")
 		attempt := 0
 		for {
+			if ctx.Err() != nil {
+				log.Println("[indexer] context cancelled — shutting down")
+				return
+			}
 			attempt++
 			log.Printf("[indexer] run attempt #%d", attempt)
 			recordIndexerEvent(app, "info", "run_start", "starting indexer run", indexerEventFields{"attempt": attempt})
-			if err := runIndexer(app, attempt); err != nil {
+			if err := runIndexer(ctx, app, attempt); err != nil {
+				if ctx.Err() != nil {
+					log.Println("[indexer] stopped after context cancellation")
+					return
+				}
 				msg := err.Error()
 				if strings.Contains(msg, "429") {
 					log.Printf("[indexer] rate-limited (429) — waiting 30s before retry (attempt #%d)", attempt)
 					recordIndexerEvent(app, "warn", "rate_limited", "HyperSync returned 429; backing off before retry", indexerEventFields{"attempt": attempt, "error": err})
-					time.Sleep(30 * time.Second)
+					select {
+					case <-time.After(30 * time.Second):
+					case <-ctx.Done():
+						return
+					}
 				} else {
 					log.Printf("[indexer] crashed: %v — restarting in 5s (attempt #%d)", err, attempt)
 					recordIndexerEvent(app, "error", "run_error", "indexer run failed; restarting", indexerEventFields{"attempt": attempt, "error": err})
-					time.Sleep(5 * time.Second)
+					select {
+					case <-time.After(5 * time.Second):
+					case <-ctx.Done():
+						return
+					}
 				}
 			}
 		}

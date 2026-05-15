@@ -16,7 +16,11 @@ func saveBlock(app core.App, blk *types.Block, seen *batchSeen) error {
 		return nil
 	}
 
-	r := core.NewRecord(utils.MustCollection(app, "blocks"))
+	coll, err := utils.FindCollection(app, "blocks")
+	if err != nil {
+		return err
+	}
+	r := core.NewRecord(coll)
 	r.Set("number", blk.Number.Uint64())
 	if blk.Hash != nil {
 		r.Set("hash", blk.Hash.Hex())
@@ -60,7 +64,11 @@ func saveTransaction(app core.App, tx *types.Transaction, blockBaseFee *big.Int,
 		return nil, nil
 	}
 
-	r := core.NewRecord(utils.MustCollection(app, "transactions"))
+	txColl, err := utils.FindCollection(app, "transactions")
+	if err != nil {
+		return nil, err
+	}
+	r := core.NewRecord(txColl)
 	r.Set("hash", tx.Hash.Hex())
 	if tx.BlockNumber != nil {
 		r.Set("block_number", tx.BlockNumber.Uint64())

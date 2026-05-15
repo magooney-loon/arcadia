@@ -47,7 +47,11 @@ func saveTransfer(app core.App, log *types.Log, seen *batchSeen, edges map[edgeK
 		symbol = s
 	}
 
-	r := core.NewRecord(utils.MustCollection(app, "transfers"))
+	coll, err := utils.FindCollection(app, "transfers")
+	if err != nil {
+		return nil, err
+	}
+	r := core.NewRecord(coll)
 	r.Set("tx_hash", txHash)
 	if log.BlockNumber != nil {
 		r.Set("block_number", log.BlockNumber.Uint64())
@@ -122,7 +126,10 @@ func flushEdgeDeltas(app core.App, deltas map[edgeKey]*edgeDelta) error {
 		return err
 	}
 
-	coll := utils.MustCollection(app, "wallet_edges")
+	coll, err := utils.FindCollection(app, "wallet_edges")
+	if err != nil {
+		return err
+	}
 	for key, d := range deltas {
 		r, hit := existing[key]
 		if hit {

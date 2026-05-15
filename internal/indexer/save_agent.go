@@ -25,7 +25,11 @@ func saveAgentRegistration(app core.App, log *types.Log, seen *batchSeen) error 
 		return nil
 	}
 
-	r := core.NewRecord(utils.MustCollection(app, "agents"))
+	agentColl, err := utils.FindCollection(app, "agents")
+	if err != nil {
+		return err
+	}
+	r := core.NewRecord(agentColl)
 	r.Set("agent_address", owner)
 	if log.BlockNumber != nil {
 		r.Set("registered_at_block", log.BlockNumber.Uint64())
@@ -52,7 +56,11 @@ func saveAgentJobCreated(app core.App, log *types.Log, seen *batchSeen) error {
 		return nil
 	}
 
-	r := core.NewRecord(utils.MustCollection(app, "agent_jobs"))
+	jobColl, err := utils.FindCollection(app, "agent_jobs")
+	if err != nil {
+		return err
+	}
+	r := core.NewRecord(jobColl)
 	r.Set("job_id", jobID)
 	r.Set("employer_address", utils.AddressFromTopic(log.Topic2))
 	r.Set("worker_address", utils.AddressFromTopic(log.Topic3))
@@ -87,7 +95,11 @@ func agentJobUpsert(app core.App, log *types.Log, seen *batchSeen, update func(*
 		if len(existing) > 0 {
 			r = existing[0]
 		} else {
-			r = core.NewRecord(utils.MustCollection(app, "agent_jobs"))
+			fallbackColl, ferr := utils.FindCollection(app, "agent_jobs")
+			if ferr != nil {
+				return ferr
+			}
+			r = core.NewRecord(fallbackColl)
 			r.Set("job_id", jobID)
 			r.Set("status", "created")
 		}

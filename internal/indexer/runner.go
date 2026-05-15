@@ -15,8 +15,7 @@ import (
 	"arcadia/internal/utils"
 )
 
-func runIndexer(app core.App, attempt int) error {
-	ctx := context.Background()
+func runIndexer(ctx context.Context, app core.App, attempt int) error {
 
 	apiToken := utils.EnvioAPIToken()
 	if apiToken == "" {
@@ -95,6 +94,9 @@ func runIndexer(app core.App, attempt int) error {
 	log.Println("[indexer] explicit GetArrow loop running")
 
 	for {
+		if ctx.Err() != nil {
+			return nil
+		}
 		start := currentBlock.Load()
 		tipCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		tip, tipErr := getChainTip(tipCtx, client)
@@ -103,7 +105,11 @@ func runIndexer(app core.App, attempt int) error {
 			return fmt.Errorf("fetch chain tip before batch: %w", tipErr)
 		}
 		if start >= tip {
-			time.Sleep(2 * time.Second)
+			select {
+			case <-time.After(2 * time.Second):
+			case <-ctx.Done():
+				return nil
+			}
 			continue
 		}
 
@@ -196,13 +202,21 @@ func runIndexer(app core.App, attempt int) error {
 		if tip > newTip {
 			remainingLag = tip - newTip
 		}
+		var sleepDur time.Duration
 		switch {
 		case remainingLag >= 200:
-			// no sleep — we're behind by at least one full batch
+			// sprint — no sleep
 		case remainingLag >= 50:
-			time.Sleep(100 * time.Millisecond)
+			sleepDur = 100 * time.Millisecond
 		default:
-			time.Sleep(400 * time.Millisecond)
+			sleepDur = 400 * time.Millisecond
+		}
+		if sleepDur > 0 {
+			select {
+			case <-time.After(sleepDur):
+			case <-ctx.Done():
+				return nil
+			}
 		}
 	}
 }

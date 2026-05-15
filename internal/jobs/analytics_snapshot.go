@@ -190,7 +190,10 @@ func takeAnalyticsSnapshot(app core.App, window string) error {
 
 	// ── write snapshot ────────────────────────────────────────────────────────
 
-	c := utils.MustCollection(app, "analytics_snapshots")
+	c, err := utils.FindCollection(app, "analytics_snapshots")
+	if err != nil {
+		return err
+	}
 	row := core.NewRecord(c)
 	row.Set("snapshot_at", time.Now().Unix())
 	row.Set("block_number", blockNumber)

@@ -79,7 +79,11 @@ func routeLog(app core.App, log *types.Log, seen *batchSeen, edges map[edgeKey]*
 }
 
 func saveTrace(app core.App, trace *types.Trace) error {
-	r := core.NewRecord(utils.MustCollection(app, "traces"))
+	coll, err := utils.FindCollection(app, "traces")
+	if err != nil {
+		return err
+	}
+	r := core.NewRecord(coll)
 	if trace.TransactionHash != nil {
 		r.Set("tx_hash", trace.TransactionHash.Hex())
 	}

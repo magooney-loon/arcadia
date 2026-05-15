@@ -80,6 +80,25 @@ func initApp(devMode bool) {
 	server.RegisterRoutes(srv.App())
 	jobs.RegisterJobs(srv.App())
 
+	// Apply SQLite PRAGMA tuning before the server starts serving requests.
+	// WAL + NORMAL synchronous is crash-safe and gives better write throughput.
+	// busy_timeout prevents SQLITE_BUSY errors under concurrent writer pressure.
+	// cache_size and temp_store improve sort/query performance at the cost of RAM.
+	srv.App().OnServe().BindFunc(func(e *core.ServeEvent) error {
+		db := e.App.DB()
+		for _, pragma := range []string{
+			"PRAGMA synchronous=NORMAL",
+			"PRAGMA busy_timeout=5000",
+			"PRAGMA cache_size=-8000",
+			"PRAGMA temp_store=2",
+		} {
+			if _, err := db.NewQuery(pragma).Execute(); err != nil {
+				e.App.Logger().Warn("SQLite PRAGMA failed", "pragma", pragma, "error", err)
+			}
+		}
+		return e.Next()
+	})
+
 	srv.App().OnServe().BindFunc(func(e *core.ServeEvent) error {
 		app.SetupRecovery(srv.App(), e)
 		indexer.StartIndexer(srv.App())

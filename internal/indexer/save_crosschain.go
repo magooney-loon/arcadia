@@ -19,7 +19,11 @@ func saveCrosschain(app core.App, log *types.Log, seen *batchSeen, fill func(*co
 	if _, dup := seen.crosschain[key]; dup {
 		return nil
 	}
-	r := core.NewRecord(utils.MustCollection(app, "crosschain_events"))
+	coll, err := utils.FindCollection(app, "crosschain_events")
+	if err != nil {
+		return err
+	}
+	r := core.NewRecord(coll)
 	r.Set("tx_hash", hash)
 	r.Set("log_index", idx)
 	if log.BlockNumber != nil {

@@ -74,11 +74,22 @@ func TokenAmountHumanFloat(raw *big.Int, decimals uint8) float64 {
 	return v
 }
 
-// MustCollection fetches a collection by name and panics if missing.
-func MustCollection(app core.App, name string) *core.Collection {
+// FindCollection returns a collection or a descriptive error. Prefer this over
+// MustCollection inside goroutines where a panic would not be caught.
+func FindCollection(app core.App, name string) (*core.Collection, error) {
 	c, err := app.FindCollectionByNameOrId(name)
 	if err != nil {
-		panic(fmt.Sprintf("collection %q not found: %v", name, err))
+		return nil, fmt.Errorf("collection %q not found: %w", name, err)
+	}
+	return c, nil
+}
+
+// MustCollection fetches a collection by name and panics if missing.
+// Deprecated: use FindCollection in code paths that can return an error.
+func MustCollection(app core.App, name string) *core.Collection {
+	c, err := FindCollection(app, name)
+	if err != nil {
+		panic(err.Error())
 	}
 	return c
 }
