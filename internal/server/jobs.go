@@ -1,4 +1,4 @@
-package main
+package server
 
 import (
 	"encoding/json"
@@ -11,7 +11,7 @@ import (
 	"github.com/pocketbase/pocketbase/core"
 )
 
-func registerJobs(app core.App) {
+func RegisterJobs(app core.App) {
 	app.OnServe().BindFunc(func(e *core.ServeEvent) error {
 		if err := indexerHealthJob(app); err != nil {
 			app.Logger().Error("Failed to register indexer health job", "error", err)

@@ -7,6 +7,8 @@ import (
 	"github.com/joho/godotenv"
 	app "github.com/magooney-loon/pb-ext/core"
 	"github.com/pocketbase/pocketbase/core"
+
+	"arcadia/internal/server"
 )
 
 func main() {
@@ -22,7 +24,7 @@ func main() {
 
 	if *generateSpecsDir != "" {
 		gen := app.NewSpecGeneratorWithInitializer(func() (*app.APIVersionManager, error) {
-			return initVersionedSystem(), nil
+			return server.InitVersionedSystem(), nil
 		})
 		if err := gen.Generate(*generateSpecsDir, *generateSpecVersion); err != nil {
 			log.Fatal(err)
@@ -32,7 +34,7 @@ func main() {
 
 	if *validateSpecsDir != "" {
 		gen := app.NewSpecGeneratorWithInitializer(func() (*app.APIVersionManager, error) {
-			return initVersionedSystem(), nil
+			return server.InitVersionedSystem(), nil
 		})
 		if err := gen.Validate(*validateSpecsDir); err != nil {
 			log.Fatal(err)
@@ -72,13 +74,13 @@ func initApp(devMode bool) {
 
 	app.SetupLogging(srv)
 
-	registerCollections(srv.App())
-	registerRoutes(srv.App())
-	registerJobs(srv.App())
+	server.RegisterCollections(srv.App())
+	server.RegisterRoutes(srv.App())
+	server.RegisterJobs(srv.App())
 
 	srv.App().OnServe().BindFunc(func(e *core.ServeEvent) error {
 		app.SetupRecovery(srv.App(), e)
-		StartIndexer(srv.App())
+		server.StartIndexer(srv.App())
 		return e.Next()
 	})
 

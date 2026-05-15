@@ -1,4 +1,4 @@
-package main
+package server
 
 // API_SOURCE
 
@@ -7,8 +7,8 @@ import (
 	"github.com/pocketbase/pocketbase/core"
 )
 
-func registerRoutes(app core.App) {
-	versionManager := initVersionedSystem()
+func RegisterRoutes(app core.App) {
+	versionManager := InitVersionedSystem()
 	app.OnServe().BindFunc(func(e *core.ServeEvent) error {
 		if err := versionManager.RegisterAllVersionRoutes(e); err != nil {
 			return err
@@ -18,7 +18,7 @@ func registerRoutes(app core.App) {
 	versionManager.RegisterWithServer(app)
 }
 
-func initVersionedSystem() *api.APIVersionManager {
+func InitVersionedSystem() *api.APIVersionManager {
 	baseConfig := &api.APIDocsConfig{
 		Title:       "Arcadia API",
 		Description: "Arc L1 blockchain indexer — blocks, transfers, agents, cross-chain flows",

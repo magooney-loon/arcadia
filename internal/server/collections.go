@@ -1,10 +1,10 @@
-package main
+package server
 
 import (
 	"github.com/pocketbase/pocketbase/core"
 )
 
-func registerCollections(app core.App) {
+func RegisterCollections(app core.App) {
 	app.OnServe().BindFunc(func(e *core.ServeEvent) error {
 		for _, fn := range []func(core.App) error{
 			metaCollection,
