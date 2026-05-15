@@ -9,34 +9,32 @@ import (
 	"arcadia/internal/utils"
 )
 
-func saveCrosschain(app core.App, log *types.Log, fill func(*core.Record)) error {
+func saveCrosschain(app core.App, log *types.Log, seen *batchSeen, fill func(*core.Record)) error {
 	if log.TransactionHash == nil || log.LogIndex == nil {
 		return nil
 	}
-	existing, err := app.FindRecordsByFilter("crosschain_events",
-		"tx_hash = {:h} && log_index = {:i}", "", 1, 0,
-		map[string]any{"h": log.TransactionHash.Hex(), "i": *log.LogIndex})
-	if err != nil {
-		return fmt.Errorf("find crosschain %s/%d: %w", log.TransactionHash.Hex(), *log.LogIndex, err)
-	}
-	if len(existing) > 0 {
+	hash := log.TransactionHash.Hex()
+	idx := *log.LogIndex
+	key := txLogKey{hash, idx}
+	if _, dup := seen.crosschain[key]; dup {
 		return nil
 	}
 	r := core.NewRecord(utils.MustCollection(app, "crosschain_events"))
-	r.Set("tx_hash", log.TransactionHash.Hex())
-	r.Set("log_index", *log.LogIndex)
+	r.Set("tx_hash", hash)
+	r.Set("log_index", idx)
 	if log.BlockNumber != nil {
 		r.Set("block_number", log.BlockNumber.Uint64())
 	}
 	fill(r)
 	if err := app.Save(r); err != nil {
-		return fmt.Errorf("save crosschain %s/%d: %w", log.TransactionHash.Hex(), *log.LogIndex, err)
+		return fmt.Errorf("save crosschain %s/%d: %w", hash, idx, err)
 	}
+	seen.crosschain[key] = struct{}{}
 	return nil
 }
 
-func saveCCTPDepositForBurn(app core.App, log *types.Log) error {
-	return saveCrosschain(app, log, func(r *core.Record) {
+func saveCCTPDepositForBurn(app core.App, log *types.Log, seen *batchSeen) error {
+	return saveCrosschain(app, log, seen, func(r *core.Record) {
 		r.Set("protocol", "cctp")
 		r.Set("event_type", "burn")
 		r.Set("source_domain", 26)
@@ -55,8 +53,8 @@ func saveCCTPDepositForBurn(app core.App, log *types.Log) error {
 	})
 }
 
-func saveCCTPMintAndWithdraw(app core.App, log *types.Log) error {
-	return saveCrosschain(app, log, func(r *core.Record) {
+func saveCCTPMintAndWithdraw(app core.App, log *types.Log, seen *batchSeen) error {
+	return saveCrosschain(app, log, seen, func(r *core.Record) {
 		r.Set("protocol", "cctp")
 		r.Set("event_type", "mint")
 		r.Set("destination_domain", 26)
@@ -70,8 +68,8 @@ func saveCCTPMintAndWithdraw(app core.App, log *types.Log) error {
 	})
 }
 
-func saveCCTPMessageReceived(app core.App, log *types.Log) error {
-	return saveCrosschain(app, log, func(r *core.Record) {
+func saveCCTPMessageReceived(app core.App, log *types.Log, seen *batchSeen) error {
+	return saveCrosschain(app, log, seen, func(r *core.Record) {
 		r.Set("protocol", "cctp")
 		r.Set("event_type", "mint")
 		r.Set("destination_domain", 26)
@@ -87,8 +85,8 @@ func saveCCTPMessageReceived(app core.App, log *types.Log) error {
 	})
 }
 
-func saveGatewayDeposited(app core.App, log *types.Log) error {
-	return saveCrosschain(app, log, func(r *core.Record) {
+func saveGatewayDeposited(app core.App, log *types.Log, seen *batchSeen) error {
+	return saveCrosschain(app, log, seen, func(r *core.Record) {
 		r.Set("protocol", "gateway")
 		r.Set("event_type", "deposit")
 		r.Set("source_domain", 26)
@@ -106,8 +104,8 @@ func saveGatewayDeposited(app core.App, log *types.Log) error {
 	})
 }
 
-func saveGatewayBurned(app core.App, log *types.Log) error {
-	return saveCrosschain(app, log, func(r *core.Record) {
+func saveGatewayBurned(app core.App, log *types.Log, seen *batchSeen) error {
+	return saveCrosschain(app, log, seen, func(r *core.Record) {
 		r.Set("protocol", "gateway")
 		r.Set("event_type", "withdraw")
 		r.Set("source_domain", 26)
@@ -127,8 +125,8 @@ func saveGatewayBurned(app core.App, log *types.Log) error {
 	})
 }
 
-func saveAttestationUsed(app core.App, log *types.Log) error {
-	return saveCrosschain(app, log, func(r *core.Record) {
+func saveAttestationUsed(app core.App, log *types.Log, seen *batchSeen) error {
+	return saveCrosschain(app, log, seen, func(r *core.Record) {
 		r.Set("protocol", "gateway")
 		r.Set("event_type", "deposit")
 		r.Set("destination_domain", 26)

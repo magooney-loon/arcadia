@@ -3,6 +3,7 @@ package indexer
 import (
 	"fmt"
 	"math/big"
+	"sort"
 
 	"github.com/enviodev/hypersync-client-go/types"
 	"github.com/ethereum/go-ethereum/common"
@@ -54,8 +55,18 @@ func processBatch(app core.App, res *types.QueryResponse) error {
 		return agentDeltas[addr]
 	}
 
+	edgeDeltas := make(map[edgeKey]*edgeDelta)
+
+	// One bulk dedupe lookup per relevant table — replaces the per-row SELECT
+	// that every save_* function used to do before INSERT.
+	seen, err := loadBatchSeen(app, res)
+	if err != nil {
+		return err
+	}
+
 	return app.RunInTransaction(func(txApp core.App) error {
 		baseFeeByBlock := make(map[uint64]*big.Int)
+		blockTsByNum := make(map[uint64]int64)
 		for _, blk := range res.Data.Blocks {
 			if blk.Number == nil {
 				continue
@@ -63,7 +74,10 @@ func processBatch(app core.App, res *types.QueryResponse) error {
 			if blk.BaseFeePerGas != nil {
 				baseFeeByBlock[blk.Number.Uint64()] = new(big.Int).Set(blk.BaseFeePerGas)
 			}
-			if err := saveBlock(txApp, &blk); err != nil {
+			if blk.Timestamp != nil {
+				blockTsByNum[blk.Number.Uint64()] = blk.Timestamp.Unix()
+			}
+			if err := saveBlock(txApp, &blk, seen); err != nil {
 				return err
 			}
 			getAcc(blk.Number.Uint64())
@@ -73,7 +87,7 @@ func processBatch(app core.App, res *types.QueryResponse) error {
 			if tx.Hash == nil || tx.BlockNumber == nil {
 				continue
 			}
-			fee, err := saveTransaction(txApp, &tx, baseFeeByBlock[tx.BlockNumber.Uint64()])
+			fee, err := saveTransaction(txApp, &tx, baseFeeByBlock[tx.BlockNumber.Uint64()], seen)
 			if err != nil {
 				return err
 			}
@@ -105,7 +119,7 @@ func processBatch(app core.App, res *types.QueryResponse) error {
 			}
 			bn := log.BlockNumber.Uint64()
 			acc := getAcc(bn)
-			amount, err := routeLog(txApp, &log)
+			amount, err := routeLog(txApp, &log, seen, edgeDeltas)
 			if err != nil {
 				return err
 			}
@@ -140,66 +154,61 @@ func processBatch(app core.App, res *types.QueryResponse) error {
 			}
 		}
 
+		// Compute per-block time deltas. Within the batch we use neighbouring
+		// timestamps; for the lowest block in the batch we look up its
+		// predecessor's timestamp once (single query, not per-block).
 		type blkTs struct {
 			num uint64
 			ts  int64
 		}
-		var sortedBlocks []blkTs
-		for _, blk := range res.Data.Blocks {
-			if blk.Number != nil && blk.Timestamp != nil {
-				sortedBlocks = append(sortedBlocks, blkTs{blk.Number.Uint64(), blk.Timestamp.Unix()})
-			}
+		sortedBlocks := make([]blkTs, 0, len(blockTsByNum))
+		for n, ts := range blockTsByNum {
+			sortedBlocks = append(sortedBlocks, blkTs{n, ts})
 		}
-		for i := 1; i < len(sortedBlocks); i++ {
-			for j := i; j > 0 && sortedBlocks[j].num < sortedBlocks[j-1].num; j-- {
-				sortedBlocks[j], sortedBlocks[j-1] = sortedBlocks[j-1], sortedBlocks[j]
+		sort.Slice(sortedBlocks, func(i, j int) bool { return sortedBlocks[i].num < sortedBlocks[j].num })
+
+		blockTimeMs := make(map[uint64]int64, len(sortedBlocks))
+		if len(sortedBlocks) > 0 {
+			first := sortedBlocks[0].num
+			prev, err := txApp.FindRecordsByFilter("blocks", "number = {:n}", "", 1, 0, map[string]any{"n": first - 1})
+			if err != nil {
+				return fmt.Errorf("find previous block %d: %w", first-1, err)
+			}
+			if len(prev) > 0 {
+				prevTs := prev[0].GetInt("timestamp")
+				blockTimeMs[first] = (sortedBlocks[0].ts - int64(prevTs)) * 1000
+			}
+			for i := 1; i < len(sortedBlocks); i++ {
+				blockTimeMs[sortedBlocks[i].num] = (sortedBlocks[i].ts - sortedBlocks[i-1].ts) * 1000
 			}
 		}
 
-		blockTimeMs := make(map[uint64]int64)
-		for i, bt := range sortedBlocks {
-			if i == 0 {
-				prev, err := txApp.FindRecordsByFilter("blocks", "number = {:n}", "", 1, 0, map[string]any{"n": bt.num - 1})
-				if err != nil {
-					return fmt.Errorf("find previous block %d: %w", bt.num-1, err)
-				}
-				if len(prev) > 0 {
-					prevTs := prev[0].GetInt("timestamp")
-					blockTimeMs[bt.num] = (bt.ts - int64(prevTs)) * 1000
-				}
-			} else {
-				blockTimeMs[bt.num] = (bt.ts - sortedBlocks[i-1].ts) * 1000
+		// Backfill tx_count + block_time_ms on the freshly-inserted block
+		// records (held in seen.newBlocks) instead of re-querying each one.
+		for bn, r := range seen.newBlocks {
+			acc := getAcc(bn)
+			r.Set("tx_count", acc.txCount)
+			if bms, ok := blockTimeMs[bn]; ok && bms > 0 {
+				r.Set("block_time_ms", bms)
+			}
+			if err := txApp.Save(r); err != nil {
+				return fmt.Errorf("save block %d stats backfill: %w", bn, err)
 			}
 		}
 
+		// Insert block_stats for every block we just created. Blocks that
+		// already existed (in seen.blocks but not in seen.newBlocks) keep
+		// their stats — same behaviour as before, no re-query needed.
+		statsColl := utils.MustCollection(txApp, "block_stats")
 		for _, blk := range res.Data.Blocks {
 			if blk.Number == nil || blk.Timestamp == nil {
 				continue
 			}
 			bn := blk.Number.Uint64()
-			acc := getAcc(bn)
-
-			existingBlocks, err := txApp.FindRecordsByFilter("blocks", "number = {:n}", "", 1, 0, map[string]any{"n": bn})
-			if err != nil {
-				return fmt.Errorf("find block %d for stats backfill: %w", bn, err)
-			}
-			if len(existingBlocks) > 0 {
-				existingBlocks[0].Set("tx_count", acc.txCount)
-				if bms, ok := blockTimeMs[bn]; ok && bms > 0 {
-					existingBlocks[0].Set("block_time_ms", bms)
-				}
-				if err := txApp.Save(existingBlocks[0]); err != nil {
-					return fmt.Errorf("save block %d stats backfill: %w", bn, err)
-				}
-			}
-
-			existingStats, err := txApp.FindRecordsByFilter("block_stats", "block_number = {:n}", "", 1, 0, map[string]any{"n": bn})
-			if err != nil {
-				return fmt.Errorf("find block_stats %d: %w", bn, err)
-			}
-			if len(existingStats) > 0 {
+			if _, isNew := seen.newBlocks[bn]; !isNew {
 				continue
 			}
+			acc := getAcc(bn)
 
 			avgFee := new(big.Int)
 			if acc.txCount > 0 && acc.totalFee.Sign() > 0 {
@@ -222,7 +231,7 @@ func processBatch(app core.App, res *types.QueryResponse) error {
 				tps = float64(acc.txCount) / (float64(bms) / 1000.0)
 			}
 
-			stats := core.NewRecord(utils.MustCollection(txApp, "block_stats"))
+			stats := core.NewRecord(statsColl)
 			stats.Set("block_number", bn)
 			stats.Set("timestamp", blk.Timestamp.Unix())
 			stats.Set("tx_count", acc.txCount)
@@ -242,6 +251,11 @@ func processBatch(app core.App, res *types.QueryResponse) error {
 			if err := txApp.Save(stats); err != nil {
 				return fmt.Errorf("save block_stats %d: %w", bn, err)
 			}
+		}
+
+		// One upsert per (from,to) pair, populated above by saveTransfer.
+		if err := flushEdgeDeltas(txApp, edgeDeltas); err != nil {
+			return err
 		}
 
 		for addr, delta := range agentDeltas {

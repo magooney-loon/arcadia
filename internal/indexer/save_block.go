@@ -10,12 +10,9 @@ import (
 	"arcadia/internal/utils"
 )
 
-func saveBlock(app core.App, blk *types.Block) error {
-	existing, err := app.FindRecordsByFilter("blocks", "number = {:n}", "", 1, 0, map[string]any{"n": blk.Number.Uint64()})
-	if err != nil {
-		return fmt.Errorf("find block %d: %w", blk.Number.Uint64(), err)
-	}
-	if len(existing) > 0 {
+func saveBlock(app core.App, blk *types.Block, seen *batchSeen) error {
+	bn := blk.Number.Uint64()
+	if _, dup := seen.blocks[bn]; dup {
 		return nil
 	}
 
@@ -50,17 +47,16 @@ func saveBlock(app core.App, blk *types.Block) error {
 	}
 
 	if err := app.Save(r); err != nil {
-		return fmt.Errorf("save block %d: %w", blk.Number.Uint64(), err)
+		return fmt.Errorf("save block %d: %w", bn, err)
 	}
+	seen.blocks[bn] = struct{}{}
+	seen.newBlocks[bn] = r
 	return nil
 }
 
-func saveTransaction(app core.App, tx *types.Transaction, blockBaseFee *big.Int) (*big.Int, error) {
-	existing, err := app.FindRecordsByFilter("transactions", "hash = {:h}", "", 1, 0, map[string]any{"h": tx.Hash.Hex()})
-	if err != nil {
-		return nil, fmt.Errorf("find transaction %s: %w", tx.Hash.Hex(), err)
-	}
-	if len(existing) > 0 {
+func saveTransaction(app core.App, tx *types.Transaction, blockBaseFee *big.Int, seen *batchSeen) (*big.Int, error) {
+	hash := tx.Hash.Hex()
+	if _, dup := seen.txs[hash]; dup {
 		return nil, nil
 	}
 
@@ -135,7 +131,8 @@ func saveTransaction(app core.App, tx *types.Transaction, blockBaseFee *big.Int)
 	r.Set("is_contract_deploy", isDeployment)
 
 	if err := app.Save(r); err != nil {
-		return nil, fmt.Errorf("save transaction %s: %w", tx.Hash.Hex(), err)
+		return nil, fmt.Errorf("save transaction %s: %w", hash, err)
 	}
+	seen.txs[hash] = struct{}{}
 	return feeWei, nil
 }

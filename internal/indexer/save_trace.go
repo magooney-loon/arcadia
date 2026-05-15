@@ -10,7 +10,7 @@ import (
 	"arcadia/internal/utils"
 )
 
-func routeLog(app core.App, log *types.Log) (*big.Int, error) {
+func routeLog(app core.App, log *types.Log, seen *batchSeen, edges map[edgeKey]*edgeDelta) (*big.Int, error) {
 	if log.Topic0 == nil || log.Address == nil {
 		return nil, nil
 	}
@@ -19,60 +19,60 @@ func routeLog(app core.App, log *types.Log) (*big.Int, error) {
 	switch *log.Topic0 {
 	case utils.TopicTransfer:
 		if addr == utils.AddrAgentRegistry {
-			return nil, saveAgentRegistration(app, log)
+			return nil, saveAgentRegistration(app, log, seen)
 		}
-		return saveTransfer(app, log)
+		return saveTransfer(app, log, seen, edges)
 
 	case utils.TopicDepositForBurn:
-		return nil, saveCCTPDepositForBurn(app, log)
+		return nil, saveCCTPDepositForBurn(app, log, seen)
 
 	case utils.TopicMintAndWithdraw:
-		return nil, saveCCTPMintAndWithdraw(app, log)
+		return nil, saveCCTPMintAndWithdraw(app, log, seen)
 
 	case utils.TopicMessageReceived:
-		return nil, saveCCTPMessageReceived(app, log)
+		return nil, saveCCTPMessageReceived(app, log, seen)
 
 	case utils.TopicGatewayDeposited:
-		return nil, saveGatewayDeposited(app, log)
+		return nil, saveGatewayDeposited(app, log, seen)
 
 	case utils.TopicGatewayBurned:
-		return nil, saveGatewayBurned(app, log)
+		return nil, saveGatewayBurned(app, log, seen)
 
 	case utils.TopicAttestationUsed:
-		return nil, saveAttestationUsed(app, log)
+		return nil, saveAttestationUsed(app, log, seen)
 
 	case utils.TopicJobCreated:
 		if addr == utils.AddrAgenticCommerce {
-			return nil, saveAgentJobCreated(app, log)
+			return nil, saveAgentJobCreated(app, log, seen)
 		}
 	case utils.TopicJobFunded:
 		if addr == utils.AddrAgenticCommerce {
-			return nil, saveAgentJobFunded(app, log)
+			return nil, saveAgentJobFunded(app, log, seen)
 		}
 	case utils.TopicJobSubmitted:
 		if addr == utils.AddrAgenticCommerce {
-			return nil, saveAgentJobSubmitted(app, log)
+			return nil, saveAgentJobSubmitted(app, log, seen)
 		}
 	case utils.TopicJobCompleted:
 		if addr == utils.AddrAgenticCommerce {
-			return nil, saveAgentJobCompleted(app, log)
+			return nil, saveAgentJobCompleted(app, log, seen)
 		}
 	case utils.TopicJobRejected:
 		if addr == utils.AddrAgenticCommerce {
-			return nil, saveAgentJobRejected(app, log)
+			return nil, saveAgentJobRejected(app, log, seen)
 		}
 	case utils.TopicPaymentReleased:
 		if addr == utils.AddrAgenticCommerce {
-			return nil, saveAgentJobPaid(app, log)
+			return nil, saveAgentJobPaid(app, log, seen)
 		}
 	case utils.TopicJobExpired:
 		if addr == utils.AddrAgenticCommerce {
-			return nil, saveAgentJobExpired(app, log)
+			return nil, saveAgentJobExpired(app, log, seen)
 		}
 
 	case utils.TopicTradeRecorded, utils.TopicMakerFunded, utils.TopicTakerFunded, utils.TopicTradeStatusChanged, utils.TopicFeesProcessed:
 		if addr == utils.AddrFxEscrow {
-			return nil, saveFxEvent(app, log)
+			return nil, saveFxEvent(app, log, seen)
 		}
 	}
 	return nil, nil

@@ -11,7 +11,7 @@ import (
 	"arcadia/internal/utils"
 )
 
-func saveAgentRegistration(app core.App, log *types.Log) error {
+func saveAgentRegistration(app core.App, log *types.Log, seen *batchSeen) error {
 	if log.Topic1 == nil || log.Topic2 == nil || log.TransactionHash == nil {
 		return nil
 	}
@@ -21,11 +21,7 @@ func saveAgentRegistration(app core.App, log *types.Log) error {
 	}
 
 	owner := utils.AddressFromTopic(log.Topic2)
-	existing, err := app.FindRecordsByFilter("agents", "agent_address = {:a}", "", 1, 0, map[string]any{"a": owner})
-	if err != nil {
-		return fmt.Errorf("find agent %s: %w", owner, err)
-	}
-	if len(existing) > 0 {
+	if _, dup := seen.agents[owner]; dup {
 		return nil
 	}
 
@@ -42,20 +38,17 @@ func saveAgentRegistration(app core.App, log *types.Log) error {
 	if err := app.Save(r); err != nil {
 		return fmt.Errorf("save agent registration %s: %w", owner, err)
 	}
+	seen.agents[owner] = struct{}{}
 	return nil
 }
 
-func saveAgentJobCreated(app core.App, log *types.Log) error {
+func saveAgentJobCreated(app core.App, log *types.Log, seen *batchSeen) error {
 	if log.Topic1 == nil || log.Topic2 == nil || log.Topic3 == nil || log.TransactionHash == nil {
 		return nil
 	}
 
 	jobID := new(big.Int).SetBytes(log.Topic1.Bytes()).String()
-	existing, err := app.FindRecordsByFilter("agent_jobs", "job_id = {:j}", "", 1, 0, map[string]any{"j": jobID})
-	if err != nil {
-		return fmt.Errorf("find agent job %s: %w", jobID, err)
-	}
-	if len(existing) > 0 {
+	if _, dup := seen.jobs[jobID]; dup {
 		return nil
 	}
 
@@ -72,25 +65,33 @@ func saveAgentJobCreated(app core.App, log *types.Log) error {
 	if err := app.Save(r); err != nil {
 		return fmt.Errorf("save agent job %s: %w", jobID, err)
 	}
+	seen.jobs[jobID] = r
 	return nil
 }
 
-func agentJobUpsert(app core.App, log *types.Log, update func(*core.Record)) error {
+// agentJobUpsert is keyed by job_id; jobs created in the same batch are
+// already in seen.jobs after saveAgentJobCreated. Older jobs require a
+// targeted lookup — agent_jobs is small (~hundreds today) so this stays
+// per-event without batch prefetch.
+func agentJobUpsert(app core.App, log *types.Log, seen *batchSeen, update func(*core.Record)) error {
 	if log.Topic1 == nil {
 		return nil
 	}
 	jobID := new(big.Int).SetBytes(log.Topic1.Bytes()).String()
-	existing, err := app.FindRecordsByFilter("agent_jobs", "job_id = {:j}", "", 1, 0, map[string]any{"j": jobID})
-	if err != nil {
-		return fmt.Errorf("find agent job %s: %w", jobID, err)
-	}
-	var r *core.Record
-	if len(existing) > 0 {
-		r = existing[0]
-	} else {
-		r = core.NewRecord(utils.MustCollection(app, "agent_jobs"))
-		r.Set("job_id", jobID)
-		r.Set("status", "created")
+	r, ok := seen.jobs[jobID]
+	if !ok {
+		existing, err := app.FindRecordsByFilter("agent_jobs", "job_id = {:j}", "", 1, 0, map[string]any{"j": jobID})
+		if err != nil {
+			return fmt.Errorf("find agent job %s: %w", jobID, err)
+		}
+		if len(existing) > 0 {
+			r = existing[0]
+		} else {
+			r = core.NewRecord(utils.MustCollection(app, "agent_jobs"))
+			r.Set("job_id", jobID)
+			r.Set("status", "created")
+		}
+		seen.jobs[jobID] = r
 	}
 	update(r)
 	if err := app.Save(r); err != nil {
@@ -99,8 +100,8 @@ func agentJobUpsert(app core.App, log *types.Log, update func(*core.Record)) err
 	return nil
 }
 
-func saveAgentJobFunded(app core.App, log *types.Log) error {
-	return agentJobUpsert(app, log, func(r *core.Record) {
+func saveAgentJobFunded(app core.App, log *types.Log, seen *batchSeen) error {
+	return agentJobUpsert(app, log, seen, func(r *core.Record) {
 		r.Set("status", "funded")
 		if log.Data != nil && len(*log.Data) >= 32 {
 			r.Set("payment_usdc", utils.StablecoinHuman(utils.ReadBig(*log.Data, 0)))
@@ -108,26 +109,26 @@ func saveAgentJobFunded(app core.App, log *types.Log) error {
 	})
 }
 
-func saveAgentJobSubmitted(app core.App, log *types.Log) error {
-	return agentJobUpsert(app, log, func(r *core.Record) {
+func saveAgentJobSubmitted(app core.App, log *types.Log, seen *batchSeen) error {
+	return agentJobUpsert(app, log, seen, func(r *core.Record) {
 		r.Set("status", "submitted")
 	})
 }
 
-func saveAgentJobCompleted(app core.App, log *types.Log) error {
-	return agentJobUpsert(app, log, func(r *core.Record) {
+func saveAgentJobCompleted(app core.App, log *types.Log, seen *batchSeen) error {
+	return agentJobUpsert(app, log, seen, func(r *core.Record) {
 		r.Set("status", "completed")
 	})
 }
 
-func saveAgentJobRejected(app core.App, log *types.Log) error {
-	return agentJobUpsert(app, log, func(r *core.Record) {
+func saveAgentJobRejected(app core.App, log *types.Log, seen *batchSeen) error {
+	return agentJobUpsert(app, log, seen, func(r *core.Record) {
 		r.Set("status", "rejected")
 	})
 }
 
-func saveAgentJobPaid(app core.App, log *types.Log) error {
-	return agentJobUpsert(app, log, func(r *core.Record) {
+func saveAgentJobPaid(app core.App, log *types.Log, seen *batchSeen) error {
+	return agentJobUpsert(app, log, seen, func(r *core.Record) {
 		r.Set("status", "paid")
 		if log.BlockNumber != nil {
 			r.Set("settled_at_block", log.BlockNumber.Uint64())
@@ -138,8 +139,8 @@ func saveAgentJobPaid(app core.App, log *types.Log) error {
 	})
 }
 
-func saveAgentJobExpired(app core.App, log *types.Log) error {
-	return agentJobUpsert(app, log, func(r *core.Record) {
+func saveAgentJobExpired(app core.App, log *types.Log, seen *batchSeen) error {
+	return agentJobUpsert(app, log, seen, func(r *core.Record) {
 		r.Set("status", "expired")
 	})
 }

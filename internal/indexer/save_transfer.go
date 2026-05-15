@@ -12,7 +12,7 @@ import (
 	"arcadia/internal/utils"
 )
 
-func saveTransfer(app core.App, log *types.Log) (*big.Int, error) {
+func saveTransfer(app core.App, log *types.Log, seen *batchSeen, edges map[edgeKey]*edgeDelta) (*big.Int, error) {
 	if log.Topic1 == nil || log.Topic2 == nil || log.TransactionHash == nil || log.LogIndex == nil {
 		return nil, nil
 	}
@@ -20,13 +20,7 @@ func saveTransfer(app core.App, log *types.Log) (*big.Int, error) {
 	txHash := log.TransactionHash.Hex()
 	logIdx := *log.LogIndex
 
-	existing, err := app.FindRecordsByFilter("transfers",
-		"tx_hash = {:h} && log_index = {:i}", "", 1, 0,
-		map[string]any{"h": txHash, "i": logIdx})
-	if err != nil {
-		return nil, fmt.Errorf("find transfer %s/%d: %w", txHash, logIdx, err)
-	}
-	if len(existing) > 0 {
+	if _, dup := seen.transfers[txLogKey{txHash, logIdx}]; dup {
 		return nil, nil
 	}
 
@@ -80,55 +74,85 @@ func saveTransfer(app core.App, log *types.Log) (*big.Int, error) {
 	if err := app.Save(r); err != nil {
 		return nil, fmt.Errorf("save transfer %s/%d: %w", txHash, logIdx, err)
 	}
+	seen.transfers[txLogKey{txHash, logIdx}] = struct{}{}
 
-	// Only create wallet edges and return an aggregatable amount for fungible tokens.
+	// Only accumulate wallet edges for fungible stablecoins.
 	if isNFT {
 		return nil, nil
 	}
 
 	if _, isStable := utils.KnownTokens[*log.Address]; isStable {
-		if err := upsertWalletEdge(app, from.Hex(), to.Hex(), amountRaw, log.BlockNumber); err != nil {
-			return nil, err
+		key := edgeKey{from.Hex(), to.Hex()}
+		d, ok := edges[key]
+		if !ok {
+			d = &edgeDelta{total: new(big.Int)}
+			edges[key] = d
+		}
+		d.total.Add(d.total, amountRaw)
+		d.count++
+		if log.BlockNumber != nil {
+			if bn := log.BlockNumber.Uint64(); bn > d.lastSeen {
+				d.lastSeen = bn
+			}
+		}
+		if _, isAgent := seen.agents[key.from]; isAgent {
+			d.fromIsAgent = true
+		}
+		if _, isAgent := seen.agents[key.to]; isAgent {
+			d.toIsAgent = true
 		}
 	}
 
 	return amountRaw, nil
 }
 
-func upsertWalletEdge(app core.App, from, to string, amount *big.Int, blockNumber *big.Int) error {
-	existing, err := app.FindRecordsByFilter("wallet_edges",
-		"from_wallet = {:f} && to_wallet = {:t}", "", 1, 0,
-		map[string]any{"f": from, "t": to})
+// flushEdgeDeltas applies the per-batch edge aggregator to wallet_edges in one
+// prefetch + bulk save pass instead of SELECT+SAVE per Transfer log.
+func flushEdgeDeltas(app core.App, deltas map[edgeKey]*edgeDelta) error {
+	if len(deltas) == 0 {
+		return nil
+	}
+	keys := make([]edgeKey, 0, len(deltas))
+	for k := range deltas {
+		keys = append(keys, k)
+	}
+	existing, err := loadEdgesFor(app, keys)
 	if err != nil {
-		return fmt.Errorf("find wallet edge %s -> %s: %w", from, to, err)
+		return err
 	}
 
-	var r *core.Record
-	if len(existing) > 0 {
-		r = existing[0]
-		prevTotal, _ := new(big.Int).SetString(r.GetString("total_usdc"), 10)
-		if prevTotal == nil {
-			prevTotal = new(big.Int)
+	coll := utils.MustCollection(app, "wallet_edges")
+	for key, d := range deltas {
+		r, hit := existing[key]
+		if hit {
+			prev, _ := new(big.Int).SetString(r.GetString("total_usdc"), 10)
+			if prev == nil {
+				prev = new(big.Int)
+			}
+			r.Set("total_usdc", new(big.Int).Add(prev, d.total).String())
+			r.Set("tx_count", r.GetInt("tx_count")+d.count)
+			if d.lastSeen > 0 {
+				r.Set("last_seen_block", d.lastSeen)
+			}
+		} else {
+			r = core.NewRecord(coll)
+			r.Set("from_wallet", key.from)
+			r.Set("to_wallet", key.to)
+			r.Set("total_usdc", d.total.String())
+			r.Set("tx_count", d.count)
+			if d.lastSeen > 0 {
+				r.Set("last_seen_block", d.lastSeen)
+			}
+			if d.fromIsAgent {
+				r.Set("from_is_agent", true)
+			}
+			if d.toIsAgent {
+				r.Set("to_is_agent", true)
+			}
 		}
-		newTotal := new(big.Int).Add(prevTotal, amount)
-		r.Set("total_usdc", newTotal.String())
-		r.Set("tx_count", r.GetInt("tx_count")+1)
-		if blockNumber != nil {
-			r.Set("last_seen_block", blockNumber.Uint64())
+		if err := app.Save(r); err != nil {
+			return fmt.Errorf("save wallet edge %s -> %s: %w", key.from, key.to, err)
 		}
-	} else {
-		r = core.NewRecord(utils.MustCollection(app, "wallet_edges"))
-		r.Set("from_wallet", from)
-		r.Set("to_wallet", to)
-		r.Set("total_usdc", amount.String())
-		r.Set("tx_count", 1)
-		if blockNumber != nil {
-			r.Set("last_seen_block", blockNumber.Uint64())
-		}
-	}
-
-	if err := app.Save(r); err != nil {
-		return fmt.Errorf("save wallet edge %s -> %s: %w", from, to, err)
 	}
 	return nil
 }

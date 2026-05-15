@@ -10,18 +10,21 @@ import (
 	"arcadia/internal/utils"
 )
 
-func fxUpsert(app core.App, tradeID string, update func(*core.Record)) error {
-	existing, err := app.FindRecordsByFilter("fx_swaps", "trade_id = {:id}", "", 1, 0, map[string]any{"id": tradeID})
-	if err != nil {
-		return fmt.Errorf("find fx trade %s: %w", tradeID, err)
-	}
-	var r *core.Record
-	if len(existing) > 0 {
-		r = existing[0]
-	} else {
-		r = core.NewRecord(utils.MustCollection(app, "fx_swaps"))
-		r.Set("trade_id", tradeID)
-		r.Set("status", "created")
+func fxUpsert(app core.App, tradeID string, seen *batchSeen, update func(*core.Record)) error {
+	r, ok := seen.fx[tradeID]
+	if !ok {
+		existing, err := app.FindRecordsByFilter("fx_swaps", "trade_id = {:id}", "", 1, 0, map[string]any{"id": tradeID})
+		if err != nil {
+			return fmt.Errorf("find fx trade %s: %w", tradeID, err)
+		}
+		if len(existing) > 0 {
+			r = existing[0]
+		} else {
+			r = core.NewRecord(utils.MustCollection(app, "fx_swaps"))
+			r.Set("trade_id", tradeID)
+			r.Set("status", "created")
+		}
+		seen.fx[tradeID] = r
 	}
 	update(r)
 	if err := app.Save(r); err != nil {
@@ -30,7 +33,7 @@ func fxUpsert(app core.App, tradeID string, update func(*core.Record)) error {
 	return nil
 }
 
-func saveFxEvent(app core.App, log *types.Log) error {
+func saveFxEvent(app core.App, log *types.Log, seen *batchSeen) error {
 	if log.Topic0 == nil || log.Topic1 == nil {
 		return nil
 	}
@@ -43,7 +46,7 @@ func saveFxEvent(app core.App, log *types.Log) error {
 			return nil
 		}
 		quoteID := log.Topic2.Hex()
-		return fxUpsert(app, tradeID, func(r *core.Record) {
+		return fxUpsert(app, tradeID, seen, func(r *core.Record) {
 			r.Set("quote_id", quoteID)
 			r.Set("status", "created")
 			if log.BlockNumber != nil {
@@ -59,7 +62,7 @@ func saveFxEvent(app core.App, log *types.Log) error {
 			return nil
 		}
 		maker := utils.AddressFromTopic(log.Topic2)
-		return fxUpsert(app, tradeID, func(r *core.Record) {
+		return fxUpsert(app, tradeID, seen, func(r *core.Record) {
 			r.Set("maker", maker)
 			if r.GetString("status") == "taker_funded" {
 				r.Set("status", "maker_funded")
@@ -71,7 +74,7 @@ func saveFxEvent(app core.App, log *types.Log) error {
 			return nil
 		}
 		taker := utils.AddressFromTopic(log.Topic2)
-		return fxUpsert(app, tradeID, func(r *core.Record) {
+		return fxUpsert(app, tradeID, seen, func(r *core.Record) {
 			r.Set("taker", taker)
 			r.Set("status", "taker_funded")
 		})
@@ -85,7 +88,7 @@ func saveFxEvent(app core.App, log *types.Log) error {
 		if statusCode == 3 {
 			statusStr = "cancelled"
 		}
-		return fxUpsert(app, tradeID, func(r *core.Record) {
+		return fxUpsert(app, tradeID, seen, func(r *core.Record) {
 			r.Set("status_code", statusCode)
 			r.Set("status", statusStr)
 		})
@@ -96,7 +99,7 @@ func saveFxEvent(app core.App, log *types.Log) error {
 		}
 		takerFee := new(big.Int).SetBytes((*log.Data)[:32]).String()
 		makerFee := new(big.Int).SetBytes((*log.Data)[32:64]).String()
-		return fxUpsert(app, tradeID, func(r *core.Record) {
+		return fxUpsert(app, tradeID, seen, func(r *core.Record) {
 			r.Set("taker_fee", takerFee)
 			r.Set("maker_fee", makerFee)
 		})
