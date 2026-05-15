@@ -13,6 +13,7 @@ import (
 	hsutils "github.com/enviodev/hypersync-client-go/utils"
 	"github.com/pocketbase/pocketbase/core"
 
+	"arcadia/internal/chain"
 	"arcadia/internal/utils"
 )
 
@@ -28,20 +29,20 @@ type fetchResult struct {
 }
 
 func runIndexer(ctx context.Context, app core.App, attempt int) error {
-	apiToken := utils.EnvioAPIToken()
+	apiToken := chain.EnvioAPIToken()
 	if apiToken == "" {
 		return fmt.Errorf("ENVIO_API_TOKEN not set — get one at envio.dev")
 	}
 
-	rpc := utils.NextRPCURL()
-	log.Printf("[indexer] connecting — hypersync: %s  rpc: %s", utils.ArcHyperSyncURL, rpc)
+	rpc := chain.NextRPCURL()
+	log.Printf("[indexer] connecting — hypersync: %s  rpc: %s", chain.ArcHyperSyncURL, rpc)
 
 	hyper, err := hypersyncgo.NewHyper(ctx, options.Options{
 		Blockchains: []options.Node{
 			{
 				Type:           hsutils.EthereumNetwork,
-				NetworkId:      utils.ArcNetworkID,
-				Endpoint:       utils.ArcHyperSyncURL,
+				NetworkId:      chain.ArcNetworkID,
+				Endpoint:       chain.ArcHyperSyncURL,
 				RpcEndpoint:    rpc,
 				ApiToken:       apiToken,
 				MaxNumRetries:  3,
@@ -55,7 +56,7 @@ func runIndexer(ctx context.Context, app core.App, attempt int) error {
 		return fmt.Errorf("failed to create HyperSync client: %w", err)
 	}
 
-	client, ok := hyper.GetClient(utils.ArcNetworkID)
+	client, ok := hyper.GetClient(chain.ArcNetworkID)
 	if !ok {
 		return fmt.Errorf("arc client not found in hyper")
 	}

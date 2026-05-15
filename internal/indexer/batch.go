@@ -9,48 +9,25 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/pocketbase/pocketbase/core"
 
+	"arcadia/internal/chain"
 	"arcadia/internal/utils"
 )
 
 func processBatch(app core.App, res *types.QueryResponse) error {
-	type blockAcc struct {
-		txCount         int
-		uniqueSenders   map[string]struct{}
-		uniqueReceivers map[string]struct{}
-		newContracts    int
-		totalFee        *big.Int
-		totalUSDC       *big.Int
-		totalEURC       *big.Int
-		totalUSYC       *big.Int
-		largestUSDC     *big.Int
-	}
 	perBlock := make(map[uint64]*blockAcc)
 
 	getAcc := func(blockNum uint64) *blockAcc {
 		if _, ok := perBlock[blockNum]; !ok {
-			perBlock[blockNum] = &blockAcc{
-				uniqueSenders:   make(map[string]struct{}),
-				uniqueReceivers: make(map[string]struct{}),
-				totalFee:        new(big.Int),
-				totalUSDC:       new(big.Int),
-				totalEURC:       new(big.Int),
-				totalUSYC:       new(big.Int),
-				largestUSDC:     new(big.Int),
-			}
+			perBlock[blockNum] = newBlockAcc()
 		}
 		return perBlock[blockNum]
 	}
 
-	type agentDelta struct {
-		feeWei      *big.Int
-		transferred *big.Int
-		txCount     int
-	}
 	agentDeltas := make(map[string]*agentDelta)
 
 	getAgentDelta := func(addr string) *agentDelta {
 		if agentDeltas[addr] == nil {
-			agentDeltas[addr] = &agentDelta{feeWei: new(big.Int), transferred: new(big.Int)}
+			agentDeltas[addr] = newAgentDelta()
 		}
 		return agentDeltas[addr]
 	}
@@ -125,19 +102,19 @@ func processBatch(app core.App, res *types.QueryResponse) error {
 			}
 			if amount != nil && log.Address != nil {
 				switch *log.Address {
-				case utils.AddrUSDC:
+				case chain.AddrUSDC:
 					acc.totalUSDC.Add(acc.totalUSDC, amount)
 					if amount.Cmp(acc.largestUSDC) > 0 {
 						acc.largestUSDC.Set(amount)
 					}
-				case utils.AddrEURC:
+				case chain.AddrEURC:
 					acc.totalEURC.Add(acc.totalEURC, amount)
-				case utils.AddrUSYC:
+				case chain.AddrUSYC:
 					acc.totalUSYC.Add(acc.totalUSYC, amount)
 				}
-				if log.Topic0 != nil && *log.Topic0 == utils.TopicTransfer &&
+				if log.Topic0 != nil && *log.Topic0 == chain.TopicTransfer &&
 					log.Address != nil && log.Topic1 != nil {
-					if _, isStable := utils.KnownTokens[*log.Address]; isStable {
+					if _, isStable := chain.KnownTokens[*log.Address]; isStable {
 						fromAddr := common.BytesToAddress(log.Topic1.Bytes()[12:]).Hex()
 						getAgentDelta(fromAddr).transferred.Add(getAgentDelta(fromAddr).transferred, amount)
 					}

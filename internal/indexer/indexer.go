@@ -12,6 +12,7 @@ import (
 
 	"github.com/pocketbase/pocketbase/core"
 
+	"arcadia/internal/rpc"
 	"arcadia/internal/utils"
 )
 
@@ -20,7 +21,7 @@ import (
 func StartIndexer(app core.App) {
 	const startupDelay = 10 * time.Second
 	log.Printf("[indexer] scheduled Arcadia HyperSync indexer startup in %s", startupDelay)
-	utils.SeedKnownTokens()
+	rpc.SeedKnownTokens()
 	startIndexerEventWriter(app)
 
 	ctx, cancel := context.WithCancel(context.Background())

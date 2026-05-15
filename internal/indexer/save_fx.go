@@ -7,6 +7,7 @@ import (
 	"github.com/enviodev/hypersync-client-go/types"
 	"github.com/pocketbase/pocketbase/core"
 
+	"arcadia/internal/chain"
 	"arcadia/internal/utils"
 )
 
@@ -45,7 +46,7 @@ func saveFxEvent(app core.App, log *types.Log, seen *batchSeen) error {
 	tradeID := new(big.Int).SetBytes(log.Topic1.Bytes()).String()
 
 	switch *log.Topic0 {
-	case utils.TopicTradeRecorded:
+	case chain.TopicTradeRecorded:
 		if log.Topic2 == nil {
 			return nil
 		}
@@ -61,7 +62,7 @@ func saveFxEvent(app core.App, log *types.Log, seen *batchSeen) error {
 			}
 		})
 
-	case utils.TopicMakerFunded:
+	case chain.TopicMakerFunded:
 		if log.Topic2 == nil {
 			return nil
 		}
@@ -73,7 +74,7 @@ func saveFxEvent(app core.App, log *types.Log, seen *batchSeen) error {
 			}
 		})
 
-	case utils.TopicTakerFunded:
+	case chain.TopicTakerFunded:
 		if log.Topic2 == nil {
 			return nil
 		}
@@ -83,7 +84,7 @@ func saveFxEvent(app core.App, log *types.Log, seen *batchSeen) error {
 			r.Set("status", "taker_funded")
 		})
 
-	case utils.TopicTradeStatusChanged:
+	case chain.TopicTradeStatusChanged:
 		if log.Data == nil || len(*log.Data) < 32 {
 			return nil
 		}
@@ -97,7 +98,7 @@ func saveFxEvent(app core.App, log *types.Log, seen *batchSeen) error {
 			r.Set("status", statusStr)
 		})
 
-	case utils.TopicFeesProcessed:
+	case chain.TopicFeesProcessed:
 		if log.Data == nil || len(*log.Data) < 64 {
 			return nil
 		}

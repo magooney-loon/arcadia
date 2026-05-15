@@ -9,6 +9,8 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/pocketbase/pocketbase/core"
 
+	"arcadia/internal/chain"
+	"arcadia/internal/rpc"
 	"arcadia/internal/utils"
 )
 
@@ -38,12 +40,12 @@ func saveTransfer(app core.App, log *types.Log, seen *batchSeen, edges map[edgeK
 	if log.BlockNumber != nil {
 		firstSeenBlock = log.BlockNumber.Uint64()
 	}
-	info := utils.LookupTokenInfo(app, *log.Address, firstSeenBlock)
+	info := rpc.LookupTokenInfo(app, *log.Address, firstSeenBlock)
 
 	isNFT := info.TokenType == "ERC-721" || info.TokenType == "ERC-1155"
 
 	symbol := "OTHER"
-	if s, ok := utils.KnownTokens[*log.Address]; ok {
+	if s, ok := chain.KnownTokens[*log.Address]; ok {
 		symbol = s
 	}
 
@@ -86,7 +88,7 @@ func saveTransfer(app core.App, log *types.Log, seen *batchSeen, edges map[edgeK
 		return nil, nil
 	}
 
-	if _, isStable := utils.KnownTokens[*log.Address]; isStable {
+	if _, isStable := chain.KnownTokens[*log.Address]; isStable {
 		key := edgeKey{from.Hex(), to.Hex()}
 		d, ok := edges[key]
 		if !ok {
@@ -109,58 +111,4 @@ func saveTransfer(app core.App, log *types.Log, seen *batchSeen, edges map[edgeK
 	}
 
 	return amountRaw, nil
-}
-
-// flushEdgeDeltas applies the per-batch edge aggregator to wallet_edges in one
-// prefetch + bulk save pass instead of SELECT+SAVE per Transfer log.
-func flushEdgeDeltas(app core.App, deltas map[edgeKey]*edgeDelta) error {
-	if len(deltas) == 0 {
-		return nil
-	}
-	keys := make([]edgeKey, 0, len(deltas))
-	for k := range deltas {
-		keys = append(keys, k)
-	}
-	existing, err := loadEdgesFor(app, keys)
-	if err != nil {
-		return err
-	}
-
-	coll, err := utils.FindCollection(app, "wallet_edges")
-	if err != nil {
-		return err
-	}
-	for key, d := range deltas {
-		r, hit := existing[key]
-		if hit {
-			prev, _ := new(big.Int).SetString(r.GetString("total_usdc"), 10)
-			if prev == nil {
-				prev = new(big.Int)
-			}
-			r.Set("total_usdc", new(big.Int).Add(prev, d.total).String())
-			r.Set("tx_count", r.GetInt("tx_count")+d.count)
-			if d.lastSeen > 0 {
-				r.Set("last_seen_block", d.lastSeen)
-			}
-		} else {
-			r = core.NewRecord(coll)
-			r.Set("from_wallet", key.from)
-			r.Set("to_wallet", key.to)
-			r.Set("total_usdc", d.total.String())
-			r.Set("tx_count", d.count)
-			if d.lastSeen > 0 {
-				r.Set("last_seen_block", d.lastSeen)
-			}
-			if d.fromIsAgent {
-				r.Set("from_is_agent", true)
-			}
-			if d.toIsAgent {
-				r.Set("to_is_agent", true)
-			}
-		}
-		if err := app.Save(r); err != nil {
-			return fmt.Errorf("save wallet edge %s -> %s: %w", key.from, key.to, err)
-		}
-	}
-	return nil
 }

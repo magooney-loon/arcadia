@@ -30,12 +30,12 @@ Legend: ✅ done · 🔄 in progress · ⬜ pending · ⏭ skipped
 | 18 | `MustCollection` → error-returning | ✅ |
 | 19 | Token cache eviction | ⏭ defer (small bound today) |
 | 20 | DB connection pool tuning | ⏭ (see #16) |
-| R1 | Split `handlers.go` into `handlers/*.go` | ⬜ |
-| R2 | Split `collections.go` into `collections/*.go` | ⬜ |
-| R3 | Move `utils/tokens.go` → `internal/rpc/erc.go` | ⬜ |
-| R4 | Move `utils/config.go` → `internal/chain/arc.go` | ⬜ |
+| R1 | Split `handlers.go` into `handlers/*.go` | ✅ |
+| R2 | Split `collections.go` into `collections/*.go` | ✅ |
+| R3 | Move `utils/tokens.go` → `internal/rpc/erc.go` | ✅ |
+| R4 | Move `utils/config.go` → `internal/chain/arc.go` | ✅ |
 | R5 | Introduce `internal/repo/` | ⬜ |
-| R6 | Extract indexer aggregator | ⬜ |
+| R6 | Extract indexer aggregator | ✅ |
 
 ### SQLite snapshot (probed 2026-05-15 on `pb_data/data.db`)
 

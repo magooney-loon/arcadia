@@ -8,6 +8,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/pocketbase/pocketbase/core"
 
+	"arcadia/internal/rpc"
 	"arcadia/internal/utils"
 )
 
@@ -94,7 +95,7 @@ func RunTokenAnalytics(app core.App) {
 					!r.GetBool("lookup_failed")
 
 				if !hasMetadata {
-					info := utils.FetchFullTokenInfo(addr)
+					info := rpc.FetchFullTokenInfo(addr)
 					r.Set("symbol", info.Symbol)
 					r.Set("name", info.Name)
 					r.Set("decimals", int(info.Decimals))
