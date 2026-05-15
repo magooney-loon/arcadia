@@ -14,7 +14,7 @@ Legend: ✅ done · 🔄 in progress · ⬜ pending · ⏭ skipped
 | 2 | Dedup block backfill SELECTs | ✅ |
 | 3 | Aggregate `wallet_edges` upserts | ✅ |
 | 4 | Adaptive inter-batch sleep | ✅ |
-| 5 | Prefetch next batch (parallel fetch/process) | ⬜ |
+| 5 | Prefetch next batch (parallel fetch/process) | ✅ |
 | 6 | `indexerHealthJob` SQL COUNT(*) | ✅ |
 | 7 | `indexerEventsCleanup` bulk DELETE | ✅ |
 | 8 | Drop `batch_start` events / buffer event writes | ✅ |

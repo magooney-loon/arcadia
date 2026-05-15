@@ -9,14 +9,25 @@ import (
 
 	hypersyncgo "github.com/enviodev/hypersync-client-go"
 	"github.com/enviodev/hypersync-client-go/options"
+	"github.com/enviodev/hypersync-client-go/types"
 	hsutils "github.com/enviodev/hypersync-client-go/utils"
 	"github.com/pocketbase/pocketbase/core"
 
 	"arcadia/internal/utils"
 )
 
-func runIndexer(ctx context.Context, app core.App, attempt int) error {
+// fetchResult carries one HyperSync batch fetch outcome.
+// res == nil means the fetch found no new blocks (at chain tip).
+type fetchResult struct {
+	res     *types.QueryResponse
+	tip     uint64
+	start   uint64
+	toBlock uint64
+	err     error
+	atTip   bool
+}
 
+func runIndexer(ctx context.Context, app core.App, attempt int) error {
 	apiToken := utils.EnvioAPIToken()
 	if apiToken == "" {
 		return fmt.Errorf("ENVIO_API_TOKEN not set — get one at envio.dev")
@@ -91,54 +102,98 @@ func runIndexer(ctx context.Context, app core.App, attempt int) error {
 		}
 	}()
 
-	log.Println("[indexer] explicit GetArrow loop running")
+	// startPrefetch kicks off an async tip-check + batch fetch. Returns a
+	// buffered channel that yields exactly one result. The goroutine is
+	// automatically cancelled via ctx when runIndexer returns.
+	startPrefetch := func(start uint64) <-chan fetchResult {
+		ch := make(chan fetchResult, 1)
+		go func() {
+			tipCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			tip, err := getChainTip(tipCtx, client)
+			cancel()
+			if err != nil {
+				ch <- fetchResult{err: fmt.Errorf("prefetch tip: %w", err)}
+				return
+			}
+			if start >= tip {
+				ch <- fetchResult{tip: tip, start: start, atTip: true}
+				return
+			}
+			toBlock := start + 200
+			if toBlock > tip+1 {
+				toBlock = tip + 1
+			}
+			res, err := getIndexerBatch(ctx, client, newIndexerQuery(start, toBlock))
+			ch <- fetchResult{res: res, tip: tip, start: start, toBlock: toBlock, err: err}
+		}()
+		return ch
+	}
+
+	log.Println("[indexer] prefetch loop running")
+
+	// Kick off the first fetch before entering the loop.
+	pending := startPrefetch(fromBlock)
 
 	for {
 		if ctx.Err() != nil {
 			return nil
 		}
-		start := currentBlock.Load()
-		tipCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-		tip, tipErr := getChainTip(tipCtx, client)
-		cancel()
-		if tipErr != nil {
-			return fmt.Errorf("fetch chain tip before batch: %w", tipErr)
+
+		// Wait for the in-flight fetch.
+		var fr fetchResult
+		select {
+		case fr = <-pending:
+		case <-ctx.Done():
+			return nil
 		}
-		if start >= tip {
+
+		if fr.err != nil {
+			return fr.err
+		}
+
+		if fr.atTip {
+			// Nothing to process — wait for a new block then re-fetch.
 			select {
 			case <-time.After(2 * time.Second):
 			case <-ctx.Done():
 				return nil
 			}
+			pending = startPrefetch(fr.start)
 			continue
 		}
 
-		toBlock := start + 200
-		if toBlock <= start || toBlock > tip+1 {
-			toBlock = tip + 1
+		res := fr.res
+		start, toBlock, tip := fr.start, fr.toBlock, fr.tip
+
+		if res == nil {
+			return fmt.Errorf("batch range [%d,%d) returned nil response", start, toBlock)
 		}
+		if res.NextBlock == nil {
+			return fmt.Errorf("batch range [%d,%d) returned nil next_block", start, toBlock)
+		}
+		next := res.NextBlock.Uint64()
+		if next <= start {
+			return fmt.Errorf("batch range [%d,%d) did not advance next_block: %d", start, toBlock, next)
+		}
+
+		remainingLag := uint64(0)
+		if tip > next {
+			remainingLag = tip - next
+		}
+
+		// ── Start prefetch of batch N+1 BEFORE processing batch N ────────────
+		// The goroutine runs concurrently with processBatch below, overlapping
+		// the WAN round-trip with the SQLite write time.
+		pending = startPrefetch(next)
 
 		nextBatch := completedBatches.Load() + 1
 		batchStart := time.Now()
 		processingBatch.Store(nextBatch)
 		processingStartedAtUnixNano.Store(batchStart.UnixNano())
-		log.Printf("[indexer] batch #%d fetching | range=[%d,%d) | tip=%d | lag=%d", nextBatch, start, toBlock, tip, tip-start)
+		log.Printf("[indexer] batch #%d processing | block %d | next_block=%d | blocks=%d txs=%d logs=%d | lag=%d",
+			nextBatch, start, next,
+			len(res.Data.Blocks), len(res.Data.Transactions), len(res.Data.Logs), remainingLag)
 
-		res, err := getIndexerBatch(ctx, client, newIndexerQuery(start, toBlock))
-		if err != nil {
-			processingBatch.Store(0)
-			processingStartedAtUnixNano.Store(0)
-			return fmt.Errorf("fetch batch range [%d,%d): %w", start, toBlock, err)
-		}
-
-		nextBlock := "<nil>"
-		if res.NextBlock != nil {
-			nextBlock = res.NextBlock.String()
-		}
-		log.Printf("[indexer] batch #%d processing | current block %d | next_block=%s | blocks=%d txs=%d logs=%d",
-			nextBatch, start, nextBlock, len(res.Data.Blocks), len(res.Data.Transactions), len(res.Data.Logs))
-		// batch_start dropped — batch_done carries the same fields and twice the
-		// event-write pressure was hitting the same SQLite writer as the batch.
 		if err := processBatch(app, res); err != nil {
 			processingBatch.Store(0)
 			processingStartedAtUnixNano.Store(0)
@@ -153,18 +208,6 @@ func runIndexer(ctx context.Context, app core.App, attempt int) error {
 				"error":        err,
 			})
 			return err
-		}
-
-		if res.NextBlock == nil {
-			processingBatch.Store(0)
-			processingStartedAtUnixNano.Store(0)
-			return fmt.Errorf("batch range [%d,%d) returned nil next_block", start, toBlock)
-		}
-		next := res.NextBlock.Uint64()
-		if next <= start {
-			processingBatch.Store(0)
-			processingStartedAtUnixNano.Store(0)
-			return fmt.Errorf("batch range [%d,%d) did not advance next_block: %d", start, toBlock, next)
 		}
 
 		currentBlock.Store(next)
@@ -182,9 +225,7 @@ func runIndexer(ctx context.Context, app core.App, attempt int) error {
 		processingStartedAtUnixNano.Store(0)
 		log.Printf("[indexer] batch #%d | block %d | range=[%d,%d) | blocks=%d txs=%d logs=%d | %dms",
 			batchCount, currentBlock.Load(), start, toBlock,
-			len(res.Data.Blocks), len(res.Data.Transactions), len(res.Data.Logs),
-			elapsed,
-		)
+			len(res.Data.Blocks), len(res.Data.Transactions), len(res.Data.Logs), elapsed)
 		recordIndexerEvent(app, "info", "batch_done", "finished processing indexer batch", indexerEventFields{
 			"attempt":      attempt,
 			"batch":        batchCount,
@@ -195,27 +236,26 @@ func runIndexer(ctx context.Context, app core.App, attempt int) error {
 			"logs":         len(res.Data.Logs),
 		})
 
-		// Adaptive pacing: sprint when behind, ease off at the tip.
-		// Arc averages ~380 ms/block; the indexer fetches 200-block batches.
-		newTip := next
-		remainingLag := uint64(0)
-		if tip > newTip {
-			remainingLag = tip - newTip
-		}
-		var sleepDur time.Duration
-		switch {
-		case remainingLag >= 200:
-			// sprint — no sleep
-		case remainingLag >= 50:
-			sleepDur = 100 * time.Millisecond
-		default:
-			sleepDur = 400 * time.Millisecond
-		}
-		if sleepDur > 0 {
-			select {
-			case <-time.After(sleepDur):
-			case <-ctx.Done():
-				return nil
+		// Adaptive pacing: sprint when behind, ease off near the tip.
+		// The prefetch goroutine is already running — the sleep here just
+		// throttles throughput when caught up; it overlaps with the fetch.
+		// When next >= tip (remainingLag == 0) the at-tip branch handles pacing.
+		if next < tip {
+			var sleepDur time.Duration
+			switch {
+			case remainingLag >= 200:
+				// sprint — no sleep; let the prefetch win the race
+			case remainingLag >= 50:
+				sleepDur = 100 * time.Millisecond
+			default:
+				sleepDur = 400 * time.Millisecond
+			}
+			if sleepDur > 0 {
+				select {
+				case <-time.After(sleepDur):
+				case <-ctx.Done():
+					return nil
+				}
 			}
 		}
 	}
