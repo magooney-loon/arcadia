@@ -91,6 +91,7 @@ func initApp(devMode bool) {
 			"PRAGMA busy_timeout=5000",
 			"PRAGMA cache_size=-8000",
 			"PRAGMA temp_store=2",
+			"PRAGMA mmap_size=268435456",
 		} {
 			if _, err := db.NewQuery(pragma).Execute(); err != nil {
 				e.App.Logger().Warn("SQLite PRAGMA failed", "pragma", pragma, "error", err)

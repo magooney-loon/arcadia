@@ -18,18 +18,18 @@ Legend: ✅ done · 🔄 in progress · ⬜ pending · ⏭ skipped
 | 6 | `indexerHealthJob` SQL COUNT(*) | ✅ |
 | 7 | `indexerEventsCleanup` bulk DELETE | ✅ |
 | 8 | Drop `batch_start` events / buffer event writes | ✅ |
-| 9 | `RunTokenAnalytics` worker pool + single tx | ⬜ |
+| 9 | `RunTokenAnalytics` worker pool + single tx | ✅ |
 | 10 | Collapse `transfers` scans in snapshot | ✅ |
 | 11 | Numeric columns for amount/fees | ✅ |
 | 12 | Agent leaderboard SQL sort | ✅ |
-| 13 | HTTP cache headers on hot endpoints | ⬜ |
+| 13 | HTTP cache headers on hot endpoints | ✅ |
 | 14 | `walletHandler` errgroup concurrency | ✅ |
 | 15 | `searchHandler` broader coverage | ⏭ product, not perf |
-| 16 | SQLite tuning audit | ⬜ |
-| 17 | Indexer graceful shutdown via ctx | ⬜ |
-| 18 | `MustCollection` → error-returning | ⬜ |
+| 16 | SQLite tuning audit | ✅ |
+| 17 | Indexer graceful shutdown via ctx | ✅ |
+| 18 | `MustCollection` → error-returning | ✅ |
 | 19 | Token cache eviction | ⏭ defer (small bound today) |
-| 20 | DB connection pool tuning | ⬜ (see #16) |
+| 20 | DB connection pool tuning | ⏭ (see #16) |
 | R1 | Split `handlers.go` into `handlers/*.go` | ⬜ |
 | R2 | Split `collections.go` into `collections/*.go` | ⬜ |
 | R3 | Move `utils/tokens.go` → `internal/rpc/erc.go` | ⬜ |

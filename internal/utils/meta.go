@@ -28,7 +28,10 @@ func SetLastIndexedBlock(app core.App, block uint64) error {
 	if len(records) > 0 {
 		r = records[0]
 	} else {
-		c := MustCollection(app, "indexer_meta")
+		c, ferr := FindCollection(app, "indexer_meta")
+		if ferr != nil {
+			return fmt.Errorf("find indexer_meta collection: %w", ferr)
+		}
 		r = core.NewRecord(c)
 		r.Set("key", "lastBlock")
 	}
@@ -40,19 +43,25 @@ func SetLastIndexedBlock(app core.App, block uint64) error {
 }
 
 // SetMetaValue upserts a key/value pair in the indexer_meta collection.
-func SetMetaValue(app core.App, key, value string) {
+func SetMetaValue(app core.App, key, value string) error {
 	records, err := app.FindRecordsByFilter("indexer_meta", "key = {:k}", "", 1, 0, map[string]any{"k": key})
 	if err != nil {
-		return
+		return fmt.Errorf("find meta key %q: %w", key, err)
 	}
 	var r *core.Record
 	if len(records) > 0 {
 		r = records[0]
 	} else {
-		c := MustCollection(app, "indexer_meta")
+		c, ferr := FindCollection(app, "indexer_meta")
+		if ferr != nil {
+			return fmt.Errorf("find indexer_meta collection: %w", ferr)
+		}
 		r = core.NewRecord(c)
 		r.Set("key", key)
 	}
 	r.Set("value", value)
-	_ = app.Save(r)
+	if err := app.Save(r); err != nil {
+		return fmt.Errorf("save meta %q: %w", key, err)
+	}
+	return nil
 }

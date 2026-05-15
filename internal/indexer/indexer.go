@@ -196,8 +196,8 @@ func logIndexerHeartbeat(ctx context.Context, app core.App, client interface {
 	} else {
 		log.Printf("[indexer] heartbeat | idle %s | block %d | tip %d | lag %d | batches=%d", idleFor, currentBlock, tip, lag, batchCount)
 	}
-	utils.SetMetaValue(app, "chainTip", strconv.FormatUint(tip, 10))
-	utils.SetMetaValue(app, "lagBlocks", strconv.FormatUint(lag, 10))
+	_ = utils.SetMetaValue(app, "chainTip", strconv.FormatUint(tip, 10))
+	_ = utils.SetMetaValue(app, "lagBlocks", strconv.FormatUint(lag, 10))
 	if persist {
 		recordIndexerEvent(app, "info", "heartbeat", "indexer heartbeat", indexerEventFields{"attempt": attempt, "batch": batchCount, "block": currentBlock, "tip": tip, "lag": lag})
 	}
