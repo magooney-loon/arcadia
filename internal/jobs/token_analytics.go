@@ -1,4 +1,4 @@
-package server
+package jobs
 
 import (
 	"log"
@@ -7,15 +7,15 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/pocketbase/pocketbase/core"
+
+	"arcadia/internal/utils"
 )
 
 // RunTokenAnalytics computes per-token aggregated stats from the transfers table
 // and enriches them with onchain metadata (name, symbol, decimals, totalSupply).
-// Results are upserted into the token_analytics collection.
 func RunTokenAnalytics(app core.App) {
 	log.Println("[token-analytics] starting token analytics job")
 
-	// Step 1: Aggregate stats from transfers table
 	type tokenAgg struct {
 		TokenAddress    string `db:"token_address"`
 		TransferCount   int    `db:"transfer_count"`
@@ -45,26 +45,21 @@ func RunTokenAnalytics(app core.App) {
 
 	log.Printf("[token-analytics] found %d unique tokens in transfers", len(aggResults))
 
-	// Step 2: Get or create the collection
 	coll, err := app.FindCollectionByNameOrId("token_analytics")
 	if err != nil {
 		log.Printf("[token-analytics] token_analytics collection not found: %v", err)
 		return
 	}
 
-	// Step 3: For each token, fetch RPC data and upsert
 	for i, agg := range aggResults {
 		addr := strings.ToLower(agg.TokenAddress)
 
-		// Check if we already have a record
 		existing, _ := app.FindRecordsByFilter("token_analytics",
 			"LOWER(token_address) = {:a}", "", 1, 0,
 			map[string]any{"a": addr})
 
-		// Fetch onchain metadata
-		info := fetchFullTokenInfo(parseAddr(agg.TokenAddress))
+		info := utils.FetchFullTokenInfo(parseAddr(agg.TokenAddress))
 
-		// Build record
 		var r *core.Record
 		if len(existing) > 0 {
 			r = existing[0]
@@ -86,7 +81,7 @@ func RunTokenAnalytics(app core.App) {
 		if info.TotalSupply != nil {
 			r.Set("total_supply_raw", info.TotalSupply.String())
 			if !info.LookupFailed && info.Decimals > 0 {
-				r.Set("total_supply_human", tokenAmountHuman(info.TotalSupply, info.Decimals))
+				r.Set("total_supply_human", utils.TokenAmountHuman(info.TotalSupply, info.Decimals))
 			}
 		}
 
@@ -95,7 +90,6 @@ func RunTokenAnalytics(app core.App) {
 			continue
 		}
 
-		// Rate limit: small delay between tokens to avoid hammering RPC
 		if i > 0 && i%10 == 0 {
 			time.Sleep(500 * time.Millisecond)
 		}
@@ -104,13 +98,11 @@ func RunTokenAnalytics(app core.App) {
 	log.Printf("[token-analytics] completed: processed %d tokens", len(aggResults))
 }
 
-// parseAddr is a helper to parse a hex address string into common.Address
 func parseAddr(hex string) common.Address {
 	return common.HexToAddress(hex)
 }
 
 // StartTokenAnalyticsScheduler runs the analytics job periodically.
-// It runs once after the initial delay, then every interval.
 func StartTokenAnalyticsScheduler(app core.App) {
 	const initialDelay = 30 * time.Second
 	const interval = 10 * time.Minute

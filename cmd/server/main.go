@@ -8,6 +8,8 @@ import (
 	app "github.com/magooney-loon/pb-ext/core"
 	"github.com/pocketbase/pocketbase/core"
 
+	"arcadia/internal/indexer"
+	"arcadia/internal/jobs"
 	"arcadia/internal/server"
 )
 
@@ -76,11 +78,12 @@ func initApp(devMode bool) {
 
 	server.RegisterCollections(srv.App())
 	server.RegisterRoutes(srv.App())
-	server.RegisterJobs(srv.App())
+	jobs.RegisterJobs(srv.App())
 
 	srv.App().OnServe().BindFunc(func(e *core.ServeEvent) error {
 		app.SetupRecovery(srv.App(), e)
-		server.StartIndexer(srv.App())
+		indexer.StartIndexer(srv.App())
+		jobs.StartTokenAnalyticsScheduler(srv.App())
 		return e.Next()
 	})
 

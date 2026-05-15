@@ -1,4 +1,4 @@
-package server
+package indexer
 
 import (
 	"context"
@@ -15,9 +15,11 @@ import (
 	hypersyncgo "github.com/enviodev/hypersync-client-go"
 	"github.com/enviodev/hypersync-client-go/options"
 	"github.com/enviodev/hypersync-client-go/types"
-	"github.com/enviodev/hypersync-client-go/utils"
+	hsutils "github.com/enviodev/hypersync-client-go/utils"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/pocketbase/pocketbase/core"
+
+	"arcadia/internal/utils"
 )
 
 // ── Indexer entry point ───────────────────────────────────────────────────────
@@ -25,7 +27,7 @@ import (
 func StartIndexer(app core.App) {
 	const startupDelay = 10 * time.Second
 	log.Printf("[indexer] scheduled Arcadia HyperSync indexer startup in %s", startupDelay)
-	seedKnownTokens()
+	utils.SeedKnownTokens()
 	go func() {
 		time.Sleep(startupDelay)
 		log.Println("[indexer] starting Arcadia HyperSync indexer")
@@ -48,9 +50,6 @@ func StartIndexer(app core.App) {
 			}
 		}
 	}()
-
-	// Start token analytics scheduler
-	StartTokenAnalyticsScheduler(app)
 }
 
 type indexerEventFields map[string]any
@@ -130,8 +129,8 @@ func logIndexerHeartbeat(ctx context.Context, app core.App, client interface {
 	} else {
 		log.Printf("[indexer] heartbeat | idle %s | block %d | tip %d | lag %d | batches=%d", idleFor, currentBlock, tip, lag, batchCount)
 	}
-	setMetaValue(app, "chainTip", strconv.FormatUint(tip, 10))
-	setMetaValue(app, "lagBlocks", strconv.FormatUint(lag, 10))
+	utils.SetMetaValue(app, "chainTip", strconv.FormatUint(tip, 10))
+	utils.SetMetaValue(app, "lagBlocks", strconv.FormatUint(lag, 10))
 	if persist {
 		recordIndexerEvent(app, "info", "heartbeat", "indexer heartbeat", indexerEventFields{"attempt": attempt, "batch": batchCount, "block": currentBlock, "tip": tip, "lag": lag})
 	}
@@ -166,39 +165,35 @@ func newIndexerQuery(fromBlock, toBlock uint64) *types.Query {
 		Transactions: []types.TransactionSelection{{}},
 		Traces:       []types.TraceSelection{{}},
 		Logs: []types.LogSelection{
-			{Topics: [][]common.Hash{{TopicTransfer}}},
-			// CCTP: DepositForBurn (USDC exits Arc) + MintAndWithdraw (USDC arrives on Arc)
+			{Topics: [][]common.Hash{{utils.TopicTransfer}}},
 			{
-				Address: []common.Address{AddrCCTPTokenMessenger},
-				Topics:  [][]common.Hash{{TopicDepositForBurn, TopicMintAndWithdraw}},
-			},
-			// CCTP: MessageReceived (low-level transport event, captures source domain + nonce)
-			{
-				Address: []common.Address{AddrCCTPMessageTransmitter},
-				Topics:  [][]common.Hash{{TopicMessageReceived}},
-			},
-			// Gateway: Deposited + GatewayBurned on GatewayWallet; AttestationUsed on GatewayMinter
-			{
-				Address: []common.Address{AddrGatewayWallet},
-				Topics:  [][]common.Hash{{TopicGatewayDeposited, TopicGatewayBurned}},
+				Address: []common.Address{utils.AddrCCTPTokenMessenger},
+				Topics:  [][]common.Hash{{utils.TopicDepositForBurn, utils.TopicMintAndWithdraw}},
 			},
 			{
-				Address: []common.Address{AddrGatewayMinter},
-				Topics:  [][]common.Hash{{TopicAttestationUsed}},
+				Address: []common.Address{utils.AddrCCTPMessageTransmitter},
+				Topics:  [][]common.Hash{{utils.TopicMessageReceived}},
 			},
-			{Address: []common.Address{AddrFxEscrow}},
-			{Address: []common.Address{AddrAgentRegistry}, Topics: [][]common.Hash{{TopicAgentRegistered}}},
-			// ERC-8183 job lifecycle: creation + all state transitions
 			{
-				Address: []common.Address{AddrAgenticCommerce},
+				Address: []common.Address{utils.AddrGatewayWallet},
+				Topics:  [][]common.Hash{{utils.TopicGatewayDeposited, utils.TopicGatewayBurned}},
+			},
+			{
+				Address: []common.Address{utils.AddrGatewayMinter},
+				Topics:  [][]common.Hash{{utils.TopicAttestationUsed}},
+			},
+			{Address: []common.Address{utils.AddrFxEscrow}},
+			{Address: []common.Address{utils.AddrAgentRegistry}, Topics: [][]common.Hash{{utils.TopicAgentRegistered}}},
+			{
+				Address: []common.Address{utils.AddrAgenticCommerce},
 				Topics: [][]common.Hash{{
-					TopicJobCreated,
-					TopicJobFunded,
-					TopicJobSubmitted,
-					TopicJobCompleted,
-					TopicJobRejected,
-					TopicPaymentReleased,
-					TopicJobExpired,
+					utils.TopicJobCreated,
+					utils.TopicJobFunded,
+					utils.TopicJobSubmitted,
+					utils.TopicJobCompleted,
+					utils.TopicJobRejected,
+					utils.TopicPaymentReleased,
+					utils.TopicJobExpired,
 				}},
 			},
 		},
@@ -307,13 +302,8 @@ func parseJSONUint64(raw json.RawMessage) (*uint64, bool, error) {
 	return uint64Ptr(n.Uint64()), true, nil
 }
 
-func uint64Ptr(v uint64) *uint64 {
-	return &v
-}
-
-func uint8Ptr(v uint8) *uint8 {
-	return &v
-}
+func uint64Ptr(v uint64) *uint64 { return &v }
+func uint8Ptr(v uint8) *uint8    { return &v }
 
 func jsonStringBytes(s string) *[]byte {
 	if s == "" {
@@ -553,24 +543,22 @@ func getIndexerBatch(ctx context.Context, client *hypersyncgo.Client, query *typ
 func runIndexer(app core.App, attempt int) error {
 	ctx := context.Background()
 
-	apiToken := EnvioAPIToken()
+	apiToken := utils.EnvioAPIToken()
 	if apiToken == "" {
 		return fmt.Errorf("ENVIO_API_TOKEN not set — get one at envio.dev")
 	}
 
-	rpc := NextRPCURL()
-	log.Printf("[indexer] connecting — hypersync: %s  rpc: %s", ArcHyperSyncURL, rpc)
+	rpc := utils.NextRPCURL()
+	log.Printf("[indexer] connecting — hypersync: %s  rpc: %s", utils.ArcHyperSyncURL, rpc)
 
 	hyper, err := hypersyncgo.NewHyper(ctx, options.Options{
 		Blockchains: []options.Node{
 			{
-				Type:        utils.EthereumNetwork,
-				NetworkId:   ArcNetworkID,
-				Endpoint:    ArcHyperSyncURL,
+				Type:        hsutils.EthereumNetwork,
+				NetworkId:   utils.ArcNetworkID,
+				Endpoint:    utils.ArcHyperSyncURL,
 				RpcEndpoint: rpc,
 				ApiToken:    apiToken,
-				// Fail fast on 429 so our outer backoff+rotation kicks in quickly.
-				// Library retries: 3 attempts × ≤3s ceiling = ≤9s before error surfaces.
 				MaxNumRetries:  3,
 				RetryBaseMs:    500 * time.Millisecond,
 				RetryBackoffMs: 500 * time.Millisecond,
@@ -582,7 +570,7 @@ func runIndexer(app core.App, attempt int) error {
 		return fmt.Errorf("failed to create HyperSync client: %w", err)
 	}
 
-	client, ok := hyper.GetClient(ArcNetworkID)
+	client, ok := hyper.GetClient(utils.ArcNetworkID)
 	if !ok {
 		return fmt.Errorf("arc client not found in hyper")
 	}
@@ -622,8 +610,6 @@ func runIndexer(app core.App, attempt int) error {
 						lastPersistedHeartbeatUnixNano.Store(time.Now().UnixNano())
 					}
 				}
-				// During a batch, SQLite may be inside a long write transaction,
-				// so keep in-flight heartbeats to stdout.
 				logIndexerHeartbeat(ctx, app, client, attempt, completedBatches.Load(), currentBlock.Load(), lastBatchAt, activeBatch, processingStartedAt, persistHeartbeat)
 			case <-heartbeatStop:
 				return
@@ -707,7 +693,7 @@ func runIndexer(app core.App, attempt int) error {
 		}
 
 		currentBlock.Store(next)
-		if err := setLastIndexedBlock(app, next); err != nil {
+		if err := utils.SetLastIndexedBlock(app, next); err != nil {
 			processingBatch.Store(0)
 			processingStartedAtUnixNano.Store(0)
 			recordIndexerEvent(app, "error", "cursor_error", "failed to persist cursor after batch", indexerEventFields{"attempt": attempt, "batch": nextBatch, "block": next, "error": err})
@@ -734,7 +720,6 @@ func runIndexer(app core.App, attempt int) error {
 			"logs":         len(res.Data.Logs),
 		})
 
-		// Pace requests to avoid HyperSync free-tier burst throttling.
 		time.Sleep(400 * time.Millisecond)
 	}
 }
@@ -742,7 +727,6 @@ func runIndexer(app core.App, attempt int) error {
 // ── Batch processing ──────────────────────────────────────────────────────────
 
 func processBatch(app core.App, res *types.QueryResponse) error {
-	// aggregate per-block stats within this batch
 	type blockAcc struct {
 		txCount         int
 		uniqueSenders   map[string]struct{}
@@ -771,7 +755,6 @@ func processBatch(app core.App, res *types.QueryResponse) error {
 		return perBlock[blockNum]
 	}
 
-	// per-address deltas for agent aggregation (raw values: wei for fees, raw ERC-20 for transfers)
 	type agentDelta struct {
 		feeWei      *big.Int
 		transferred *big.Int
@@ -788,7 +771,6 @@ func processBatch(app core.App, res *types.QueryResponse) error {
 
 	return app.RunInTransaction(func(txApp core.App) error {
 		baseFeeByBlock := make(map[uint64]*big.Int)
-		// 1. Blocks
 		for _, blk := range res.Data.Blocks {
 			if blk.Number == nil {
 				continue
@@ -799,10 +781,9 @@ func processBatch(app core.App, res *types.QueryResponse) error {
 			if err := saveBlock(txApp, &blk); err != nil {
 				return err
 			}
-			getAcc(blk.Number.Uint64()) // ensure acc exists even for empty blocks
+			getAcc(blk.Number.Uint64())
 		}
 
-		// 2. Transactions
 		for _, tx := range res.Data.Transactions {
 			if tx.Hash == nil || tx.BlockNumber == nil {
 				continue
@@ -816,7 +797,6 @@ func processBatch(app core.App, res *types.QueryResponse) error {
 			acc.txCount++
 			if tx.From != nil {
 				acc.uniqueSenders[tx.From.Hex()] = struct{}{}
-				// accumulate for agent aggregation
 				d := getAgentDelta(tx.From.Hex())
 				d.txCount++
 				if fee != nil {
@@ -834,7 +814,6 @@ func processBatch(app core.App, res *types.QueryResponse) error {
 			}
 		}
 
-		// 3. Logs → transfers / crosschain / fx / agents / jobs
 		for _, log := range res.Data.Logs {
 			if log.BlockNumber == nil {
 				continue
@@ -847,22 +826,19 @@ func processBatch(app core.App, res *types.QueryResponse) error {
 			}
 			if amount != nil && log.Address != nil {
 				switch *log.Address {
-				case AddrUSDC:
+				case utils.AddrUSDC:
 					acc.totalUSDC.Add(acc.totalUSDC, amount)
 					if amount.Cmp(acc.largestUSDC) > 0 {
 						acc.largestUSDC.Set(amount)
 					}
-				case AddrEURC:
+				case utils.AddrEURC:
 					acc.totalEURC.Add(acc.totalEURC, amount)
-				case AddrUSYC:
+				case utils.AddrUSYC:
 					acc.totalUSYC.Add(acc.totalUSYC, amount)
 				}
-				// accumulate stablecoin volume sent by from_addr for agent aggregation.
-				// Restricted to KnownTokens (USDC/EURC/USYC) — custom tokens with
-				// non-standard decimals would produce nonsense values via stablecoinHuman.
-				if log.Topic0 != nil && *log.Topic0 == TopicTransfer &&
+				if log.Topic0 != nil && *log.Topic0 == utils.TopicTransfer &&
 					log.Address != nil && log.Topic1 != nil {
-					if _, isStable := KnownTokens[*log.Address]; isStable {
+					if _, isStable := utils.KnownTokens[*log.Address]; isStable {
 						fromAddr := common.BytesToAddress(log.Topic1.Bytes()[12:]).Hex()
 						getAgentDelta(fromAddr).transferred.Add(getAgentDelta(fromAddr).transferred, amount)
 					}
@@ -870,7 +846,6 @@ func processBatch(app core.App, res *types.QueryResponse) error {
 			}
 		}
 
-		// 3b. Traces
 		for _, trace := range res.Data.Traces {
 			if trace.TransactionHash == nil || trace.BlockNumber == nil {
 				continue
@@ -880,8 +855,6 @@ func processBatch(app core.App, res *types.QueryResponse) error {
 			}
 		}
 
-		// 4. Block stats + tx_count back-fill onto blocks.
-		//    Sort blocks ascending so we can compute consecutive block_time_ms.
 		type blkTs struct {
 			num uint64
 			ts  int64
@@ -892,14 +865,12 @@ func processBatch(app core.App, res *types.QueryResponse) error {
 				sortedBlocks = append(sortedBlocks, blkTs{blk.Number.Uint64(), blk.Timestamp.Unix()})
 			}
 		}
-		// simple insertion sort (batches are small)
 		for i := 1; i < len(sortedBlocks); i++ {
 			for j := i; j > 0 && sortedBlocks[j].num < sortedBlocks[j-1].num; j-- {
 				sortedBlocks[j], sortedBlocks[j-1] = sortedBlocks[j-1], sortedBlocks[j]
 			}
 		}
 
-		// block_time_ms indexed by block number — look up prev from DB for the first block
 		blockTimeMs := make(map[uint64]int64)
 		for i, bt := range sortedBlocks {
 			if i == 0 {
@@ -923,7 +894,6 @@ func processBatch(app core.App, res *types.QueryResponse) error {
 			bn := blk.Number.Uint64()
 			acc := getAcc(bn)
 
-			// back-fill tx_count onto the blocks record
 			existingBlocks, err := txApp.FindRecordsByFilter("blocks", "number = {:n}", "", 1, 0, map[string]any{"n": bn})
 			if err != nil {
 				return fmt.Errorf("find block %d for stats backfill: %w", bn, err)
@@ -938,7 +908,6 @@ func processBatch(app core.App, res *types.QueryResponse) error {
 				}
 			}
 
-			// skip block_stats if already persisted (indexer restart)
 			existingStats, err := txApp.FindRecordsByFilter("block_stats", "block_number = {:n}", "", 1, 0, map[string]any{"n": bn})
 			if err != nil {
 				return fmt.Errorf("find block_stats %d: %w", bn, err)
@@ -968,21 +937,21 @@ func processBatch(app core.App, res *types.QueryResponse) error {
 				tps = float64(acc.txCount) / (float64(bms) / 1000.0)
 			}
 
-			stats := core.NewRecord(mustCollection(txApp, "block_stats"))
+			stats := core.NewRecord(utils.MustCollection(txApp, "block_stats"))
 			stats.Set("block_number", bn)
 			stats.Set("timestamp", blk.Timestamp.Unix())
 			stats.Set("tx_count", acc.txCount)
 			stats.Set("block_time_ms", bms)
 			stats.Set("tps", tps)
-			stats.Set("avg_fee_usdc", weiToUSDC(avgFee))
-			stats.Set("total_fee_usdc", weiToUSDC(acc.totalFee))
-			stats.Set("total_usdc_transferred", stablecoinHuman(acc.totalUSDC))
-			stats.Set("total_eurc_transferred", stablecoinHuman(acc.totalEURC))
-			stats.Set("total_usyc_transferred", stablecoinHuman(acc.totalUSYC))
+			stats.Set("avg_fee_usdc", utils.WeiToUSDC(avgFee))
+			stats.Set("total_fee_usdc", utils.WeiToUSDC(acc.totalFee))
+			stats.Set("total_usdc_transferred", utils.StablecoinHuman(acc.totalUSDC))
+			stats.Set("total_eurc_transferred", utils.StablecoinHuman(acc.totalEURC))
+			stats.Set("total_usyc_transferred", utils.StablecoinHuman(acc.totalUSYC))
 			stats.Set("unique_senders", len(acc.uniqueSenders))
 			stats.Set("unique_receivers", len(acc.uniqueReceivers))
 			stats.Set("new_contracts", acc.newContracts)
-			stats.Set("largest_usdc_transfer", stablecoinHuman(acc.largestUSDC))
+			stats.Set("largest_usdc_transfer", utils.StablecoinHuman(acc.largestUSDC))
 			stats.Set("utilization_pct", utilPct)
 
 			if err := txApp.Save(stats); err != nil {
@@ -990,16 +959,13 @@ func processBatch(app core.App, res *types.QueryResponse) error {
 			}
 		}
 
-		// 5. Agent aggregation — update tx_count, usdc_spent_fees, usdc_transferred
-		//    for any agent address that had activity in this batch.
-		//    Raw storage: wei string for fees, raw ERC-20 units string for transfers.
 		for addr, delta := range agentDeltas {
 			if delta.txCount == 0 && delta.feeWei.Sign() == 0 && delta.transferred.Sign() == 0 {
 				continue
 			}
 			agentRows, err := txApp.FindRecordsByFilter("agents", "agent_address = {:a}", "", 1, 0, map[string]any{"a": addr})
 			if err != nil || len(agentRows) == 0 {
-				continue // address is not a registered agent
+				continue
 			}
 			r := agentRows[0]
 			if delta.txCount > 0 {
@@ -1031,7 +997,6 @@ func processBatch(app core.App, res *types.QueryResponse) error {
 // ── Individual record savers ──────────────────────────────────────────────────
 
 func saveBlock(app core.App, blk *types.Block) error {
-	// skip if already exists
 	existing, err := app.FindRecordsByFilter("blocks", "number = {:n}", "", 1, 0, map[string]any{"n": blk.Number.Uint64()})
 	if err != nil {
 		return fmt.Errorf("find block %d: %w", blk.Number.Uint64(), err)
@@ -1040,7 +1005,7 @@ func saveBlock(app core.App, blk *types.Block) error {
 		return nil
 	}
 
-	r := core.NewRecord(mustCollection(app, "blocks"))
+	r := core.NewRecord(utils.MustCollection(app, "blocks"))
 	r.Set("number", blk.Number.Uint64())
 	if blk.Hash != nil {
 		r.Set("hash", blk.Hash.Hex())
@@ -1073,11 +1038,9 @@ func saveBlock(app core.App, blk *types.Block) error {
 	if err := app.Save(r); err != nil {
 		return fmt.Errorf("save block %d: %w", blk.Number.Uint64(), err)
 	}
-
 	return nil
 }
 
-// saveTransaction saves the transaction and returns the fee in wei (for stats accumulation).
 func saveTransaction(app core.App, tx *types.Transaction, blockBaseFee *big.Int) (*big.Int, error) {
 	existing, err := app.FindRecordsByFilter("transactions", "hash = {:h}", "", 1, 0, map[string]any{"h": tx.Hash.Hex()})
 	if err != nil {
@@ -1087,7 +1050,7 @@ func saveTransaction(app core.App, tx *types.Transaction, blockBaseFee *big.Int)
 		return nil, nil
 	}
 
-	r := core.NewRecord(mustCollection(app, "transactions"))
+	r := core.NewRecord(utils.MustCollection(app, "transactions"))
 	r.Set("hash", tx.Hash.Hex())
 	if tx.BlockNumber != nil {
 		r.Set("block_number", tx.BlockNumber.Uint64())
@@ -1133,7 +1096,7 @@ func saveTransaction(app core.App, tx *types.Transaction, blockBaseFee *big.Int)
 	if tx.GasUsed != nil && tx.EffectiveGasPrice != nil {
 		feeWei = new(big.Int).Mul(new(big.Int).SetUint64(*tx.GasUsed), tx.EffectiveGasPrice)
 		r.Set("effective_gas_price", tx.EffectiveGasPrice.String())
-		r.Set("fee_usdc", weiToUSDC(feeWei))
+		r.Set("fee_usdc", utils.WeiToUSDC(feeWei))
 	}
 	if tx.GasUsed != nil && tx.EffectiveGasPrice != nil && blockBaseFee != nil {
 		priorityPerGas := new(big.Int).Sub(tx.EffectiveGasPrice, blockBaseFee)
@@ -1142,7 +1105,7 @@ func saveTransaction(app core.App, tx *types.Transaction, blockBaseFee *big.Int)
 		}
 		priorityFeeWei := new(big.Int).Mul(new(big.Int).SetUint64(*tx.GasUsed), priorityPerGas)
 		r.Set("priority_fee_per_gas", priorityPerGas.String())
-		r.Set("priority_fee_usdc", weiToUSDC(priorityFeeWei))
+		r.Set("priority_fee_usdc", utils.WeiToUSDC(priorityFeeWei))
 	}
 
 	if tx.Kind != nil {
@@ -1163,8 +1126,6 @@ func saveTransaction(app core.App, tx *types.Transaction, blockBaseFee *big.Int)
 	return feeWei, nil
 }
 
-// routeLog decodes a log and routes it to the right handler.
-// Returns the transfer amount (in raw uint256) if this is an ERC-20 Transfer, else nil.
 func routeLog(app core.App, log *types.Log) (*big.Int, error) {
 	if log.Topic0 == nil || log.Address == nil {
 		return nil, nil
@@ -1172,61 +1133,61 @@ func routeLog(app core.App, log *types.Log) (*big.Int, error) {
 
 	addr := *log.Address
 	switch *log.Topic0 {
-	case TopicTransfer:
-		if addr == AddrAgentRegistry {
+	case utils.TopicTransfer:
+		if addr == utils.AddrAgentRegistry {
 			return nil, saveAgentRegistration(app, log)
 		}
 		return saveTransfer(app, log)
 
-	case TopicDepositForBurn:
+	case utils.TopicDepositForBurn:
 		return nil, saveCCTPDepositForBurn(app, log)
 
-	case TopicMintAndWithdraw:
+	case utils.TopicMintAndWithdraw:
 		return nil, saveCCTPMintAndWithdraw(app, log)
 
-	case TopicMessageReceived:
+	case utils.TopicMessageReceived:
 		return nil, saveCCTPMessageReceived(app, log)
 
-	case TopicGatewayDeposited:
+	case utils.TopicGatewayDeposited:
 		return nil, saveGatewayDeposited(app, log)
 
-	case TopicGatewayBurned:
+	case utils.TopicGatewayBurned:
 		return nil, saveGatewayBurned(app, log)
 
-	case TopicAttestationUsed:
+	case utils.TopicAttestationUsed:
 		return nil, saveAttestationUsed(app, log)
 
-	case TopicJobCreated:
-		if addr == AddrAgenticCommerce {
+	case utils.TopicJobCreated:
+		if addr == utils.AddrAgenticCommerce {
 			return nil, saveAgentJobCreated(app, log)
 		}
-	case TopicJobFunded:
-		if addr == AddrAgenticCommerce {
+	case utils.TopicJobFunded:
+		if addr == utils.AddrAgenticCommerce {
 			return nil, saveAgentJobFunded(app, log)
 		}
-	case TopicJobSubmitted:
-		if addr == AddrAgenticCommerce {
+	case utils.TopicJobSubmitted:
+		if addr == utils.AddrAgenticCommerce {
 			return nil, saveAgentJobSubmitted(app, log)
 		}
-	case TopicJobCompleted:
-		if addr == AddrAgenticCommerce {
+	case utils.TopicJobCompleted:
+		if addr == utils.AddrAgenticCommerce {
 			return nil, saveAgentJobCompleted(app, log)
 		}
-	case TopicJobRejected:
-		if addr == AddrAgenticCommerce {
+	case utils.TopicJobRejected:
+		if addr == utils.AddrAgenticCommerce {
 			return nil, saveAgentJobRejected(app, log)
 		}
-	case TopicPaymentReleased:
-		if addr == AddrAgenticCommerce {
+	case utils.TopicPaymentReleased:
+		if addr == utils.AddrAgenticCommerce {
 			return nil, saveAgentJobPaid(app, log)
 		}
-	case TopicJobExpired:
-		if addr == AddrAgenticCommerce {
+	case utils.TopicJobExpired:
+		if addr == utils.AddrAgenticCommerce {
 			return nil, saveAgentJobExpired(app, log)
 		}
 
-	case TopicTradeRecorded, TopicMakerFunded, TopicTakerFunded, TopicTradeStatusChanged, TopicFeesProcessed:
-		if addr == AddrFxEscrow {
+	case utils.TopicTradeRecorded, utils.TopicMakerFunded, utils.TopicTakerFunded, utils.TopicTradeStatusChanged, utils.TopicFeesProcessed:
+		if addr == utils.AddrFxEscrow {
 			return nil, saveFxEvent(app, log)
 		}
 	}
@@ -1261,19 +1222,18 @@ func saveTransfer(app core.App, log *types.Log) (*big.Int, error) {
 		amountRaw = new(big.Int)
 	}
 
-	// Look up real decimals + symbol (cached). Falls back to OTHER on RPC failure.
 	var firstSeenBlock uint64
 	if log.BlockNumber != nil {
 		firstSeenBlock = log.BlockNumber.Uint64()
 	}
-	info := lookupTokenInfo(app, *log.Address, firstSeenBlock)
+	info := utils.LookupTokenInfo(app, *log.Address, firstSeenBlock)
 
 	symbol := "OTHER"
-	if s, ok := KnownTokens[*log.Address]; ok {
+	if s, ok := utils.KnownTokens[*log.Address]; ok {
 		symbol = s
 	}
 
-	r := core.NewRecord(mustCollection(app, "transfers"))
+	r := core.NewRecord(utils.MustCollection(app, "transfers"))
 	r.Set("tx_hash", txHash)
 	if log.BlockNumber != nil {
 		r.Set("block_number", log.BlockNumber.Uint64())
@@ -1288,19 +1248,15 @@ func saveTransfer(app core.App, log *types.Log) (*big.Int, error) {
 	if info.Symbol != "" {
 		r.Set("token_name", info.Symbol)
 	}
-	// amount_human uses real on-chain decimals when available.
-	// Tokens whose decimals lookup failed are left blank (frontend should rely on amount_raw).
 	if !info.LookupFailed {
-		r.Set("amount_human", tokenAmountHuman(amountRaw, info.Decimals))
+		r.Set("amount_human", utils.TokenAmountHuman(amountRaw, info.Decimals))
 	}
 
 	if err := app.Save(r); err != nil {
 		return nil, fmt.Errorf("save transfer %s/%d: %w", txHash, logIdx, err)
 	}
 
-	// update wallet graph edge only for known stablecoins — total_usdc on edges
-	// assumes 6-decimal ERC-20 amounts; unknown tokens have arbitrary decimals.
-	if _, isStable := KnownTokens[*log.Address]; isStable {
+	if _, isStable := utils.KnownTokens[*log.Address]; isStable {
 		if err := upsertWalletEdge(app, from.Hex(), to.Hex(), amountRaw, log.BlockNumber); err != nil {
 			return nil, err
 		}
@@ -1309,7 +1265,6 @@ func saveTransfer(app core.App, log *types.Log) (*big.Int, error) {
 	return amountRaw, nil
 }
 
-// saveCrosschain is the shared upsert helper for crosschain_events.
 func saveCrosschain(app core.App, log *types.Log, fill func(*core.Record)) error {
 	if log.TransactionHash == nil || log.LogIndex == nil {
 		return nil
@@ -1323,7 +1278,7 @@ func saveCrosschain(app core.App, log *types.Log, fill func(*core.Record)) error
 	if len(existing) > 0 {
 		return nil
 	}
-	r := core.NewRecord(mustCollection(app, "crosschain_events"))
+	r := core.NewRecord(utils.MustCollection(app, "crosschain_events"))
 	r.Set("tx_hash", log.TransactionHash.Hex())
 	r.Set("log_index", *log.LogIndex)
 	if log.BlockNumber != nil {
@@ -1336,51 +1291,26 @@ func saveCrosschain(app core.App, log *types.Log, fill func(*core.Record)) error
 	return nil
 }
 
-// readUint32 reads a uint32 from 32 ABI-padded bytes at offset in data.
-func readUint32(data []byte, offset int) uint32 {
-	if len(data) < offset+32 {
-		return 0
-	}
-	return uint32(new(big.Int).SetBytes(data[offset : offset+32]).Uint64())
-}
-
-// readBig reads a *big.Int from 32 ABI bytes at offset in data.
-func readBig(data []byte, offset int) *big.Int {
-	if len(data) < offset+32 {
-		return new(big.Int)
-	}
-	return new(big.Int).SetBytes(data[offset : offset+32])
-}
-
-// ── CCTP event handlers ───────────────────────────────────────────────────────
-
-// DepositForBurn: USDC exits Arc via CCTP.
-// t1=burnToken(indexed), t2=depositor(indexed), t3=minFinalityThreshold(indexed)
-// data: [amount(u256), mintRecipient(bytes32), destinationDomain(u32), ...]
 func saveCCTPDepositForBurn(app core.App, log *types.Log) error {
 	return saveCrosschain(app, log, func(r *core.Record) {
 		r.Set("protocol", "cctp")
 		r.Set("event_type", "burn")
-		r.Set("source_domain", 26) // Arc is always the source here
+		r.Set("source_domain", 26)
 
 		if log.Topic2 != nil {
-			r.Set("sender", addressFromTopic(log.Topic2))
+			r.Set("sender", utils.AddressFromTopic(log.Topic2))
 		}
 		if log.Data != nil && len(*log.Data) >= 64 {
 			d := *log.Data
-			r.Set("amount_usdc", stablecoinHuman(readBig(d, 0)))
-			// mintRecipient is bytes32; last 20 bytes = address
-			r.Set("recipient", addressFromBytes32(d[32:64]))
+			r.Set("amount_usdc", utils.StablecoinHuman(utils.ReadBig(d, 0)))
+			r.Set("recipient", utils.AddressFromBytes32(d[32:64]))
 			if len(d) >= 96 {
-				r.Set("destination_domain", readUint32(d, 64))
+				r.Set("destination_domain", utils.ReadUint32(d, 64))
 			}
 		}
 	})
 }
 
-// MintAndWithdraw: USDC arrives on Arc from another chain.
-// t1=mintRecipient(indexed), t2=mintToken(indexed)
-// data: [amount(u256), feeCollected(u256)]
 func saveCCTPMintAndWithdraw(app core.App, log *types.Log) error {
 	return saveCrosschain(app, log, func(r *core.Record) {
 		r.Set("protocol", "cctp")
@@ -1388,17 +1318,14 @@ func saveCCTPMintAndWithdraw(app core.App, log *types.Log) error {
 		r.Set("destination_domain", 26)
 
 		if log.Topic1 != nil {
-			r.Set("recipient", addressFromTopic(log.Topic1))
+			r.Set("recipient", utils.AddressFromTopic(log.Topic1))
 		}
 		if log.Data != nil && len(*log.Data) >= 32 {
-			r.Set("amount_usdc", stablecoinHuman(readBig(*log.Data, 0)))
+			r.Set("amount_usdc", utils.StablecoinHuman(utils.ReadBig(*log.Data, 0)))
 		}
 	})
 }
 
-// MessageReceived: low-level CCTP message delivery on Arc.
-// t1=caller(indexed), t2=nonce(bytes32 indexed), t3=finalityThreshold(indexed)
-// data: [sourceDomain(u32), sender(bytes32), messageBody(bytes)]
 func saveCCTPMessageReceived(app core.App, log *types.Log) error {
 	return saveCrosschain(app, log, func(r *core.Record) {
 		r.Set("protocol", "cctp")
@@ -1410,18 +1337,12 @@ func saveCCTPMessageReceived(app core.App, log *types.Log) error {
 		}
 		if log.Data != nil && len(*log.Data) >= 64 {
 			d := *log.Data
-			r.Set("source_domain", readUint32(d, 0))
-			// sender is bytes32; last 20 bytes = address
-			r.Set("sender", addressFromBytes32(d[32:64]))
+			r.Set("source_domain", utils.ReadUint32(d, 0))
+			r.Set("sender", utils.AddressFromBytes32(d[32:64]))
 		}
 	})
 }
 
-// ── Gateway event handlers ────────────────────────────────────────────────────
-
-// Deposited: user deposits USDC into their unified balance on Arc.
-// t1=token(indexed), t2=depositor(indexed), t3=sender(indexed)
-// data: [value(u256)]
 func saveGatewayDeposited(app core.App, log *types.Log) error {
 	return saveCrosschain(app, log, func(r *core.Record) {
 		r.Set("protocol", "gateway")
@@ -1430,20 +1351,17 @@ func saveGatewayDeposited(app core.App, log *types.Log) error {
 		r.Set("destination_domain", 26)
 
 		if log.Topic2 != nil {
-			r.Set("sender", addressFromTopic(log.Topic2))
+			r.Set("sender", utils.AddressFromTopic(log.Topic2))
 		}
 		if log.Topic3 != nil {
-			r.Set("recipient", addressFromTopic(log.Topic3))
+			r.Set("recipient", utils.AddressFromTopic(log.Topic3))
 		}
 		if log.Data != nil && len(*log.Data) >= 32 {
-			r.Set("amount_usdc", stablecoinHuman(readBig(*log.Data, 0)))
+			r.Set("amount_usdc", utils.StablecoinHuman(utils.ReadBig(*log.Data, 0)))
 		}
 	})
 }
 
-// GatewayBurned: USDC leaves Arc via Gateway bridge.
-// t1=token(indexed), t2=depositor(indexed), t3=transferSpecHash(bytes32 indexed)
-// data: [destinationDomain(u32), destinationRecipient(bytes32), signer(addr), value(u256), ...]
 func saveGatewayBurned(app core.App, log *types.Log) error {
 	return saveCrosschain(app, log, func(r *core.Record) {
 		r.Set("protocol", "gateway")
@@ -1451,23 +1369,20 @@ func saveGatewayBurned(app core.App, log *types.Log) error {
 		r.Set("source_domain", 26)
 
 		if log.Topic2 != nil {
-			r.Set("sender", addressFromTopic(log.Topic2))
+			r.Set("sender", utils.AddressFromTopic(log.Topic2))
 		}
 		if log.Topic3 != nil {
-			r.Set("nonce_val", log.Topic3.Hex()) // transferSpecHash
+			r.Set("nonce_val", log.Topic3.Hex())
 		}
 		if log.Data != nil && len(*log.Data) >= 128 {
 			d := *log.Data
-			r.Set("destination_domain", readUint32(d, 0))
-			r.Set("recipient", addressFromBytes32(d[32:64]))
-			r.Set("amount_usdc", stablecoinHuman(readBig(d, 96)))
+			r.Set("destination_domain", utils.ReadUint32(d, 0))
+			r.Set("recipient", utils.AddressFromBytes32(d[32:64]))
+			r.Set("amount_usdc", utils.StablecoinHuman(utils.ReadBig(d, 96)))
 		}
 	})
 }
 
-// AttestationUsed: USDC arrives on Arc from another chain via Gateway.
-// t1=token(indexed), t2=recipient(indexed), t3=transferSpecHash(bytes32 indexed)
-// data: [sourceDomain(u32), sourceDepositor(bytes32), sourceSigner(bytes32), value(u256)]
 func saveAttestationUsed(app core.App, log *types.Log) error {
 	return saveCrosschain(app, log, func(r *core.Record) {
 		r.Set("protocol", "gateway")
@@ -1475,21 +1390,20 @@ func saveAttestationUsed(app core.App, log *types.Log) error {
 		r.Set("destination_domain", 26)
 
 		if log.Topic2 != nil {
-			r.Set("recipient", addressFromTopic(log.Topic2))
+			r.Set("recipient", utils.AddressFromTopic(log.Topic2))
 		}
 		if log.Topic3 != nil {
-			r.Set("nonce_val", log.Topic3.Hex()) // transferSpecHash
+			r.Set("nonce_val", log.Topic3.Hex())
 		}
 		if log.Data != nil && len(*log.Data) >= 128 {
 			d := *log.Data
-			r.Set("source_domain", readUint32(d, 0))
-			r.Set("sender", addressFromBytes32(d[32:64]))
-			r.Set("amount_usdc", stablecoinHuman(readBig(d, 96)))
+			r.Set("source_domain", utils.ReadUint32(d, 0))
+			r.Set("sender", utils.AddressFromBytes32(d[32:64]))
+			r.Set("amount_usdc", utils.StablecoinHuman(utils.ReadBig(d, 96)))
 		}
 	})
 }
 
-// fxUpsert finds or creates the fx_swaps record for tradeID, then calls update(r) and saves it.
 func fxUpsert(app core.App, tradeID string, update func(*core.Record)) error {
 	existing, err := app.FindRecordsByFilter("fx_swaps", "trade_id = {:id}", "", 1, 0, map[string]any{"id": tradeID})
 	if err != nil {
@@ -1499,7 +1413,7 @@ func fxUpsert(app core.App, tradeID string, update func(*core.Record)) error {
 	if len(existing) > 0 {
 		r = existing[0]
 	} else {
-		r = core.NewRecord(mustCollection(app, "fx_swaps"))
+		r = core.NewRecord(utils.MustCollection(app, "fx_swaps"))
 		r.Set("trade_id", tradeID)
 		r.Set("status", "created")
 	}
@@ -1515,12 +1429,10 @@ func saveFxEvent(app core.App, log *types.Log) error {
 		return nil
 	}
 
-	// All FxEscrow events have trade ID as topic1 (indexed uint256)
 	tradeID := new(big.Int).SetBytes(log.Topic1.Bytes()).String()
 
 	switch *log.Topic0 {
-	case TopicTradeRecorded:
-		// TradeRecorded(uint256 indexed id, bytes32 indexed quoteId)
+	case utils.TopicTradeRecorded:
 		if log.Topic2 == nil {
 			return nil
 		}
@@ -1536,12 +1448,11 @@ func saveFxEvent(app core.App, log *types.Log) error {
 			}
 		})
 
-	case TopicMakerFunded:
-		// MakerFunded(uint256 indexed id, address indexed maker)
+	case utils.TopicMakerFunded:
 		if log.Topic2 == nil {
 			return nil
 		}
-		maker := addressFromTopic(log.Topic2)
+		maker := utils.AddressFromTopic(log.Topic2)
 		return fxUpsert(app, tradeID, func(r *core.Record) {
 			r.Set("maker", maker)
 			if r.GetString("status") == "taker_funded" {
@@ -1549,20 +1460,17 @@ func saveFxEvent(app core.App, log *types.Log) error {
 			}
 		})
 
-	case TopicTakerFunded:
-		// TakerFunded(uint256 indexed id, address indexed taker)
+	case utils.TopicTakerFunded:
 		if log.Topic2 == nil {
 			return nil
 		}
-		taker := addressFromTopic(log.Topic2)
+		taker := utils.AddressFromTopic(log.Topic2)
 		return fxUpsert(app, tradeID, func(r *core.Record) {
 			r.Set("taker", taker)
 			r.Set("status", "taker_funded")
 		})
 
-	case TopicTradeStatusChanged:
-		// TradeStatusChanged(uint256 indexed id, address indexed actor, uint8 newStatus)
-		// newStatus is ABI-encoded in data: pad-left uint8
+	case utils.TopicTradeStatusChanged:
 		if log.Data == nil || len(*log.Data) < 32 {
 			return nil
 		}
@@ -1576,8 +1484,7 @@ func saveFxEvent(app core.App, log *types.Log) error {
 			r.Set("status", statusStr)
 		})
 
-	case TopicFeesProcessed:
-		// FeesProcessed(uint256 indexed id, uint256 takerFee, uint256 makerFee)
+	case utils.TopicFeesProcessed:
 		if log.Data == nil || len(*log.Data) < 64 {
 			return nil
 		}
@@ -1601,7 +1508,7 @@ func saveAgentRegistration(app core.App, log *types.Log) error {
 		return nil
 	}
 
-	owner := addressFromTopic(log.Topic2)
+	owner := utils.AddressFromTopic(log.Topic2)
 	existing, err := app.FindRecordsByFilter("agents", "agent_address = {:a}", "", 1, 0, map[string]any{"a": owner})
 	if err != nil {
 		return fmt.Errorf("find agent %s: %w", owner, err)
@@ -1610,7 +1517,7 @@ func saveAgentRegistration(app core.App, log *types.Log) error {
 		return nil
 	}
 
-	r := core.NewRecord(mustCollection(app, "agents"))
+	r := core.NewRecord(utils.MustCollection(app, "agents"))
 	r.Set("agent_address", owner)
 	if log.BlockNumber != nil {
 		r.Set("registered_at_block", log.BlockNumber.Uint64())
@@ -1640,11 +1547,10 @@ func saveAgentJobCreated(app core.App, log *types.Log) error {
 		return nil
 	}
 
-	// topic2 = client (employer), topic3 = provider (worker)
-	r := core.NewRecord(mustCollection(app, "agent_jobs"))
+	r := core.NewRecord(utils.MustCollection(app, "agent_jobs"))
 	r.Set("job_id", jobID)
-	r.Set("employer_address", addressFromTopic(log.Topic2))
-	r.Set("worker_address", addressFromTopic(log.Topic3))
+	r.Set("employer_address", utils.AddressFromTopic(log.Topic2))
+	r.Set("worker_address", utils.AddressFromTopic(log.Topic3))
 	r.Set("status", "created")
 	if log.BlockNumber != nil {
 		r.Set("created_at_block", log.BlockNumber.Uint64())
@@ -1657,8 +1563,6 @@ func saveAgentJobCreated(app core.App, log *types.Log) error {
 	return nil
 }
 
-// agentJobUpsert finds the agent_jobs record for jobID and calls update(r), then saves it.
-// Creates a placeholder record if none exists (events can arrive out of order).
 func agentJobUpsert(app core.App, log *types.Log, update func(*core.Record)) error {
 	if log.Topic1 == nil {
 		return nil
@@ -1672,7 +1576,7 @@ func agentJobUpsert(app core.App, log *types.Log, update func(*core.Record)) err
 	if len(existing) > 0 {
 		r = existing[0]
 	} else {
-		r = core.NewRecord(mustCollection(app, "agent_jobs"))
+		r = core.NewRecord(utils.MustCollection(app, "agent_jobs"))
 		r.Set("job_id", jobID)
 		r.Set("status", "created")
 	}
@@ -1683,40 +1587,33 @@ func agentJobUpsert(app core.App, log *types.Log, update func(*core.Record)) err
 	return nil
 }
 
-// JobFunded(uint256 indexed jobId, address indexed client, uint256 amount)
-// Sets payment_usdc (raw ERC-20 6-decimal units) and advances status to "funded".
 func saveAgentJobFunded(app core.App, log *types.Log) error {
 	return agentJobUpsert(app, log, func(r *core.Record) {
 		r.Set("status", "funded")
 		if log.Data != nil && len(*log.Data) >= 32 {
-			r.Set("payment_usdc", stablecoinHuman(readBig(*log.Data, 0)))
+			r.Set("payment_usdc", utils.StablecoinHuman(utils.ReadBig(*log.Data, 0)))
 		}
 	})
 }
 
-// JobSubmitted(uint256 indexed jobId, address indexed provider, bytes32 deliverable)
 func saveAgentJobSubmitted(app core.App, log *types.Log) error {
 	return agentJobUpsert(app, log, func(r *core.Record) {
 		r.Set("status", "submitted")
 	})
 }
 
-// JobCompleted(uint256 indexed jobId, address indexed evaluator, bytes32 reason)
 func saveAgentJobCompleted(app core.App, log *types.Log) error {
 	return agentJobUpsert(app, log, func(r *core.Record) {
 		r.Set("status", "completed")
 	})
 }
 
-// JobRejected(uint256 indexed jobId, address indexed rejector, bytes32 reason)
 func saveAgentJobRejected(app core.App, log *types.Log) error {
 	return agentJobUpsert(app, log, func(r *core.Record) {
 		r.Set("status", "rejected")
 	})
 }
 
-// PaymentReleased(uint256 indexed jobId, address indexed provider, uint256 amount)
-// Terminal state: payment sent to provider.
 func saveAgentJobPaid(app core.App, log *types.Log) error {
 	return agentJobUpsert(app, log, func(r *core.Record) {
 		r.Set("status", "paid")
@@ -1729,7 +1626,6 @@ func saveAgentJobPaid(app core.App, log *types.Log) error {
 	})
 }
 
-// JobExpired(uint256 indexed jobId)
 func saveAgentJobExpired(app core.App, log *types.Log) error {
 	return agentJobUpsert(app, log, func(r *core.Record) {
 		r.Set("status", "expired")
@@ -1737,7 +1633,7 @@ func saveAgentJobExpired(app core.App, log *types.Log) error {
 }
 
 func saveTrace(app core.App, trace *types.Trace) error {
-	r := core.NewRecord(mustCollection(app, "traces"))
+	r := core.NewRecord(utils.MustCollection(app, "traces"))
 	if trace.TransactionHash != nil {
 		r.Set("tx_hash", trace.TransactionHash.Hex())
 	}
@@ -1771,7 +1667,6 @@ func saveTrace(app core.App, trace *types.Trace) error {
 	return nil
 }
 
-// upsertWalletEdge increments the edge (from→to) in the wallet graph.
 func upsertWalletEdge(app core.App, from, to string, amount *big.Int, blockNumber *big.Int) error {
 	existing, err := app.FindRecordsByFilter("wallet_edges",
 		"from_wallet = {:f} && to_wallet = {:t}", "", 1, 0,
@@ -1794,7 +1689,7 @@ func upsertWalletEdge(app core.App, from, to string, amount *big.Int, blockNumbe
 			r.Set("last_seen_block", blockNumber.Uint64())
 		}
 	} else {
-		r = core.NewRecord(mustCollection(app, "wallet_edges"))
+		r = core.NewRecord(utils.MustCollection(app, "wallet_edges"))
 		r.Set("from_wallet", from)
 		r.Set("to_wallet", to)
 		r.Set("total_usdc", amount.String())
@@ -1812,22 +1707,12 @@ func upsertWalletEdge(app core.App, from, to string, amount *big.Int, blockNumbe
 
 // ── Cursor management ─────────────────────────────────────────────────────────
 
-// arcBlocksPerDay is a conservative estimate based on Arc's ~1 second block time.
-const arcBlocksPerDay = uint64(86_400)
-
-// arcCatchupLookback is how far back we start on a fresh DB.
-// 1 hour gives enough context data without blowing the free-tier rate limit
-// during catch-up (18 batches of 200 blocks vs 3024 for 7 days).
 const arcCatchupLookback = uint64(3_600)
 
-// resolveStartBlock returns the block to stream from.
-// If a cursor exists in the DB we resume from there. On a fresh start we fetch
-// the current chain tip and walk back 7 days so we don't blow the free-tier
-// Envio soft limits (100k events / 5GB) by replaying the entire chain history.
 func resolveStartBlock(ctx context.Context, app core.App, client interface {
 	GetHeight(context.Context) (*big.Int, error)
 }) uint64 {
-	last := getLastIndexedBlock(app)
+	last := utils.GetLastIndexedBlock(app)
 	if last > 0 {
 		log.Printf("[indexer] resuming from saved cursor %d", last)
 		return last
@@ -1848,119 +1733,4 @@ func resolveStartBlock(ctx context.Context, app core.App, client interface {
 
 	log.Printf("[indexer] fresh start | tip=%d from_block=%d lookback_blocks=%d", tip, start, lookback)
 	return start
-}
-
-func getLastIndexedBlock(app core.App) uint64 {
-	records, err := app.FindRecordsByFilter("indexer_meta", "key = 'lastBlock'", "", 1, 0)
-	if err != nil || len(records) == 0 {
-		return 0
-	}
-	val, _ := strconv.ParseUint(records[0].GetString("value"), 10, 64)
-	return val
-}
-
-func setLastIndexedBlock(app core.App, block uint64) error {
-	records, err := app.FindRecordsByFilter("indexer_meta", "key = 'lastBlock'", "", 1, 0)
-	if err != nil {
-		return fmt.Errorf("find lastBlock cursor: %w", err)
-	}
-
-	var r *core.Record
-	if len(records) > 0 {
-		r = records[0]
-	} else {
-		c := mustCollection(app, "indexer_meta")
-		r = core.NewRecord(c)
-		r.Set("key", "lastBlock")
-	}
-	r.Set("value", strconv.FormatUint(block, 10))
-	if err := app.Save(r); err != nil {
-		return fmt.Errorf("save lastBlock cursor %d: %w", block, err)
-	}
-	return nil
-}
-
-func setMetaValue(app core.App, key, value string) {
-	records, err := app.FindRecordsByFilter("indexer_meta", "key = {:k}", "", 1, 0, map[string]any{"k": key})
-	if err != nil {
-		return
-	}
-	var r *core.Record
-	if len(records) > 0 {
-		r = records[0]
-	} else {
-		c := mustCollection(app, "indexer_meta")
-		r = core.NewRecord(c)
-		r.Set("key", key)
-	}
-	r.Set("value", value)
-	_ = app.Save(r)
-}
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-// weiToUSDC converts a fee in native USDC wei (18 decimals) to a human-readable string.
-func weiToUSDC(wei *big.Int) string {
-	if wei == nil || wei.Sign() == 0 {
-		return "0"
-	}
-	divisor := new(big.Int).Exp(big.NewInt(10), big.NewInt(18), nil)
-	quot := new(big.Float).Quo(new(big.Float).SetInt(wei), new(big.Float).SetInt(divisor))
-	return quot.Text('f', 8)
-}
-
-// stablecoinHuman converts an ERC-20 stablecoin amount (6 decimals) to a human-readable string.
-func stablecoinHuman(raw *big.Int) string {
-	if raw == nil || raw.Sign() == 0 {
-		return "0"
-	}
-	divisor := new(big.Int).Exp(big.NewInt(10), big.NewInt(6), nil)
-	quot := new(big.Float).Quo(new(big.Float).SetInt(raw), new(big.Float).SetInt(divisor))
-	return quot.Text('f', 6)
-}
-
-// tokenAmountHuman converts a raw uint256 amount to a human-readable string using
-// the supplied decimals. Output precision is min(decimals, 8) to keep strings short.
-func tokenAmountHuman(raw *big.Int, decimals uint8) string {
-	if raw == nil || raw.Sign() == 0 {
-		return "0"
-	}
-	divisor := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(decimals)), nil)
-	quot := new(big.Float).Quo(new(big.Float).SetInt(raw), new(big.Float).SetInt(divisor))
-	prec := int(decimals)
-	if prec > 8 {
-		prec = 8
-	}
-	return quot.Text('f', prec)
-}
-
-// mustCollection fetches a collection by name and panics if missing — collections are
-// registered at startup so absence here is a programming error.
-func mustCollection(app core.App, name string) *core.Collection {
-	c, err := app.FindCollectionByNameOrId(name)
-	if err != nil {
-		panic(fmt.Sprintf("collection %q not found: %v", name, err))
-	}
-	return c
-}
-
-// addressFromTopic extracts an Ethereum address from a 32-byte topic (last 20 bytes).
-func addressFromTopic(h *common.Hash) string {
-	if h == nil {
-		return ""
-	}
-	return common.BytesToAddress(h.Bytes()[12:]).Hex()
-}
-
-// addressFromBytes32 extracts an Ethereum address from a 32-byte ABI-padded slice (last 20 bytes).
-func addressFromBytes32(b []byte) string {
-	if len(b) < 32 {
-		return ""
-	}
-	return common.BytesToAddress(b[12:32]).Hex()
-}
-
-// stripQuotes is a no-op helper kept for clarity when working with string values.
-func stripQuotes(s string) string {
-	return strings.Trim(s, `"`)
 }

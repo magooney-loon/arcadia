@@ -1,4 +1,4 @@
-package server
+package jobs
 
 import (
 	"encoding/json"
@@ -9,6 +9,8 @@ import (
 	"github.com/magooney-loon/pb-ext/core/jobs"
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/core"
+
+	"arcadia/internal/utils"
 )
 
 func RegisterJobs(app core.App) {
@@ -27,7 +29,6 @@ func RegisterJobs(app core.App) {
 		}
 		app.Logger().Info("All jobs registered")
 
-		// Prime snapshots immediately so handlers have data before the first cron fires.
 		go func() {
 			time.Sleep(5 * time.Second)
 			for _, win := range []string{"1h", "24h", "7d"} {
@@ -41,7 +42,6 @@ func RegisterJobs(app core.App) {
 	})
 }
 
-// indexerEventsCleanupJob runs every hour and deletes indexer_events older than 2 hours.
 func indexerEventsCleanupJob(app core.App) error {
 	jm := jobs.GetManager()
 	if jm == nil {
@@ -81,7 +81,6 @@ func indexerEventsCleanupJob(app core.App) error {
 	)
 }
 
-// indexerHealthJob runs every minute and logs indexer cursor + collection row counts.
 func indexerHealthJob(app core.App) error {
 	jm := jobs.GetManager()
 	if jm == nil {
@@ -113,10 +112,9 @@ func indexerHealthJob(app core.App) error {
 				}
 			}
 
-			cursor, _ := app.FindRecordsByFilter("indexer_meta", "key = 'lastBlock'", "", 1, 0)
 			lastBlock := "unknown"
-			if len(cursor) > 0 {
-				lastBlock = cursor[0].GetString("value")
+			if last := utils.GetLastIndexedBlock(app); last > 0 {
+				lastBlock = fmt.Sprintf("%d", last)
 			}
 
 			el.Info("Last indexed block: %s", lastBlock)
@@ -126,8 +124,6 @@ func indexerHealthJob(app core.App) error {
 	)
 }
 
-// analyticsSnapshotJob materializes window aggregates every 5 minutes.
-// Handlers do a single-row read instead of scanning full tables per request.
 func analyticsSnapshotJob(app core.App) error {
 	jm := jobs.GetManager()
 	if jm == nil {
@@ -155,10 +151,8 @@ func analyticsSnapshotJob(app core.App) error {
 	)
 }
 
-// takeAnalyticsSnapshot computes all analytics for the given window and inserts
-// a new row into analytics_snapshots. Called by the cron job and on startup.
 func takeAnalyticsSnapshot(app core.App, window string) error {
-	_, wParams := windowBlockFilter(app, window)
+	_, wParams := utils.WindowBlockFilter(app, window)
 	fromBlock := wParams["from"]
 
 	latest, _ := app.FindRecordsByFilter("block_stats", "", "-block_number", 1, 0)
@@ -240,7 +234,7 @@ func takeAnalyticsSnapshot(app core.App, window string) error {
 		 FROM block_stats WHERE block_number >= {:from}`).
 		Bind(dbx.Params{"from": fromBlock}).One(&fAgg)
 
-	fees := loadFeeColumn(app, fromBlock)
+	fees := utils.LoadFeeColumn(app, fromBlock)
 	sort.Float64s(fees)
 
 	var failedRatio float64
@@ -278,7 +272,7 @@ func takeAnalyticsSnapshot(app core.App, window string) error {
 	var totalIn, totalOut float64
 	var countIn, countOut int
 	for _, r := range bridgeRows {
-		k := domainName(r.ChainDomain)
+		k := utils.DomainName(r.ChainDomain)
 		if byChain[k] == nil {
 			byChain[k] = &chainFlow{}
 		}
@@ -305,12 +299,11 @@ func takeAnalyticsSnapshot(app core.App, window string) error {
 
 	// ── write snapshot ────────────────────────────────────────────────────────
 
-	c := mustCollection(app, "analytics_snapshots")
+	c := utils.MustCollection(app, "analytics_snapshots")
 	row := core.NewRecord(c)
 	row.Set("snapshot_at", time.Now().Unix())
 	row.Set("block_number", blockNumber)
 	row.Set("window", window)
-	// transfers / volume
 	row.Set("transfers_count", tStats.Count)
 	row.Set("transfer_volume", tStats.Volume)
 	row.Set("total_transfers", tStats.Count)
@@ -325,25 +318,22 @@ func takeAnalyticsSnapshot(app core.App, window string) error {
 	row.Set("whale_transfers", totalWhales)
 	row.Set("unique_senders", addrs.Senders)
 	row.Set("unique_receivers", addrs.Receivers)
-	// fees
 	row.Set("fees_total", fAgg.FeesTotal)
-	row.Set("fee_p25", percentileFloat(fees, 25))
-	row.Set("fee_p50", percentileFloat(fees, 50))
-	row.Set("fee_p75", percentileFloat(fees, 75))
-	row.Set("fee_p95", percentileFloat(fees, 95))
+	row.Set("fee_p25", utils.PercentileFloat(fees, 25))
+	row.Set("fee_p50", utils.PercentileFloat(fees, 50))
+	row.Set("fee_p75", utils.PercentileFloat(fees, 75))
+	row.Set("fee_p95", utils.PercentileFloat(fees, 95))
 	row.Set("failed_tx_ratio", failedRatio)
 	row.Set("total_txs", fAgg.TotalTxs)
 	row.Set("failed_txs", fAgg.FailedTxs)
 	row.Set("avg_block_time_ms", fAgg.AvgBlockTimeMs)
 	row.Set("block_count", fAgg.BlockCount)
-	// bridge
 	row.Set("bridge_inbound_vol", totalIn)
 	row.Set("bridge_inbound_count", countIn)
 	row.Set("bridge_outbound_vol", totalOut)
 	row.Set("bridge_outbound_count", countOut)
 	row.Set("bridge_net_flow", totalIn-totalOut)
 	row.Set("bridge_by_chain", string(bridgeByChainJSON))
-	// agents
 	row.Set("agent_count", agentCount.Count)
 
 	return app.Save(row)

@@ -1,4 +1,4 @@
-package server
+package utils
 
 import (
 	"bytes"
@@ -20,21 +20,19 @@ import (
 // TokenInfo describes an ERC-20 token's display metadata.
 type TokenInfo struct {
 	Address      common.Address
-	Symbol       string // empty if symbol() call failed
+	Symbol       string
 	Decimals     uint8
-	LookupFailed bool // true if RPC didn't return valid decimals; consumer should fall back to OTHER
+	LookupFailed bool
 }
 
 // tokenInfoCache is an in-memory, process-wide cache of token metadata.
-// Hits are essentially free; misses fall through to DB, then RPC.
 var (
 	tokenInfoMu    sync.RWMutex
 	tokenInfoCache = map[common.Address]TokenInfo{}
 )
 
-// seedKnownTokens primes the cache with the three Arc stablecoins so we never
-// burn an RPC call for them.
-func seedKnownTokens() {
+// SeedKnownTokens primes the cache with the three Arc stablecoins.
+func SeedKnownTokens() {
 	tokenInfoMu.Lock()
 	defer tokenInfoMu.Unlock()
 	for addr, sym := range KnownTokens {
@@ -42,10 +40,9 @@ func seedKnownTokens() {
 	}
 }
 
-// lookupTokenInfo returns metadata for the given token address.
+// LookupTokenInfo returns metadata for the given token address.
 // Resolution order: in-memory → DB cache (tokens collection) → JSON-RPC fetch.
-// On RPC failure the token is stored with LookupFailed=true so we don't keep retrying.
-func lookupTokenInfo(app core.App, addr common.Address, firstSeenBlock uint64) TokenInfo {
+func LookupTokenInfo(app core.App, addr common.Address, firstSeenBlock uint64) TokenInfo {
 	tokenInfoMu.RLock()
 	if info, ok := tokenInfoCache[addr]; ok {
 		tokenInfoMu.RUnlock()
@@ -53,7 +50,6 @@ func lookupTokenInfo(app core.App, addr common.Address, firstSeenBlock uint64) T
 	}
 	tokenInfoMu.RUnlock()
 
-	// DB cache
 	rows, _ := app.FindRecordsByFilter("tokens", "address = {:a}", "", 1, 0, map[string]any{"a": addr.Hex()})
 	if len(rows) > 0 {
 		r := rows[0]
@@ -69,7 +65,6 @@ func lookupTokenInfo(app core.App, addr common.Address, firstSeenBlock uint64) T
 		return info
 	}
 
-	// RPC fetch
 	info := fetchTokenInfoFromRPC(addr)
 	info.Address = addr
 
@@ -81,7 +76,7 @@ func lookupTokenInfo(app core.App, addr common.Address, firstSeenBlock uint64) T
 		r.Set("decimals", info.Decimals)
 		r.Set("first_seen_block", firstSeenBlock)
 		r.Set("lookup_failed", info.LookupFailed)
-		_ = app.Save(r) // best-effort; duplicate race is fine, next call hits DB cache
+		_ = app.Save(r)
 	}
 
 	tokenInfoMu.Lock()
@@ -90,24 +85,19 @@ func lookupTokenInfo(app core.App, addr common.Address, firstSeenBlock uint64) T
 	return info
 }
 
-// fetchTokenInfoFromRPC calls decimals() and symbol() on the contract.
-// Tries each RPC in the pool until one succeeds or all fail.
 func fetchTokenInfoFromRPC(addr common.Address) TokenInfo {
 	for _, rpcURL := range arcRPCPool {
 		dec, ok := callDecimals(rpcURL, addr)
 		if !ok {
 			continue
 		}
-		sym, _ := callSymbol(rpcURL, addr) // best-effort, symbol failures are non-fatal
+		sym, _ := callSymbol(rpcURL, addr)
 		return TokenInfo{Symbol: sym, Decimals: dec}
 	}
 	return TokenInfo{LookupFailed: true}
 }
 
-// decimals() selector: keccak256("decimals()")[:4] = 0x313ce567
 const sigDecimals = "0x313ce567"
-
-// symbol() selector: keccak256("symbol()")[:4] = 0x95d89b41
 const sigSymbol = "0x95d89b41"
 
 func callDecimals(rpcURL string, addr common.Address) (uint8, bool) {
@@ -129,7 +119,6 @@ func callSymbol(rpcURL string, addr common.Address) (string, bool) {
 	}
 	s := decodeABIString(raw)
 	if s == "" || len(s) > 32 {
-		// bytes32-encoded fallback (older ERC-20s)
 		s = strings.TrimRight(string(bytes.Trim(raw, "\x00")), "\x00")
 	}
 	s = strings.TrimSpace(s)
@@ -139,10 +128,7 @@ func callSymbol(rpcURL string, addr common.Address) (string, bool) {
 	return s, s != ""
 }
 
-// name() selector: keccak256("name()")[:4] = 0x06fdde03
 const sigName = "0x06fdde03"
-
-// totalSupply() selector: keccak256("totalSupply()")[:4] = 0x18160ddd
 const sigTotalSupply = "0x18160ddd"
 
 func callName(rpcURL string, addr common.Address) (string, bool) {
@@ -152,7 +138,6 @@ func callName(rpcURL string, addr common.Address) (string, bool) {
 	}
 	s := decodeABIString(raw)
 	if s == "" || len(s) > 64 {
-		// bytes32-encoded fallback
 		s = strings.TrimRight(string(bytes.Trim(raw, "\x00")), "\x00")
 	}
 	s = strings.TrimSpace(s)
@@ -171,9 +156,8 @@ func callTotalSupply(rpcURL string, addr common.Address) (*big.Int, bool) {
 	return n, true
 }
 
-// fetchFullTokenInfo calls name(), symbol(), decimals(), totalSupply() on the contract.
-// Tries each RPC in the pool until one succeeds for decimals, then uses same endpoint for rest.
-func fetchFullTokenInfo(addr common.Address) FullTokenInfo {
+// FetchFullTokenInfo calls name(), symbol(), decimals(), totalSupply() on the contract.
+func FetchFullTokenInfo(addr common.Address) FullTokenInfo {
 	for _, rpcURL := range arcRPCPool {
 		dec, ok := callDecimals(rpcURL, addr)
 		if !ok {
@@ -201,7 +185,6 @@ type FullTokenInfo struct {
 	LookupFailed bool
 }
 
-// ethCall issues an eth_call against rpcURL and returns the raw return bytes.
 func ethCall(rpcURL string, addr common.Address, dataHex string) ([]byte, error) {
 	body := fmt.Sprintf(
 		`{"jsonrpc":"2.0","id":1,"method":"eth_call","params":[{"to":%q,"data":%q},"latest"]}`,
@@ -240,10 +223,7 @@ func ethCall(rpcURL string, addr common.Address, dataHex string) ([]byte, error)
 	return hex.DecodeString(hexStr)
 }
 
-// decodeABIString decodes the ABI-encoded `string` return value:
-// [0..32]   = offset (always 0x20)
-// [32..64]  = length L
-// [64..]    = UTF-8 bytes (right-padded to 32-byte multiple)
+// decodeABIString decodes the ABI-encoded `string` return value.
 func decodeABIString(raw []byte) string {
 	if len(raw) < 64 {
 		return ""

@@ -11,8 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/core"
+
+	"arcadia/internal/utils"
 )
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -47,7 +48,7 @@ func enrichEdgeRecord(r *core.Record) map[string]any {
 	m := r.PublicExport()
 	if raw := r.GetString("total_usdc"); raw != "" && raw != "0" {
 		if n, ok := new(big.Int).SetString(raw, 10); ok {
-			m["total_usdc_human"] = stablecoinHuman(n)
+			m["total_usdc_human"] = utils.StablecoinHuman(n)
 		}
 	}
 	return m
@@ -60,12 +61,12 @@ func enrichAgentRecord(r *core.Record) map[string]any {
 	m := r.PublicExport()
 	if raw := r.GetString("usdc_spent_fees"); raw != "" && raw != "0" {
 		if n, ok := new(big.Int).SetString(raw, 10); ok {
-			m["usdc_spent_fees_human"] = weiToUSDC(n)
+			m["usdc_spent_fees_human"] = utils.WeiToUSDC(n)
 		}
 	}
 	if raw := r.GetString("usdc_transferred"); raw != "" && raw != "0" {
 		if n, ok := new(big.Int).SetString(raw, 10); ok {
-			m["usdc_transferred_human"] = stablecoinHuman(n)
+			m["usdc_transferred_human"] = utils.StablecoinHuman(n)
 		}
 	}
 	return m
@@ -511,47 +512,6 @@ func parseUSDC(s string) float64 {
 	return f
 }
 
-// windowToBlockCount converts a time window string to an approximate block count.
-// Arc L1 averages ~380 ms per block.
-func windowToBlockCount(window string) int {
-	const avgBlockMs = 380
-	switch window {
-	case "1h":
-		return 3_600_000 / avgBlockMs
-	case "7d":
-		return 7 * 86_400_000 / avgBlockMs
-	default: // "24h"
-		return 86_400_000 / avgBlockMs
-	}
-}
-
-// windowBlockFilter returns a PocketBase filter + params scoped to the last N blocks.
-// It fetches the current tip from block_stats so callers don't need to.
-func windowBlockFilter(app core.App, window string) (string, map[string]any) {
-	blockCount := windowToBlockCount(window)
-	latest, _ := app.FindRecordsByFilter("block_stats", "", "-block_number", 1, 0)
-	fromBlock := 0
-	if len(latest) > 0 {
-		fromBlock = latest[0].GetInt("block_number") - blockCount
-		if fromBlock < 0 {
-			fromBlock = 0
-		}
-	}
-	return "block_number >= {:from}", map[string]any{"from": fromBlock}
-}
-
-func percentileFloat(sorted []float64, p float64) float64 {
-	n := len(sorted)
-	if n == 0 {
-		return 0
-	}
-	idx := int(p / 100.0 * float64(n))
-	if idx >= n {
-		idx = n - 1
-	}
-	return sorted[idx]
-}
-
 func isNumeric(s string) bool {
 	if len(s) == 0 {
 		return false
@@ -562,42 +522,6 @@ func isNumeric(s string) bool {
 		}
 	}
 	return true
-}
-
-var domainNames = map[int]string{
-	0:  "Ethereum",
-	1:  "Avalanche",
-	2:  "OP Mainnet",
-	3:  "Arbitrum",
-	5:  "Solana",
-	6:  "Base",
-	7:  "Polygon PoS",
-	10: "Unichain",
-	11: "Linea",
-	12: "Codex",
-	13: "Sonic",
-	14: "World Chain",
-	15: "Monad",
-	16: "Sei",
-	17: "BNB Smart Chain",
-	18: "XDC",
-	19: "HyperEVM",
-	21: "Ink",
-	22: "Plume",
-	25: "Starknet",
-	26: "Arc Testnet",
-	27: "Stellar",
-	28: "EDGE",
-	29: "Injective",
-	30: "Morph",
-	31: "Pharos",
-}
-
-func domainName(id int) string {
-	if n, ok := domainNames[id]; ok {
-		return n
-	}
-	return strconv.Itoa(id)
 }
 
 // ── new endpoints ─────────────────────────────────────────────────────────────
@@ -760,23 +684,6 @@ func analyticsFeesHandler(c *core.RequestEvent) error {
 		"failed_tx_ratio":   snap.GetFloat("failed_tx_ratio"),
 		"snapshot_at":       snap.GetInt("snapshot_at"),
 	})
-}
-
-// loadFeeColumn returns avg_fee_usdc values for all block_stats rows in window.
-// Used for percentile computation — full set, no row cap.
-func loadFeeColumn(app core.App, fromBlock any) []float64 {
-	type row struct {
-		V float64 `db:"v"`
-	}
-	var rows []row
-	_ = app.DB().NewQuery(
-		`SELECT CAST(avg_fee_usdc AS REAL) AS v FROM block_stats WHERE block_number >= {:from}`).
-		Bind(dbx.Params{"from": fromBlock}).All(&rows)
-	out := make([]float64, len(rows))
-	for i, r := range rows {
-		out[i] = r.V
-	}
-	return out
 }
 
 // API_DESC Transfer volume aggregates with whale count and per-token breakdown
