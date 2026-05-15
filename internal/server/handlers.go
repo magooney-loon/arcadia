@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"math/big"
 	"net/http"
-	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pocketbase/pocketbase/core"
@@ -42,6 +42,13 @@ func recordsToMaps(records []*core.Record) []map[string]any {
 		out[i] = r.PublicExport()
 	}
 	return out
+}
+
+// cacheHeaders writes a public Cache-Control header. Use small TTLs for
+// indexer-tip data (1–5 s) and longer ones for snapshot-backed endpoints
+// (30–60 s) — the frontend's polling rate dominates DB load otherwise.
+func cacheHeaders(c *core.RequestEvent, maxAgeSeconds int) {
+	c.Response.Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d", maxAgeSeconds))
 }
 
 // enrichEdgeRecord adds total_usdc_human (stablecoin 6-decimal raw → human string).
@@ -78,6 +85,7 @@ func enrichAgentRecord(r *core.Record) map[string]any {
 // API_DESC Latest live chain stats (TPS, fees, transfer volumes, agent activity)
 // API_TAGS Stats
 func statsHandler(c *core.RequestEvent) error {
+	cacheHeaders(c, 2)
 	// latest block_stats row
 	rows, err := c.App.FindRecordsByFilter("block_stats", "", "-block_number", 1, 0)
 	if err != nil || len(rows) == 0 {
@@ -219,20 +227,44 @@ func walletHandler(c *core.RequestEvent) error {
 
 	limit, offset := limitOffset(c)
 
-	// outgoing + incoming transfers
-	sent, _ := c.App.FindRecordsByFilter("transfers", "from_addr = {:a}", "-block_number", limit, offset, map[string]any{"a": address})
-	received, _ := c.App.FindRecordsByFilter("transfers", "to_addr = {:a}", "-block_number", limit, offset, map[string]any{"a": address})
+	// Fan out the 7 independent SELECTs concurrently. SQLite WAL allows many
+	// readers in parallel; on the previous sequential path tail latency was
+	// the sum of all 7 round-trips.
+	var (
+		wg                                                          sync.WaitGroup
+		sent, received                                              []*core.Record
+		outEdges, inEdges                                           []*core.Record
+		txsSent, txsReceived                                        []*core.Record
+		agentRecords                                                []*core.Record
+	)
+	params := map[string]any{"a": address}
+	run := func(fn func()) {
+		wg.Add(1)
+		go func() { defer wg.Done(); fn() }()
+	}
+	run(func() {
+		sent, _ = c.App.FindRecordsByFilter("transfers", "from_addr = {:a}", "-block_number", limit, offset, params)
+	})
+	run(func() {
+		received, _ = c.App.FindRecordsByFilter("transfers", "to_addr = {:a}", "-block_number", limit, offset, params)
+	})
+	run(func() {
+		outEdges, _ = c.App.FindRecordsByFilter("wallet_edges", "from_wallet = {:a}", "-tx_count", 20, 0, params)
+	})
+	run(func() {
+		inEdges, _ = c.App.FindRecordsByFilter("wallet_edges", "to_wallet = {:a}", "-tx_count", 20, 0, params)
+	})
+	run(func() {
+		txsSent, _ = c.App.FindRecordsByFilter("transactions", "from_addr = {:a}", "-block_number", limit, offset, params)
+	})
+	run(func() {
+		txsReceived, _ = c.App.FindRecordsByFilter("transactions", "to_addr = {:a}", "-block_number", limit, offset, params)
+	})
+	run(func() {
+		agentRecords, _ = c.App.FindRecordsByFilter("agents", "agent_address = {:a}", "", 1, 0, params)
+	})
+	wg.Wait()
 
-	// graph edges
-	outEdges, _ := c.App.FindRecordsByFilter("wallet_edges", "from_wallet = {:a}", "-tx_count", 20, 0, map[string]any{"a": address})
-	inEdges, _ := c.App.FindRecordsByFilter("wallet_edges", "to_wallet = {:a}", "-tx_count", 20, 0, map[string]any{"a": address})
-
-	// transactions
-	txsSent, _ := c.App.FindRecordsByFilter("transactions", "from_addr = {:a}", "-block_number", limit, offset, map[string]any{"a": address})
-	txsReceived, _ := c.App.FindRecordsByFilter("transactions", "to_addr = {:a}", "-block_number", limit, offset, map[string]any{"a": address})
-
-	// agent status
-	agentRecords, _ := c.App.FindRecordsByFilter("agents", "agent_address = {:a}", "", 1, 0, map[string]any{"a": address})
 	var agentData any
 	if len(agentRecords) > 0 {
 		agentData = enrichAgentRecord(agentRecords[0])
@@ -530,6 +562,7 @@ func isNumeric(s string) bool {
 // API_DESC Indexer health: lag, error rate, last indexed block
 // API_TAGS Stats
 func healthHandler(c *core.RequestEvent) error {
+	cacheHeaders(c, 2)
 	// Single query for all meta keys instead of 3 separate lookups.
 	metaRows, _ := c.App.FindRecordsByFilter("indexer_meta", "key != ''", "", 10, 0)
 	metaMap := make(map[string]string, len(metaRows))
@@ -662,6 +695,7 @@ func blockDetailHandler(c *core.RequestEvent) error {
 // API_DESC Fee analytics: P25/P50/P75/P95 percentiles, failed tx ratio, avg block time
 // API_TAGS Stats
 func analyticsFeesHandler(c *core.RequestEvent) error {
+	cacheHeaders(c, 30)
 	window := qp(c, "window", "24h")
 	snap, ok := latestSnapshot(c.App, window)
 	if !ok {
@@ -684,6 +718,7 @@ func analyticsFeesHandler(c *core.RequestEvent) error {
 // API_DESC Transfer volume aggregates with whale count and per-token breakdown
 // API_TAGS Transfers
 func analyticsVolumeHandler(c *core.RequestEvent) error {
+	cacheHeaders(c, 30)
 	window := qp(c, "window", "24h")
 	token := qp(c, "token", "")
 	snap, ok := latestSnapshot(c.App, window)
@@ -724,6 +759,7 @@ func analyticsVolumeHandler(c *core.RequestEvent) error {
 // API_DESC Cross-chain net flow: inbound vs outbound USDC grouped by chain
 // API_TAGS CrossChain
 func analyticsBridgeFlowHandler(c *core.RequestEvent) error {
+	cacheHeaders(c, 30)
 	window := qp(c, "window", "24h")
 	snap, ok := latestSnapshot(c.App, window)
 	if !ok {
@@ -750,6 +786,7 @@ func analyticsBridgeFlowHandler(c *core.RequestEvent) error {
 // API_DESC Single-request 24h dashboard summary: transfer count, volume, fees, bridge, agents
 // API_TAGS Stats
 func analyticsOverviewHandler(c *core.RequestEvent) error {
+	cacheHeaders(c, 30)
 	window := qp(c, "window", "24h")
 	snap, ok := latestSnapshot(c.App, window)
 	if !ok {
@@ -778,6 +815,7 @@ func analyticsOverviewHandler(c *core.RequestEvent) error {
 // API_DESC Historical analytics snapshots for time-series charting
 // API_TAGS Stats
 func analyticsHistoryHandler(c *core.RequestEvent) error {
+	cacheHeaders(c, 60)
 	window := qp(c, "window", "24h")
 	limit, _ := limitOffset(c)
 	if limit > 1000 {
@@ -881,6 +919,7 @@ func tokenDetailHandler(c *core.RequestEvent) error {
 // API_DESC Agent leaderboard ranked by stablecoin volume transferred
 // API_TAGS Agents
 func analyticsAgentLeaderboardHandler(c *core.RequestEvent) error {
+	cacheHeaders(c, 60)
 	limit, _ := limitOffset(c)
 	if limit > 100 {
 		limit = 100
@@ -918,8 +957,9 @@ func analyticsAgentLeaderboardHandler(c *core.RequestEvent) error {
 		statsMap[jobStats[i].Addr] = &jobStats[i]
 	}
 
-	// Fetch agents (sorted later by volume in-memory).
-	agents, err := c.App.FindRecordsByFilter("agents", "", "", 500, 0)
+	// Index-backed sort on the numeric mirror column avoids the old in-memory
+	// sprintf+ParseFloat-per-agent pass and lets us cap the result set in SQL.
+	agents, err := c.App.FindRecordsByFilter("agents", "", "-usdc_transferred_num", limit, 0)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error()})
 	}
@@ -940,17 +980,6 @@ func analyticsAgentLeaderboardHandler(c *core.RequestEvent) error {
 			entry["rejected_jobs"] = 0
 		}
 		result = append(result, entry)
-	}
-
-	// Sort by usdc_transferred_human (stablecoin volume) descending.
-	sort.Slice(result, func(i, j int) bool {
-		vi, _ := strconv.ParseFloat(fmt.Sprintf("%v", result[i]["usdc_transferred_human"]), 64)
-		vj, _ := strconv.ParseFloat(fmt.Sprintf("%v", result[j]["usdc_transferred_human"]), 64)
-		return vi > vj
-	})
-
-	if len(result) > limit {
-		result = result[:limit]
 	}
 
 	return c.JSON(http.StatusOK, map[string]any{

@@ -51,25 +51,11 @@ func takeAnalyticsSnapshot(app core.App, window string) error {
 	blockNumber := latest[0].GetInt("block_number")
 
 	// ── transfers / volume ────────────────────────────────────────────────────
-
-	var tStats struct {
-		Count  int     `db:"cnt"`
-		Volume float64 `db:"vol"`
-	}
-	_ = app.DB().NewQuery(
-		`SELECT COUNT(*) AS cnt, COALESCE(SUM(CAST(amount_human AS REAL)), 0) AS vol
-		 FROM transfers WHERE block_number >= {:from} AND token_symbol != 'OTHER'`).
-		Bind(dbx.Params{"from": fromBlock}).One(&tStats)
-
-	var largest struct {
-		Amount float64 `db:"amt"`
-		Block  int     `db:"block_number"`
-	}
-	_ = app.DB().NewQuery(
-		`SELECT CAST(amount_human AS REAL) AS amt, block_number
-		 FROM transfers WHERE block_number >= {:from} AND token_symbol != 'OTHER'
-		 ORDER BY CAST(amount_human AS REAL) DESC LIMIT 1`).
-		Bind(dbx.Params{"from": fromBlock}).One(&largest)
+	//
+	// One GROUP BY scan returns per-symbol cnt/vol/whales; we derive the
+	// global totals in Go. A second index-backed query finds the largest
+	// transfer (amount_num is indexed). A third query counts distinct
+	// senders/receivers globally. 4 scans → 3.
 
 	type groupRow struct {
 		Symbol string  `db:"token_symbol"`
@@ -80,20 +66,36 @@ func takeAnalyticsSnapshot(app core.App, window string) error {
 	var groupRows []groupRow
 	_ = app.DB().NewQuery(
 		`SELECT token_symbol,
-		        COALESCE(SUM(CAST(amount_human AS REAL)), 0) AS vol,
+		        COALESCE(SUM(amount_num), 0) AS vol,
 		        COUNT(*) AS cnt,
-		        SUM(CASE WHEN CAST(amount_human AS REAL) >= 10000 THEN 1 ELSE 0 END) AS whales
+		        SUM(CASE WHEN amount_num >= 10000 THEN 1 ELSE 0 END) AS whales
 		 FROM transfers WHERE block_number >= {:from} AND token_symbol != 'OTHER'
 		 GROUP BY token_symbol`).Bind(dbx.Params{"from": fromBlock}).All(&groupRows)
 
 	volByToken := map[string]float64{}
 	cntByToken := map[string]int{}
 	totalWhales := 0
+	tStats := struct {
+		Count  int
+		Volume float64
+	}{}
 	for _, g := range groupRows {
 		volByToken[g.Symbol] = g.Vol
 		cntByToken[g.Symbol] = g.Cnt
 		totalWhales += g.Whales
+		tStats.Count += g.Cnt
+		tStats.Volume += g.Vol
 	}
+
+	var largest struct {
+		Amount float64 `db:"amt"`
+		Block  int     `db:"block_number"`
+	}
+	_ = app.DB().NewQuery(
+		`SELECT amount_num AS amt, block_number
+		 FROM transfers WHERE block_number >= {:from} AND token_symbol != 'OTHER'
+		 ORDER BY amount_num DESC LIMIT 1`).
+		Bind(dbx.Params{"from": fromBlock}).One(&largest)
 
 	var addrs struct {
 		Senders   int `db:"senders"`
@@ -116,7 +118,7 @@ func takeAnalyticsSnapshot(app core.App, window string) error {
 	_ = app.DB().NewQuery(
 		`SELECT
 			COUNT(*) AS block_count,
-			COALESCE(SUM(CAST(total_fee_usdc AS REAL)), 0) AS fees_total,
+			COALESCE(SUM(total_fee_num), 0) AS fees_total,
 			COALESCE(SUM(tx_count), 0) AS total_txs,
 			COALESCE(SUM(failed_tx_count), 0) AS failed_txs,
 			COALESCE(AVG(CASE WHEN block_time_ms > 0 THEN block_time_ms END), 0) AS avg_bms

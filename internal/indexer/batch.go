@@ -239,6 +239,8 @@ func processBatch(app core.App, res *types.QueryResponse) error {
 			stats.Set("tps", tps)
 			stats.Set("avg_fee_usdc", utils.WeiToUSDC(avgFee))
 			stats.Set("total_fee_usdc", utils.WeiToUSDC(acc.totalFee))
+			stats.Set("avg_fee_num", utils.WeiToUSDCFloat(avgFee))
+			stats.Set("total_fee_num", utils.WeiToUSDCFloat(acc.totalFee))
 			stats.Set("total_usdc_transferred", utils.StablecoinHuman(acc.totalUSDC))
 			stats.Set("total_eurc_transferred", utils.StablecoinHuman(acc.totalEURC))
 			stats.Set("total_usyc_transferred", utils.StablecoinHuman(acc.totalUSYC))
@@ -246,6 +248,7 @@ func processBatch(app core.App, res *types.QueryResponse) error {
 			stats.Set("unique_receivers", len(acc.uniqueReceivers))
 			stats.Set("new_contracts", acc.newContracts)
 			stats.Set("largest_usdc_transfer", utils.StablecoinHuman(acc.largestUSDC))
+			stats.Set("largest_usdc_num", utils.StablecoinHumanFloat(acc.largestUSDC))
 			stats.Set("utilization_pct", utilPct)
 
 			if err := txApp.Save(stats); err != nil {
@@ -282,7 +285,10 @@ func processBatch(app core.App, res *types.QueryResponse) error {
 				if prev == nil {
 					prev = new(big.Int)
 				}
-				r.Set("usdc_transferred", new(big.Int).Add(prev, delta.transferred).String())
+				total := new(big.Int).Add(prev, delta.transferred)
+				r.Set("usdc_transferred", total.String())
+				// Mirror to numeric column so the agent leaderboard can ORDER BY in SQL.
+				r.Set("usdc_transferred_num", utils.StablecoinHumanFloat(total))
 			}
 			if err := txApp.Save(r); err != nil {
 				return fmt.Errorf("update agent %s stats: %w", addr, err)

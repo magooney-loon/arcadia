@@ -5,7 +5,6 @@ import (
 	"math/big"
 
 	"github.com/enviodev/hypersync-client-go/types"
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/core"
 )
@@ -226,11 +225,3 @@ func loadEdgesFor(app core.App, keys []edgeKey) (map[edgeKey]*core.Record, error
 	return out, nil
 }
 
-// addressFromTopic20 mirrors utils.AddressFromTopic but on raw bytes — used by
-// the wallet-edge aggregator to avoid extra allocations.
-func addressFromTopic20(h *common.Hash) string {
-	if h == nil {
-		return ""
-	}
-	return common.BytesToAddress(h.Bytes()[12:]).Hex()
-}

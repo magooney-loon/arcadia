@@ -69,6 +69,7 @@ func saveTransfer(app core.App, log *types.Log, seen *batchSeen, edges map[edgeK
 		// amount_human is not meaningful for NFT transfers.
 	} else if !info.LookupFailed {
 		r.Set("amount_human", utils.TokenAmountHuman(amountRaw, info.Decimals))
+		r.Set("amount_num", utils.TokenAmountHumanFloat(amountRaw, info.Decimals))
 	}
 
 	if err := app.Save(r); err != nil {

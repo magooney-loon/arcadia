@@ -228,20 +228,43 @@ func transfersCollection(app core.App) error {
 			c.Fields.Add(&core.TextField{Name: "token_name", Required: false, Max: 32})
 			changed = true
 		}
+		// amount_num is an indexed numeric mirror of amount_human, so analytics
+		// queries can ORDER BY / SUM without `CAST(... AS REAL)` table scans.
+		backfillAmountNum := false
+		if c.Fields.GetByName("amount_num") == nil {
+			c.Fields.Add(&core.NumberField{Name: "amount_num"})
+			changed = true
+			backfillAmountNum = true
+		}
 		// Add token_symbol index for transfers filtering.
-		hasSymIdx := false
+		hasSymIdx, hasAmountNumIdx := false, false
 		for _, idx := range c.Indexes {
 			if strings.Contains(idx, "token_symbol") {
 				hasSymIdx = true
-				break
+			}
+			if strings.Contains(idx, "amount_num") {
+				hasAmountNumIdx = true
 			}
 		}
 		if !hasSymIdx {
 			c.AddIndex("idx_transfers_token_symbol", false, "token_symbol", "")
 			changed = true
 		}
+		if !hasAmountNumIdx {
+			c.AddIndex("idx_transfers_amount_num", false, "amount_num", "")
+			changed = true
+		}
 		if changed {
-			return app.Save(c)
+			if err := app.Save(c); err != nil {
+				return err
+			}
+		}
+		if backfillAmountNum {
+			if _, err := app.DB().NewQuery(
+				`UPDATE transfers SET amount_num = CAST(amount_human AS REAL)
+				 WHERE amount_num IS NULL AND amount_human IS NOT NULL AND amount_human != ''`).Execute(); err != nil {
+				app.Logger().Warn("transfers.amount_num backfill failed", "error", err)
+			}
 		}
 		return nil
 	}
@@ -265,12 +288,15 @@ func transfersCollection(app core.App) error {
 	c.Fields.Add(&core.TextField{Name: "amount_raw", Required: false, Max: 80})
 	// amount_human = amount_raw / 10^decimals (per-token, from on-chain decimals())
 	c.Fields.Add(&core.TextField{Name: "amount_human", Required: false, Max: 40})
+	// Indexed numeric mirror of amount_human, used by analytics SQL.
+	c.Fields.Add(&core.NumberField{Name: "amount_num"})
 	c.AddIndex("idx_transfers_unique", true, "tx_hash, log_index", "")
 	c.AddIndex("idx_transfers_block", false, "block_number", "")
 	c.AddIndex("idx_transfers_token", false, "token_address", "")
 	c.AddIndex("idx_transfers_token_symbol", false, "token_symbol", "")
 	c.AddIndex("idx_transfers_from", false, "from_addr", "")
 	c.AddIndex("idx_transfers_to", false, "to_addr", "")
+	c.AddIndex("idx_transfers_amount_num", false, "amount_num", "")
 	c.ViewRule = nil
 	if err := app.Save(c); err != nil {
 		return err
@@ -394,6 +420,38 @@ func fxSwapsCollection(app core.App) error {
 // agentsCollection — Layer 5a: registered ERC-8004 AI agents.
 func agentsCollection(app core.App) error {
 	if collectionExists(app, "agents") {
+		c, err := app.FindCollectionByNameOrId("agents")
+		if err != nil {
+			return err
+		}
+		needsBackfill := false
+		if c.Fields.GetByName("usdc_transferred_num") == nil {
+			c.Fields.Add(&core.NumberField{Name: "usdc_transferred_num"})
+			needsBackfill = true
+		}
+		hasLeaderboardIdx := false
+		for _, idx := range c.Indexes {
+			if strings.Contains(idx, "usdc_transferred_num") {
+				hasLeaderboardIdx = true
+			}
+		}
+		if !hasLeaderboardIdx {
+			c.AddIndex("idx_agents_leaderboard", false, "usdc_transferred_num", "")
+		}
+		if needsBackfill || !hasLeaderboardIdx {
+			if err := app.Save(c); err != nil {
+				return err
+			}
+		}
+		if needsBackfill {
+			// Raw column holds ERC-20 stablecoin units (6 decimals).
+			if _, err := app.DB().NewQuery(
+				`UPDATE agents
+				 SET usdc_transferred_num = COALESCE(CAST(usdc_transferred AS REAL), 0) / 1000000.0
+				 WHERE usdc_transferred_num IS NULL`).Execute(); err != nil {
+				app.Logger().Warn("agents.usdc_transferred_num backfill failed", "error", err)
+			}
+		}
 		return nil
 	}
 	c := core.NewBaseCollection("agents")
@@ -405,7 +463,10 @@ func agentsCollection(app core.App) error {
 	c.Fields.Add(&core.NumberField{Name: "tx_count"})
 	c.Fields.Add(&core.TextField{Name: "usdc_spent_fees", Required: false, Max: 40})
 	c.Fields.Add(&core.TextField{Name: "usdc_transferred", Required: false, Max: 40})
+	// Indexed numeric mirror of usdc_transferred (decimals applied) for SQL leaderboard sort.
+	c.Fields.Add(&core.NumberField{Name: "usdc_transferred_num"})
 	c.AddIndex("idx_agents_address", true, "agent_address", "")
+	c.AddIndex("idx_agents_leaderboard", false, "usdc_transferred_num", "")
 	c.ViewRule = nil
 	if err := app.Save(c); err != nil {
 		return err
@@ -447,6 +508,40 @@ func agentJobsCollection(app core.App) error {
 // blockStatsCollection — Layer 7: pre-aggregated per-block metrics.
 func blockStatsCollection(app core.App) error {
 	if collectionExists(app, "block_stats") {
+		c, err := app.FindCollectionByNameOrId("block_stats")
+		if err != nil {
+			return err
+		}
+		changed := false
+		// Indexed numeric mirrors of the text fee/amount columns. The text
+		// columns keep precision; the numeric ones make analytics ORDER BY
+		// / SUM index-backed instead of CAST-on-every-row.
+		needsBackfill := false
+		addNum := func(name string) {
+			if c.Fields.GetByName(name) == nil {
+				c.Fields.Add(&core.NumberField{Name: name})
+				changed = true
+				needsBackfill = true
+			}
+		}
+		addNum("total_fee_num")
+		addNum("avg_fee_num")
+		addNum("largest_usdc_num")
+		if changed {
+			if err := app.Save(c); err != nil {
+				return err
+			}
+		}
+		if needsBackfill {
+			if _, err := app.DB().NewQuery(
+				`UPDATE block_stats
+				 SET total_fee_num    = COALESCE(CAST(total_fee_usdc       AS REAL), 0),
+				     avg_fee_num      = COALESCE(CAST(avg_fee_usdc         AS REAL), 0),
+				     largest_usdc_num = COALESCE(CAST(largest_usdc_transfer AS REAL), 0)
+				 WHERE total_fee_num IS NULL OR avg_fee_num IS NULL OR largest_usdc_num IS NULL`).Execute(); err != nil {
+				app.Logger().Warn("block_stats numeric backfill failed", "error", err)
+			}
+		}
 		return nil
 	}
 	c := core.NewBaseCollection("block_stats")
@@ -457,6 +552,8 @@ func blockStatsCollection(app core.App) error {
 	c.Fields.Add(&core.NumberField{Name: "failed_tx_count"})
 	c.Fields.Add(&core.TextField{Name: "avg_fee_usdc", Required: false, Max: 40})
 	c.Fields.Add(&core.TextField{Name: "total_fee_usdc", Required: false, Max: 40})
+	c.Fields.Add(&core.NumberField{Name: "avg_fee_num"})
+	c.Fields.Add(&core.NumberField{Name: "total_fee_num"})
 	c.Fields.Add(&core.TextField{Name: "total_usdc_transferred", Required: false, Max: 40})
 	c.Fields.Add(&core.TextField{Name: "total_eurc_transferred", Required: false, Max: 40})
 	c.Fields.Add(&core.TextField{Name: "total_usyc_transferred", Required: false, Max: 40})
@@ -464,6 +561,7 @@ func blockStatsCollection(app core.App) error {
 	c.Fields.Add(&core.NumberField{Name: "unique_receivers"})
 	c.Fields.Add(&core.NumberField{Name: "new_contracts"})
 	c.Fields.Add(&core.TextField{Name: "largest_usdc_transfer", Required: false, Max: 40})
+	c.Fields.Add(&core.NumberField{Name: "largest_usdc_num"})
 	c.Fields.Add(&core.NumberField{Name: "utilization_pct"})
 	c.Fields.Add(&core.NumberField{Name: "block_time_ms"})
 	c.AddIndex("idx_bstats_number", true, "block_number", "")

@@ -35,14 +35,14 @@ func WindowBlockFilter(app core.App, window string) (string, map[string]any) {
 	return "block_number >= {:from}", map[string]any{"from": fromBlock}
 }
 
-// LoadFeeColumn returns avg_fee_usdc values for all block_stats rows in window.
+// LoadFeeColumn returns avg_fee values for all block_stats rows in window.
 func LoadFeeColumn(app core.App, fromBlock any) []float64 {
 	type row struct {
 		V float64 `db:"v"`
 	}
 	var rows []row
 	_ = app.DB().NewQuery(
-		`SELECT CAST(avg_fee_usdc AS REAL) AS v FROM block_stats WHERE block_number >= {:from}`).
+		`SELECT avg_fee_num AS v FROM block_stats WHERE block_number >= {:from}`).
 		Bind(dbx.Params{"from": fromBlock}).All(&rows)
 	out := make([]float64, len(rows))
 	for i, r := range rows {

@@ -10,20 +10,20 @@ Legend: ✅ done · 🔄 in progress · ⬜ pending · ⏭ skipped
 
 | # | Item | Status |
 |---|---|---|
-| 1 | Bulk dedupe lookups in `processBatch` | ⬜ |
-| 2 | Dedup block backfill SELECTs | ⬜ |
-| 3 | Aggregate `wallet_edges` upserts | ⬜ |
-| 4 | Adaptive inter-batch sleep | ⬜ |
+| 1 | Bulk dedupe lookups in `processBatch` | ✅ |
+| 2 | Dedup block backfill SELECTs | ✅ |
+| 3 | Aggregate `wallet_edges` upserts | ✅ |
+| 4 | Adaptive inter-batch sleep | ✅ |
 | 5 | Prefetch next batch (parallel fetch/process) | ⬜ |
-| 6 | `indexerHealthJob` SQL COUNT(*) | ⬜ |
-| 7 | `indexerEventsCleanup` bulk DELETE | ⬜ |
-| 8 | Drop `batch_start` events / buffer event writes | ⬜ |
+| 6 | `indexerHealthJob` SQL COUNT(*) | ✅ |
+| 7 | `indexerEventsCleanup` bulk DELETE | ✅ |
+| 8 | Drop `batch_start` events / buffer event writes | ✅ |
 | 9 | `RunTokenAnalytics` worker pool + single tx | ⬜ |
-| 10 | Collapse `transfers` scans in snapshot | ⬜ |
-| 11 | Numeric columns for amount/fees | ⬜ |
-| 12 | Agent leaderboard SQL sort | ⬜ |
+| 10 | Collapse `transfers` scans in snapshot | ✅ |
+| 11 | Numeric columns for amount/fees | ✅ |
+| 12 | Agent leaderboard SQL sort | ✅ |
 | 13 | HTTP cache headers on hot endpoints | ⬜ |
-| 14 | `walletHandler` errgroup concurrency | ⬜ |
+| 14 | `walletHandler` errgroup concurrency | ✅ |
 | 15 | `searchHandler` broader coverage | ⏭ product, not perf |
 | 16 | SQLite tuning audit | ⬜ |
 | 17 | Indexer graceful shutdown via ctx | ⬜ |

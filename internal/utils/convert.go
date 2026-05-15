@@ -43,6 +43,37 @@ func TokenAmountHuman(raw *big.Int, decimals uint8) string {
 	return quot.Text('f', prec)
 }
 
+// WeiToUSDCFloat is the float64 sibling of WeiToUSDC, used to populate the
+// indexed numeric columns that analytics queries ORDER BY / SUM on.
+func WeiToUSDCFloat(wei *big.Int) float64 {
+	if wei == nil || wei.Sign() == 0 {
+		return 0
+	}
+	divisor := new(big.Float).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(18), nil))
+	v, _ := new(big.Float).Quo(new(big.Float).SetInt(wei), divisor).Float64()
+	return v
+}
+
+// StablecoinHumanFloat is the float64 sibling of StablecoinHuman.
+func StablecoinHumanFloat(raw *big.Int) float64 {
+	if raw == nil || raw.Sign() == 0 {
+		return 0
+	}
+	divisor := new(big.Float).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(6), nil))
+	v, _ := new(big.Float).Quo(new(big.Float).SetInt(raw), divisor).Float64()
+	return v
+}
+
+// TokenAmountHumanFloat is the float64 sibling of TokenAmountHuman.
+func TokenAmountHumanFloat(raw *big.Int, decimals uint8) float64 {
+	if raw == nil || raw.Sign() == 0 {
+		return 0
+	}
+	divisor := new(big.Float).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(decimals)), nil))
+	v, _ := new(big.Float).Quo(new(big.Float).SetInt(raw), divisor).Float64()
+	return v
+}
+
 // MustCollection fetches a collection by name and panics if missing.
 func MustCollection(app core.App, name string) *core.Collection {
 	c, err := app.FindCollectionByNameOrId(name)
