@@ -4,6 +4,7 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"math/big"
 	"net/http"
 	"sort"
@@ -181,7 +182,7 @@ func transfersHandler(c *core.RequestEvent) error {
 			filter += " && "
 		}
 		filter += "token_symbol = {:sym}"
-		params["sym"] = token
+		params["sym"] = strings.ToUpper(token)
 	}
 	if from := qp(c, "from", ""); from != "" {
 		if filter != "" {
@@ -529,21 +530,15 @@ func isNumeric(s string) bool {
 // API_DESC Indexer health: lag, error rate, last indexed block
 // API_TAGS Stats
 func healthHandler(c *core.RequestEvent) error {
-	cursor, _ := c.App.FindRecordsByFilter("indexer_meta", "key = 'lastBlock'", "", 1, 0)
-	var lastBlock int
-	if len(cursor) > 0 {
-		lastBlock, _ = strconv.Atoi(cursor[0].GetString("value"))
+	// Single query for all meta keys instead of 3 separate lookups.
+	metaRows, _ := c.App.FindRecordsByFilter("indexer_meta", "key != ''", "", 10, 0)
+	metaMap := make(map[string]string, len(metaRows))
+	for _, r := range metaRows {
+		metaMap[r.GetString("key")] = r.GetString("value")
 	}
-
-	tipMeta, _ := c.App.FindRecordsByFilter("indexer_meta", "key = 'chainTip'", "", 1, 0)
-	lagMeta, _ := c.App.FindRecordsByFilter("indexer_meta", "key = 'lagBlocks'", "", 1, 0)
-	var tip, lag int
-	if len(tipMeta) > 0 {
-		tip, _ = strconv.Atoi(tipMeta[0].GetString("value"))
-	}
-	if len(lagMeta) > 0 {
-		lag, _ = strconv.Atoi(lagMeta[0].GetString("value"))
-	}
+	lastBlock, _ := strconv.Atoi(metaMap["lastBlock"])
+	tip, _ := strconv.Atoi(metaMap["chainTip"])
+	lag, _ := strconv.Atoi(metaMap["lagBlocks"])
 
 	since := time.Now().UTC().Add(-time.Hour).Format("2006-01-02 15:04:05.000Z")
 	errEvents, _ := c.App.FindRecordsByFilter("indexer_events",
@@ -858,9 +853,11 @@ func tokenDetailHandler(c *core.RequestEvent) error {
 		return c.JSON(http.StatusBadRequest, map[string]any{"error": "address required"})
 	}
 
+	lower := strings.ToLower(address)
+
 	tokenRows, err := c.App.FindRecordsByFilter("token_analytics",
-		"LOWER(token_address) = {:a}", "", 1, 0,
-		map[string]any{"a": strings.ToLower(address)})
+		"token_address = {:a}", "", 1, 0,
+		map[string]any{"a": lower})
 	if err != nil || len(tokenRows) == 0 {
 		return c.JSON(http.StatusNotFound, map[string]any{"error": "token not found"})
 	}
@@ -869,7 +866,7 @@ func tokenDetailHandler(c *core.RequestEvent) error {
 
 	// Fetch recent transfers for this token
 	transfers, err := c.App.FindRecordsByFilter("transfers",
-		"LOWER(token_address) = {:a}", "-block_number", 50, 0,
+		"token_address = {:a}", "-block_number", 50, 0,
 		map[string]any{"a": tokenAddr})
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error()})
@@ -889,7 +886,39 @@ func analyticsAgentLeaderboardHandler(c *core.RequestEvent) error {
 		limit = 100
 	}
 
-	// Fetch all agents so high-volume low-tx agents aren't excluded before sort.
+	// Batch query: get job stats for ALL agents in a single SQL aggregation
+	// instead of N+1 queries per agent.
+	type jobAgg struct {
+		Addr         string  `db:"addr"`
+		JobCount     int     `db:"job_count"`
+		TotalEscrow  float64 `db:"total_escrow"`
+		PaidJobs     int     `db:"paid_jobs"`
+		RejectedJobs int     `db:"rejected_jobs"`
+	}
+	var jobStats []jobAgg
+	_ = c.App.DB().NewQuery(`
+		SELECT addr, SUM(job_count) as job_count, SUM(total_escrow) as total_escrow,
+		       SUM(paid_jobs) as paid_jobs, SUM(rejected_jobs) as rejected_jobs
+		FROM (
+		    SELECT employer_address as addr, COUNT(*) as job_count,
+		           COALESCE(SUM(CAST(payment_usdc AS REAL)), 0) as total_escrow,
+		           SUM(CASE WHEN status = 'paid' THEN 1 ELSE 0 END) as paid_jobs,
+		           SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected_jobs
+		    FROM agent_jobs GROUP BY employer_address
+		    UNION ALL
+		    SELECT worker_address as addr, COUNT(*) as job_count,
+		           COALESCE(SUM(CAST(payment_usdc AS REAL)), 0) as total_escrow,
+		           SUM(CASE WHEN status = 'paid' THEN 1 ELSE 0 END) as paid_jobs,
+		           SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected_jobs
+		    FROM agent_jobs GROUP BY worker_address
+		) GROUP BY addr`).All(&jobStats)
+
+	statsMap := make(map[string]*jobAgg, len(jobStats))
+	for i := range jobStats {
+		statsMap[jobStats[i].Addr] = &jobStats[i]
+	}
+
+	// Fetch agents (sorted later by volume in-memory).
 	agents, err := c.App.FindRecordsByFilter("agents", "", "", 500, 0)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error()})
@@ -899,40 +928,25 @@ func analyticsAgentLeaderboardHandler(c *core.RequestEvent) error {
 	for _, a := range agents {
 		entry := enrichAgentRecord(a)
 		addr := a.GetString("agent_address")
-
-		jobs, _ := c.App.FindRecordsByFilter("agent_jobs",
-			"employer_address = {:a} || worker_address = {:a}", "", 500, 0,
-			map[string]any{"a": addr})
-
-		var totalEscrow float64
-		var paid, rejected int
-		for _, j := range jobs {
-			totalEscrow += parseUSDC(j.GetString("payment_usdc"))
-			switch j.GetString("status") {
-			case "paid":
-				paid++
-			case "rejected":
-				rejected++
-			}
+		if s, ok := statsMap[addr]; ok {
+			entry["job_count"] = s.JobCount
+			entry["total_escrow"] = s.TotalEscrow
+			entry["paid_jobs"] = s.PaidJobs
+			entry["rejected_jobs"] = s.RejectedJobs
+		} else {
+			entry["job_count"] = 0
+			entry["total_escrow"] = 0.0
+			entry["paid_jobs"] = 0
+			entry["rejected_jobs"] = 0
 		}
-
-		entry["job_count"] = len(jobs)
-		entry["total_escrow"] = totalEscrow
-		entry["paid_jobs"] = paid
-		entry["rejected_jobs"] = rejected
 		result = append(result, entry)
 	}
 
 	// Sort by usdc_transferred_human (stablecoin volume) descending.
-	getVol := func(e map[string]any) float64 {
-		if s, ok := e["usdc_transferred_human"].(string); ok {
-			v, _ := strconv.ParseFloat(s, 64)
-			return v
-		}
-		return 0
-	}
 	sort.Slice(result, func(i, j int) bool {
-		return getVol(result[i]) > getVol(result[j])
+		vi, _ := strconv.ParseFloat(fmt.Sprintf("%v", result[i]["usdc_transferred_human"]), 64)
+		vj, _ := strconv.ParseFloat(fmt.Sprintf("%v", result[j]["usdc_transferred_human"]), 64)
+		return vi > vj
 	})
 
 	if len(result) > limit {

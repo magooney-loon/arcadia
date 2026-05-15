@@ -1,6 +1,8 @@
 package server
 
 import (
+	"strings"
+
 	"github.com/pocketbase/pocketbase/core"
 )
 
@@ -9,7 +11,6 @@ func RegisterCollections(app core.App) {
 		for _, fn := range []func(core.App) error{
 			metaCollection,
 			indexerEventsCollection,
-			tokensCollection,
 			tokenAnalyticsCollection,
 			blocksCollection,
 			transactionsCollection,
@@ -84,28 +85,6 @@ func indexerEventsCollection(app core.App) error {
 		return err
 	}
 	app.Logger().Info("Created indexer_events collection")
-	return nil
-}
-
-// tokensCollection — Layer 3b: token metadata cache (decimals + symbol).
-// Populated lazily by the indexer on first sighting of an ERC-20 contract.
-// Known stables (USDC/EURC/USYC) are also stored so the lookup path is uniform.
-func tokensCollection(app core.App) error {
-	if collectionExists(app, "tokens") {
-		return nil
-	}
-	c := core.NewBaseCollection("tokens")
-	c.Fields.Add(&core.TextField{Name: "address", Required: true, Max: 42})
-	c.Fields.Add(&core.TextField{Name: "symbol", Required: false, Max: 32})
-	c.Fields.Add(&core.NumberField{Name: "decimals"})
-	c.Fields.Add(&core.NumberField{Name: "first_seen_block"})
-	c.Fields.Add(&core.BoolField{Name: "lookup_failed"}) // true if RPC didn't return decimals
-	c.AddIndex("idx_tokens_address", true, "address", "")
-	c.ViewRule = nil
-	if err := app.Save(c); err != nil {
-		return err
-	}
-	app.Logger().Info("Created tokens collection")
 	return nil
 }
 
@@ -245,6 +224,18 @@ func transfersCollection(app core.App) error {
 			c.Fields.Add(&core.TextField{Name: "token_name", Required: false, Max: 32})
 			changed = true
 		}
+		// Add token_symbol index for transfers filtering.
+		hasSymIdx := false
+		for _, idx := range c.Indexes {
+			if strings.Contains(idx, "token_symbol") {
+				hasSymIdx = true
+				break
+			}
+		}
+		if !hasSymIdx {
+			c.AddIndex("idx_transfers_token_symbol", false, "token_symbol", "")
+			changed = true
+		}
 		if changed {
 			return app.Save(c)
 		}
@@ -269,6 +260,7 @@ func transfersCollection(app core.App) error {
 	c.AddIndex("idx_transfers_unique", true, "tx_hash, log_index", "")
 	c.AddIndex("idx_transfers_block", false, "block_number", "")
 	c.AddIndex("idx_transfers_token", false, "token_address", "")
+	c.AddIndex("idx_transfers_token_symbol", false, "token_symbol", "")
 	c.AddIndex("idx_transfers_from", false, "from_addr", "")
 	c.AddIndex("idx_transfers_to", false, "to_addr", "")
 	c.ViewRule = nil

@@ -13,6 +13,7 @@ import (
 
 // RunTokenAnalytics computes per-token aggregated stats from the transfers table
 // and enriches them with onchain metadata (name, symbol, decimals, totalSupply).
+// Tokens that already have cached metadata skip the RPC calls entirely.
 func RunTokenAnalytics(app core.App) {
 	log.Println("[token-analytics] starting token analytics job")
 
@@ -51,51 +52,64 @@ func RunTokenAnalytics(app core.App) {
 		return
 	}
 
-	for i, agg := range aggResults {
+	rpcCalls := 0
+	for _, agg := range aggResults {
 		addr := strings.ToLower(agg.TokenAddress)
 
 		existing, _ := app.FindRecordsByFilter("token_analytics",
-			"LOWER(token_address) = {:a}", "", 1, 0,
+			"token_address = {:a}", "", 1, 0,
 			map[string]any{"a": addr})
 
-		info := utils.FetchFullTokenInfo(parseAddr(agg.TokenAddress))
-
 		var r *core.Record
+		hasMetadata := false
+
 		if len(existing) > 0 {
 			r = existing[0]
+			// Skip RPC if we already have symbol, decimals, and the lookup didn't fail.
+			hasMetadata = r.GetString("symbol") != "" &&
+				r.GetInt("decimals") > 0 &&
+				!r.GetBool("lookup_failed")
 		} else {
 			r = core.NewRecord(coll)
-			r.Set("token_address", strings.ToLower(agg.TokenAddress))
+			r.Set("token_address", addr)
 		}
 
-		r.Set("symbol", info.Symbol)
-		r.Set("name", info.Name)
-		r.Set("decimals", int(info.Decimals))
-		r.Set("lookup_failed", info.LookupFailed)
+		// Only hit RPC when metadata is missing or previous lookup failed.
+		if !hasMetadata {
+			info := utils.FetchFullTokenInfo(parseAddr(agg.TokenAddress))
+
+			r.Set("symbol", info.Symbol)
+			r.Set("name", info.Name)
+			r.Set("decimals", int(info.Decimals))
+			r.Set("lookup_failed", info.LookupFailed)
+
+			if info.TotalSupply != nil {
+				r.Set("total_supply_raw", info.TotalSupply.String())
+				if !info.LookupFailed && info.Decimals > 0 {
+					r.Set("total_supply_human", utils.TokenAmountHuman(info.TotalSupply, info.Decimals))
+				}
+			}
+
+			rpcCalls++
+			if rpcCalls%10 == 0 {
+				time.Sleep(500 * time.Millisecond)
+			}
+		}
+
+		// Always refresh aggregation stats from the latest transfers data.
 		r.Set("transfer_count", agg.TransferCount)
 		r.Set("first_seen_block", agg.FirstBlock)
 		r.Set("last_seen_block", agg.LastBlock)
 		r.Set("unique_senders", agg.UniqueSenders)
 		r.Set("unique_receivers", agg.UniqueReceivers)
 
-		if info.TotalSupply != nil {
-			r.Set("total_supply_raw", info.TotalSupply.String())
-			if !info.LookupFailed && info.Decimals > 0 {
-				r.Set("total_supply_human", utils.TokenAmountHuman(info.TotalSupply, info.Decimals))
-			}
-		}
-
 		if err := app.Save(r); err != nil {
 			log.Printf("[token-analytics] failed to save %s: %v", addr, err)
 			continue
 		}
-
-		if i > 0 && i%10 == 0 {
-			time.Sleep(500 * time.Millisecond)
-		}
 	}
 
-	log.Printf("[token-analytics] completed: processed %d tokens", len(aggResults))
+	log.Printf("[token-analytics] completed: processed %d tokens (%d RPC lookups)", len(aggResults), rpcCalls)
 }
 
 func parseAddr(hex string) common.Address {

@@ -21,6 +21,7 @@ import (
 type TokenInfo struct {
 	Address      common.Address
 	Symbol       string
+	Name         string
 	Decimals     uint8
 	LookupFailed bool
 }
@@ -30,6 +31,16 @@ var (
 	tokenInfoMu    sync.RWMutex
 	tokenInfoCache = map[common.Address]TokenInfo{}
 )
+
+// rpcHTTPClient is a shared HTTP client with connection pooling for JSON-RPC calls.
+var rpcHTTPClient = &http.Client{
+	Timeout: 8 * time.Second,
+	Transport: &http.Transport{
+		MaxIdleConns:        10,
+		MaxIdleConnsPerHost: 3,
+		IdleConnTimeout:     60 * time.Second,
+	},
+}
 
 // SeedKnownTokens primes the cache with the three Arc stablecoins.
 func SeedKnownTokens() {
@@ -41,7 +52,7 @@ func SeedKnownTokens() {
 }
 
 // LookupTokenInfo returns metadata for the given token address.
-// Resolution order: in-memory → DB cache (tokens collection) → JSON-RPC fetch.
+// Resolution order: in-memory cache → token_analytics collection → JSON-RPC fetch.
 func LookupTokenInfo(app core.App, addr common.Address, firstSeenBlock uint64) TokenInfo {
 	tokenInfoMu.RLock()
 	if info, ok := tokenInfoCache[addr]; ok {
@@ -50,12 +61,15 @@ func LookupTokenInfo(app core.App, addr common.Address, firstSeenBlock uint64) T
 	}
 	tokenInfoMu.RUnlock()
 
-	rows, _ := app.FindRecordsByFilter("tokens", "address = {:a}", "", 1, 0, map[string]any{"a": addr.Hex()})
+	// Check token_analytics collection (single source of truth for token metadata).
+	rows, _ := app.FindRecordsByFilter("token_analytics", "token_address = {:a}", "", 1, 0,
+		map[string]any{"a": strings.ToLower(addr.Hex())})
 	if len(rows) > 0 {
 		r := rows[0]
 		info := TokenInfo{
 			Address:      addr,
 			Symbol:       r.GetString("symbol"),
+			Name:         r.GetString("name"),
 			Decimals:     uint8(r.GetInt("decimals")),
 			LookupFailed: r.GetBool("lookup_failed"),
 		}
@@ -65,15 +79,18 @@ func LookupTokenInfo(app core.App, addr common.Address, firstSeenBlock uint64) T
 		return info
 	}
 
+	// Fetch from RPC (decimals + symbol + name in one pass).
 	info := fetchTokenInfoFromRPC(addr)
 	info.Address = addr
 
-	c, err := app.FindCollectionByNameOrId("tokens")
+	// Persist to token_analytics so future lookups skip RPC.
+	c, err := app.FindCollectionByNameOrId("token_analytics")
 	if err == nil {
 		r := core.NewRecord(c)
-		r.Set("address", addr.Hex())
+		r.Set("token_address", strings.ToLower(addr.Hex()))
 		r.Set("symbol", info.Symbol)
-		r.Set("decimals", info.Decimals)
+		r.Set("name", info.Name)
+		r.Set("decimals", int(info.Decimals))
 		r.Set("first_seen_block", firstSeenBlock)
 		r.Set("lookup_failed", info.LookupFailed)
 		_ = app.Save(r)
@@ -92,7 +109,8 @@ func fetchTokenInfoFromRPC(addr common.Address) TokenInfo {
 			continue
 		}
 		sym, _ := callSymbol(rpcURL, addr)
-		return TokenInfo{Symbol: sym, Decimals: dec}
+		nm, _ := callName(rpcURL, addr)
+		return TokenInfo{Symbol: sym, Name: nm, Decimals: dec}
 	}
 	return TokenInfo{LookupFailed: true}
 }
@@ -194,7 +212,7 @@ func ethCall(rpcURL string, addr common.Address, dataHex string) ([]byte, error)
 	defer cancel()
 	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, rpcURL, strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := rpcHTTPClient.Do(req)
 	if err != nil {
 		return nil, err
 	}

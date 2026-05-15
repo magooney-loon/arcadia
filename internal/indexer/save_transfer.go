@@ -3,6 +3,7 @@ package indexer
 import (
 	"fmt"
 	"math/big"
+	"strings"
 
 	"github.com/enviodev/hypersync-client-go/types"
 	"github.com/ethereum/go-ethereum/common"
@@ -56,7 +57,7 @@ func saveTransfer(app core.App, log *types.Log) (*big.Int, error) {
 		r.Set("block_number", log.BlockNumber.Uint64())
 	}
 	r.Set("log_index", logIdx)
-	r.Set("token_address", log.Address.Hex())
+	r.Set("token_address", strings.ToLower(log.Address.Hex()))
 	r.Set("token_symbol", symbol)
 	r.Set("from_addr", from.Hex())
 	r.Set("to_addr", to.Hex())
