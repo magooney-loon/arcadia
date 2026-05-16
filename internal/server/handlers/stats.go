@@ -10,12 +10,17 @@ import (
 	"github.com/pocketbase/pocketbase/core"
 
 	"arcadia/internal/repo"
+
+	"arcadia/internal/server/cache"
 )
 
 // API_DESC Latest live chain stats (TPS, fees, transfer volumes, agent activity)
 // API_TAGS Stats
 func statsHandler(c *core.RequestEvent) error {
 	cacheHeaders(c, 2)
+	if cached, ok := cache.Default.Get("stats"); ok {
+		return c.JSON(http.StatusOK, cached)
+	}
 	// latest block_stats row
 	rec, err := repo.LatestBlockStats(c.App)
 	if err != nil || rec == nil {
@@ -57,6 +62,9 @@ func statsHandler(c *core.RequestEvent) error {
 func blockStatsHandler(c *core.RequestEvent) error {
 	cacheHeaders(c, 2)
 	limit, offset := limitOffset(c)
+	if cached, ok := cache.Default.Get("block_stats:" + strconv.Itoa(limit)); ok {
+		return c.JSON(http.StatusOK, cached)
+	}
 	records, err := repo.FindRecords(c.App, "block_stats", "", "-block_number", limit, offset)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error()})
@@ -71,6 +79,9 @@ func blockStatsHandler(c *core.RequestEvent) error {
 // API_TAGS Stats
 func healthHandler(c *core.RequestEvent) error {
 	cacheHeaders(c, 2)
+	if cached, ok := cache.Default.Get("health"); ok {
+		return c.JSON(http.StatusOK, cached)
+	}
 	// Single query for all meta keys instead of 3 separate lookups.
 	metaMap, _ := repo.AllMeta(c.App)
 	lastBlock, _ := strconv.Atoi(metaMap["lastBlock"])

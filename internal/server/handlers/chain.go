@@ -10,12 +10,17 @@ import (
 	"github.com/pocketbase/pocketbase/core"
 
 	"arcadia/internal/repo"
+
+	"arcadia/internal/server/cache"
 )
 
 // API_DESC Recent blocks with derived stats
 // API_TAGS Chain
 func blocksHandler(c *core.RequestEvent) error {
 	limit, offset := limitOffset(c)
+	if cached, ok := cache.Default.Get("blocks:" + strconv.Itoa(limit)); ok {
+		return c.JSON(http.StatusOK, cached)
+	}
 	records, err := repo.ListBlocks(c.App, limit, offset)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error()})
@@ -30,6 +35,9 @@ func blocksHandler(c *core.RequestEvent) error {
 // API_TAGS Chain
 func transactionsHandler(c *core.RequestEvent) error {
 	limit, offset := limitOffset(c)
+	if cached, ok := cache.Default.Get("transactions:" + strconv.Itoa(limit)); ok {
+		return c.JSON(http.StatusOK, cached)
+	}
 
 	f := repo.TransactionFilter{}
 	if block := qp(c, "block", ""); block != "" {

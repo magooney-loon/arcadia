@@ -9,6 +9,7 @@ import (
 	"github.com/pocketbase/pocketbase/core"
 
 	"arcadia/internal/repo"
+	"arcadia/internal/server/cache"
 )
 
 // minIndexerInterval throttles indexer broadcasts when the indexer is
@@ -31,15 +32,9 @@ const analyticsTopic = "analytics"
 
 // BroadcastIndexerUpdate fans out both the small `indexer` payload and
 // the larger `charts` payload to whichever clients are subscribed.
-// Throttled to ~1Hz to avoid SSE storms when catching up. Safe to call
-// from a goroutine after each batch commit.
+// Also populates the in-memory REST cache so API handlers can serve
+// responses without hitting SQLite.
 func BroadcastIndexerUpdate(app core.App) {
-	hasIndexer := HasSubscribers(app, indexerTopic)
-	hasCharts := HasSubscribers(app, chartsTopic)
-	if !hasIndexer && !hasCharts {
-		return
-	}
-
 	now := time.Now().UnixMilli()
 	last := lastIndexerBroadcast.Load()
 	if now-last < minIndexerInterval.Milliseconds() {
@@ -49,24 +44,58 @@ func BroadcastIndexerUpdate(app core.App) {
 		return
 	}
 
-	if hasIndexer {
-		_ = Broadcast(app, indexerTopic, buildIndexerPayload(app))
+	// Always build and cache payloads — even if no SSE subscribers,
+	// REST handlers need the cache.
+	indexerPayload := buildIndexerPayload(app)
+
+	// Cache the individual components for REST handlers.
+	// TTL is generous: the next broadcast (≤1s) will overwrite.
+	const ttl = 5 * time.Second
+	if s, ok := indexerPayload["stats"]; ok {
+		cache.Default.Set("stats", s, ttl)
 	}
-	if hasCharts {
-		_ = Broadcast(app, chartsTopic, map[string]any{
-			"block_stats": buildBlockStatsList(app, 200),
-		})
+	if h, ok := indexerPayload["health"]; ok {
+		cache.Default.Set("health", h, ttl)
 	}
+	if b, ok := indexerPayload["blocks"]; ok {
+		cache.Default.Set("blocks:10", b, ttl)
+	}
+	if t, ok := indexerPayload["transactions"]; ok {
+		cache.Default.Set("transactions:10", t, ttl)
+	}
+
+	// Charts payload
+	chartsData := map[string]any{
+		"block_stats": buildBlockStatsList(app, 200),
+	}
+	cache.Default.Set("block_stats:200", chartsData, ttl)
+
+	// Also cache common block/tx list sizes used by list pages.
+	cache.Default.Set("blocks:50", buildBlocksList(app, 50), ttl)
+	cache.Default.Set("transactions:100", buildTransactionsList(app, 100), ttl)
+	cache.Default.Set("block_stats:50", buildBlockStatsList(app, 50), ttl)
+
+	// Send to SSE subscribers.
+	_ = Broadcast(app, indexerTopic, indexerPayload)
+	_ = Broadcast(app, chartsTopic, chartsData)
 }
 
 // BroadcastAnalyticsUpdate fires after a snapshot job finishes for the
-// given window. Payload mirrors what the overview/bridge/volume REST
-// handlers would return.
+// given window. Also caches the payloads for REST handlers.
 func BroadcastAnalyticsUpdate(app core.App, window string) {
-	if !HasSubscribers(app, analyticsTopic) {
-		return
-	}
 	payload := buildAnalyticsPayload(app, window)
+
+	const ttl = 30 * time.Second
+	if o, ok := payload["overview"]; ok {
+		cache.Default.Set("analytics:overview:"+window, o, ttl)
+	}
+	if bf, ok := payload["bridge_flow"]; ok {
+		cache.Default.Set("analytics:bridge_flow:"+window, bf, ttl)
+	}
+	if v, ok := payload["volume"]; ok {
+		cache.Default.Set("analytics:volume:"+window, v, ttl)
+	}
+
 	_ = Broadcast(app, analyticsTopic, payload)
 }
 

@@ -9,6 +9,8 @@ import (
 	"github.com/pocketbase/pocketbase/core"
 
 	"arcadia/internal/repo"
+
+	"arcadia/internal/server/cache"
 )
 
 // API_DESC Fee analytics: P25/P50/P75/P95 percentiles, failed tx ratio, avg block time
@@ -39,6 +41,9 @@ func analyticsFeesHandler(c *core.RequestEvent) error {
 func analyticsVolumeHandler(c *core.RequestEvent) error {
 	cacheHeaders(c, 30)
 	window := qp(c, "window", "24h")
+	if cached, ok := cache.Default.Get("analytics:volume:" + window); ok {
+		return c.JSON(http.StatusOK, cached)
+	}
 	token := qp(c, "token", "")
 	snap, ok := latestSnapshot(c.App, window)
 	if !ok {
@@ -80,6 +85,9 @@ func analyticsVolumeHandler(c *core.RequestEvent) error {
 func analyticsBridgeFlowHandler(c *core.RequestEvent) error {
 	cacheHeaders(c, 30)
 	window := qp(c, "window", "24h")
+	if cached, ok := cache.Default.Get("analytics:bridge_flow:" + window); ok {
+		return c.JSON(http.StatusOK, cached)
+	}
 	snap, ok := latestSnapshot(c.App, window)
 	if !ok {
 		return c.JSON(http.StatusOK, map[string]any{"window": window, "syncing": true})
@@ -107,6 +115,9 @@ func analyticsBridgeFlowHandler(c *core.RequestEvent) error {
 func analyticsOverviewHandler(c *core.RequestEvent) error {
 	cacheHeaders(c, 30)
 	window := qp(c, "window", "24h")
+	if cached, ok := cache.Default.Get("analytics:overview:" + window); ok {
+		return c.JSON(http.StatusOK, cached)
+	}
 	snap, ok := latestSnapshot(c.App, window)
 	if !ok {
 		return c.JSON(http.StatusOK, map[string]any{"window": window, "syncing": true})
