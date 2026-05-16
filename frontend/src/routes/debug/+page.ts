@@ -20,25 +20,25 @@ import {
 
 export const load: PageLoad = async () => {
 	abortAll();
-	await Promise.all([
-		fetchStats(),
-		fetchHealth(),
-		fetchBlockStats(50),
-		fetchBlocks(50),
-		fetchTransactions(),
-		fetchTraces(),
-		fetchTransfers(),
-		fetchCrosschain(),
-		fetchFx(),
-		fetchAgents(),
-		fetchAgentJobs(),
-		fetchEdges(),
-		fetchTokens(),
-		fetchAnalyticsOverview(),
-		fetchAnalyticsFees(),
-		fetchAnalyticsVolume(),
-		fetchAnalyticsBridgeFlow(),
-		fetchAgentLeaderboard()
-	]);
+	// Don't await — let the page render immediately with loading state
+	// while data fetches in the background
+	fetchStats();
+	fetchHealth();
+	fetchBlockStats(50);
+	fetchBlocks(50);
+	fetchTransactions();
+	fetchTraces();
+	fetchTransfers();
+	fetchCrosschain();
+	fetchFx();
+	fetchAgents();
+	fetchAgentJobs();
+	fetchEdges();
+	fetchTokens();
+	fetchAnalyticsOverview();
+	fetchAnalyticsFees();
+	fetchAnalyticsVolume();
+	fetchAnalyticsBridgeFlow();
+	fetchAgentLeaderboard();
 	return {};
 };

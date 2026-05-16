@@ -4,6 +4,8 @@ import { fetchTransactions } from '$lib/stores/chain.svelte';
 
 export const load: PageLoad = async () => {
 	abortAll();
-	await fetchTransactions({ limit: 100, offset: 0 });
+	// Don't await — let the page render immediately with loading state
+	// while data fetches in the background
+	fetchTransactions({ limit: 100, offset: 0 });
 	return {};
 };

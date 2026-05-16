@@ -9,7 +9,9 @@ export const ssr = false;
 export const load: PageLoad = async ({ params }) => {
 	abortAll();
 	if (params.address) {
-		await fetchWallet(params.address, 50, 0);
+		// Don't await — let the page render immediately with loading state
+		// while data fetches in the background
+		fetchWallet(params.address, 50, 0);
 	}
 	return {};
 };

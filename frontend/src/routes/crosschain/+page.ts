@@ -5,9 +5,9 @@ import { fetchAnalyticsBridgeFlow } from '$lib/stores/analytics.svelte';
 
 export const load: PageLoad = async () => {
 	abortAll();
-	await Promise.all([
-		fetchCrosschain({ limit: 50, offset: 0 }),
-		fetchAnalyticsBridgeFlow()
-	]);
+	// Don't await — let the page render immediately with loading state
+	// while data fetches in the background
+	fetchCrosschain({ limit: 50, offset: 0 });
+	fetchAnalyticsBridgeFlow();
 	return {};
 };

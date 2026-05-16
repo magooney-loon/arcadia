@@ -17,7 +17,7 @@ export async function fetchTransfers(filter: TransferFilter = {}) {
 	try {
 		transfers.data = await client.list(filter);
 	} catch (e) {
-		transfers.error = String(e);
+		if (!String(e).includes('cancelled')) transfers.error = String(e);
 	} finally {
 		transfers.loading = false;
 	}

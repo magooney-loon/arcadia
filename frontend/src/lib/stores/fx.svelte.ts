@@ -17,7 +17,7 @@ export async function fetchFx(filter: FxFilter = {}) {
 	try {
 		fx.data = await client.list(filter);
 	} catch (e) {
-		fx.error = String(e);
+		if (!String(e).includes('cancelled')) fx.error = String(e);
 	} finally {
 		fx.loading = false;
 	}

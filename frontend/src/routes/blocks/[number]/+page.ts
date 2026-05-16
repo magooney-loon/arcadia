@@ -10,7 +10,9 @@ export const load: PageLoad = async ({ params }) => {
 	abortAll();
 	const number = Number(params.number);
 	if (!isNaN(number)) {
-		await fetchBlockDetail(number);
+		// Don't await — let the page render immediately with loading state
+		// while data fetches in the background
+		fetchBlockDetail(number);
 	}
 	return {};
 };

@@ -4,6 +4,8 @@ import { fetchTokens } from '$lib/stores/tokens.svelte';
 
 export const load: PageLoad = async () => {
 	abortAll();
-	await fetchTokens(500);
+	// Don't await — let the page render immediately with loading state
+	// while data fetches in the background
+	fetchTokens(500);
 	return {};
 };

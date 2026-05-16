@@ -19,7 +19,7 @@ export async function fetchWallet(address: string, limit = 50, offset = 0) {
 	try {
 		wallet.data = await client.get(address, limit, offset);
 	} catch (e) {
-		wallet.error = String(e);
+		if (!String(e).includes('cancelled')) wallet.error = String(e);
 	} finally {
 		wallet.loading = false;
 	}

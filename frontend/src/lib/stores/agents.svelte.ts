@@ -37,7 +37,7 @@ export async function fetchAgents(limit = 50, offset = 0) {
 	try {
 		agents.data = await client.list(limit, offset);
 	} catch (e) {
-		agents.error = String(e);
+		if (!String(e).includes('cancelled')) agents.error = String(e);
 	} finally {
 		agents.loading = false;
 	}
@@ -50,7 +50,7 @@ export async function fetchAgent(address: string) {
 	try {
 		agent.data = await client.get(address);
 	} catch (e) {
-		agent.error = String(e);
+		if (!String(e).includes('cancelled')) agent.error = String(e);
 	} finally {
 		agent.loading = false;
 	}
@@ -62,7 +62,7 @@ export async function fetchAgentJobs(filter: AgentJobsFilter = {}) {
 	try {
 		agentJobs.data = await client.jobs(filter);
 	} catch (e) {
-		agentJobs.error = String(e);
+		if (!String(e).includes('cancelled')) agentJobs.error = String(e);
 	} finally {
 		agentJobs.loading = false;
 	}

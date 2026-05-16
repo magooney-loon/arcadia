@@ -4,6 +4,8 @@ import { fetchAgentLeaderboard } from '$lib/stores/analytics.svelte';
 
 export const load: PageLoad = async () => {
 	abortAll();
-	await fetchAgentLeaderboard(50);
+	// Don't await — let the page render immediately with loading state
+	// while data fetches in the background
+	fetchAgentLeaderboard(50);
 	return {};
 };

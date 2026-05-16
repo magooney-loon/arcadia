@@ -12,15 +12,15 @@ import {
 
 export const load: PageLoad = async () => {
 	abortAll();
-	await Promise.all([
-		fetchStats(),
-		fetchBlocks(10),
-		fetchTransactions({ limit: 10 }),
-		fetchBlockStats(200),
-		fetchAnalyticsOverview({ window: '24h' }),
-		fetchAnalyticsBridgeFlow({ window: '24h' }),
-		fetchAnalyticsVolume({ window: '24h' }),
-		fetchAgentLeaderboard(5)
-	]);
+	// Don't await — let the page render immediately with loading state
+	// while data fetches in the background
+	fetchStats();
+	fetchBlocks(10);
+	fetchTransactions({ limit: 10 });
+	fetchBlockStats(200);
+	fetchAnalyticsOverview({ window: '24h' });
+	fetchAnalyticsBridgeFlow({ window: '24h' });
+	fetchAnalyticsVolume({ window: '24h' });
+	fetchAgentLeaderboard(5);
 	return {};
 };

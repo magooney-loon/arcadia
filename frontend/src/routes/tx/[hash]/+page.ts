@@ -9,7 +9,9 @@ export const ssr = false;
 export const load: PageLoad = async ({ params }) => {
 	abortAll();
 	if (params.hash) {
-		await fetchTxDetail(params.hash);
+		// Don't await — let the page render immediately with loading state
+		// while data fetches in the background
+		fetchTxDetail(params.hash);
 	}
 	return {};
 };
