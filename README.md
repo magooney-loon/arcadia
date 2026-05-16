@@ -74,6 +74,29 @@ Dev mode builds the SvelteKit frontend, copies it to `pb_public/`, and starts th
 pb-cli
 ```
 
+### Profiling the indexer
+
+Capture server output to a log file while running, then summarize batch phase timings:
+
+```bash
+mkdir -p logs
+pb-cli 2>&1 | tee logs/profile.log
+```
+
+Once you have a log (or while it's running and you've captured enough), run the profiler:
+
+```bash
+./scripts/profile_batches.sh logs/profile.log
+```
+
+You can also pipe a live log directly:
+
+```bash
+journalctl -u arcadia | ./scripts/profile_batches.sh -
+```
+
+The script parses `batch_profile` lines and prints count, avg, p50, p95, and max per phase (e.g. `seen_ms`, `tx_total_ms`, `blocks_ms`, `txs_ms`, `traces_ms`, `backfill_ms`, etc.).
+
 ### Verify it's running
 
 - **App**: http://127.0.0.1:8090
