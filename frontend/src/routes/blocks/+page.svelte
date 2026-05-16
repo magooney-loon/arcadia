@@ -6,11 +6,16 @@
 	import { createSort } from '$lib/sort.svelte';
 	import * as fmt from '$lib/fmt.js';
 	import AddrLink from '$lib/components/AddrLink.svelte';
+	import DataState from '$lib/components/DataState.svelte';
 
 	let limit = $state(50);
 	let offset = $state(0);
 
 	onMount(() => {
+		// Clear stale data from prior navigation so the page reliably
+		// renders <DataState> until the new fetch resolves.
+		blocks.data = null;
+		blockStats.data = null;
 		fetchBlocks(limit, offset);
 		fetchBlockStats(limit, offset);
 	});
@@ -77,19 +82,7 @@
 					</tr>
 				</thead>
 				<tbody>
-					{#if blocks.loading}
-						<tr
-							><td colspan="6" style="text-align:center;color:var(--fg-4);padding:32px" class="mono"
-								>loading…</td
-							></tr
-						>
-					{:else if blocks.error}
-						<tr
-							><td colspan="6" style="text-align:center;color:var(--err);padding:16px" class="mono"
-								>{blocks.error}</td
-							></tr
-						>
-					{:else if blocks.data?.blocks.length}
+					{#if blocks.data?.blocks.length}
 						{#each sortedBlocks as b (b.number)}
 							{@const stat = feesMap.get(b.number)}
 							<tr>
@@ -110,11 +103,12 @@
 							</tr>
 						{/each}
 					{:else}
-						<tr
-							><td colspan="6" style="text-align:center;color:var(--fg-4);padding:32px" class="mono"
-								>no data</td
-							></tr
-						>
+						<DataState
+							loading={blocks.loading}
+							error={blocks.error}
+							colspan={6}
+							label="blocks"
+						/>
 					{/if}
 				</tbody>
 			</table>

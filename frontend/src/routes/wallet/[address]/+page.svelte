@@ -6,6 +6,7 @@
 	import * as fmt from '$lib/fmt.js';
 	import TxLink from '$lib/components/TxLink.svelte';
 	import AddrLink from '$lib/components/AddrLink.svelte';
+	import DataState from '$lib/components/DataState.svelte';
 
 	const address = $derived(page.params.address ?? '');
 	const latestBlock = $derived(stats.data?.block_number ?? 0);
@@ -13,7 +14,10 @@
 	let tab = $state<'transfers' | 'txs' | 'edges'>('transfers');
 
 	$effect(() => {
-		if (address) fetchWallet(address, 50, 0);
+		if (address) {
+			wallet.data = null;
+			fetchWallet(address, 50, 0);
+		}
 	});
 
 	const data = $derived(wallet.data);
@@ -62,11 +66,13 @@
 		</div>
 	</div>
 
-	{#if wallet.loading}
-		<div class="card"><div class="card-body mono muted">loading…</div></div>
-	{:else if wallet.error}
-		<div class="card"><div class="card-body" style="color:var(--err)">{wallet.error}</div></div>
-	{:else if data}
+	{#if !data}
+		<div class="card">
+			<div class="card-body" style="padding:0">
+				<DataState loading={wallet.loading} error={wallet.error} label="wallet" />
+			</div>
+		</div>
+	{:else}
 		<!-- Agent stats banner (only if registered ERC-8004 agent) -->
 		{#if isAgent && agent}
 			<div

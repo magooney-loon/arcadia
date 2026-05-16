@@ -4,10 +4,14 @@
 	import { analyticsAgentLeaderboard, fetchAgentLeaderboard } from '$lib/stores/analytics.svelte';
 	import * as fmt from '$lib/fmt.js';
 	import AddrLink from '$lib/components/AddrLink.svelte';
+	import DataState from '$lib/components/DataState.svelte';
 
 	let limit = $state(50);
 
-	onMount(() => fetchAgentLeaderboard(limit));
+	onMount(() => {
+		analyticsAgentLeaderboard.data = null;
+		fetchAgentLeaderboard(limit);
+	});
 
 	const board = $derived(analyticsAgentLeaderboard.data?.leaderboard ?? []);
 
@@ -102,19 +106,7 @@
 					</tr>
 				</thead>
 				<tbody>
-					{#if analyticsAgentLeaderboard.loading}
-						<tr
-							><td colspan="9" style="text-align:center;color:var(--fg-4);padding:32px" class="mono"
-								>loading…</td
-							></tr
-						>
-					{:else if analyticsAgentLeaderboard.error}
-						<tr
-							><td colspan="9" style="text-align:center;color:var(--err);padding:16px" class="mono"
-								>{analyticsAgentLeaderboard.error}</td
-							></tr
-						>
-					{:else if board.length}
+					{#if board.length}
 						{#each sortedBoard as a, i (a.agent_address)}
 							<tr>
 								<td class="muted">{i + 1}</td>
@@ -136,11 +128,12 @@
 							</tr>
 						{/each}
 					{:else}
-						<tr
-							><td colspan="9" style="text-align:center;color:var(--fg-4);padding:32px" class="mono"
-								>no agents found</td
-							></tr
-						>
+						<DataState
+							loading={analyticsAgentLeaderboard.loading}
+							error={analyticsAgentLeaderboard.error}
+							colspan={9}
+							label="agents"
+						/>
 					{/if}
 				</tbody>
 			</table>

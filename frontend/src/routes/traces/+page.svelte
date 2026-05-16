@@ -6,12 +6,16 @@
 	import * as fmt from '$lib/fmt.js';
 	import AddrLink from '$lib/components/AddrLink.svelte';
 	import TxLink from '$lib/components/TxLink.svelte';
+	import DataState from '$lib/components/DataState.svelte';
 
 	let txFilter = $state('');
 	let offset = $state(0);
 	const limit = 50;
 
-	onMount(() => load());
+	onMount(() => {
+		traces.data = null;
+		load();
+	});
 
 	function load() {
 		fetchTraces({
@@ -105,19 +109,7 @@
 					</tr>
 				</thead>
 				<tbody>
-					{#if traces.loading}
-						<tr
-							><td colspan="6" style="text-align:center;color:var(--fg-4);padding:32px" class="mono"
-								>loading…</td
-							></tr
-						>
-					{:else if traces.error}
-						<tr
-							><td colspan="6" style="text-align:center;color:var(--err);padding:16px" class="mono"
-								>{traces.error}</td
-							></tr
-						>
-					{:else if traces.data?.traces.length}
+					{#if traces.data?.traces.length}
 						{#each sortedTraces as t (t.tx_hash + '_' + t.block_number)}
 							<tr>
 								<td
@@ -135,11 +127,12 @@
 							</tr>
 						{/each}
 					{:else}
-						<tr
-							><td colspan="6" style="text-align:center;color:var(--fg-4);padding:32px" class="mono"
-								>no results</td
-							></tr
-						>
+						<DataState
+							loading={traces.loading}
+							error={traces.error}
+							colspan={6}
+							label="traces"
+						/>
 					{/if}
 				</tbody>
 			</table>

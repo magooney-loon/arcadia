@@ -6,12 +6,18 @@
 	import { stats } from '$lib/stores/stats.svelte';
 	import * as fmt from '$lib/fmt.js';
 	import AddrLink from '$lib/components/AddrLink.svelte';
+	import DataState from '$lib/components/DataState.svelte';
 
 	const hash = $derived(page.params.hash ?? '');
 	const latestBlock = $derived(stats.data?.block_number ?? 0);
 
 	$effect(() => {
-		if (hash) fetchTxDetail(hash);
+		if (hash) {
+			// Clear any prior tx so the page reliably falls into the
+			// loading branch instead of flashing the previous one.
+			txDetail.data = null;
+			fetchTxDetail(hash);
+		}
 	});
 
 	const data = $derived(txDetail.data);
@@ -65,11 +71,13 @@
 		</div>
 	</div>
 
-	{#if txDetail.loading}
-		<div class="card"><div class="card-body mono muted">loading…</div></div>
-	{:else if txDetail.error}
-		<div class="card"><div class="card-body" style="color:var(--err)">{txDetail.error}</div></div>
-	{:else if tx}
+	{#if !tx}
+		<div class="card">
+			<div class="card-body" style="padding:0">
+				<DataState loading={txDetail.loading} error={txDetail.error} label="transaction" />
+			</div>
+		</div>
+	{:else}
 		<!-- Status banner -->
 		<div
 			class="card"
@@ -221,7 +229,5 @@
 				</div>
 			</div>
 		{/if}
-	{:else}
-		<div class="card"><div class="card-body mono muted">transaction not found</div></div>
 	{/if}
 </div>

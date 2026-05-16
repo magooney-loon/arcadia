@@ -6,12 +6,16 @@
 	import * as fmt from '$lib/fmt.js';
 	import AddrLink from '$lib/components/AddrLink.svelte';
 	import TxLink from '$lib/components/TxLink.svelte';
+	import DataState from '$lib/components/DataState.svelte';
 
 	const number = $derived(Number(page.params.number ?? 0));
 	const latestBlock = $derived(stats.data?.block_number ?? 0);
 
 	$effect(() => {
-		if (number) fetchBlockDetail(number);
+		if (number) {
+			blockDetail.data = null;
+			fetchBlockDetail(number);
+		}
 	});
 
 	const data = $derived(blockDetail.data);
@@ -38,11 +42,13 @@
 		</div>
 	</div>
 
-	{#if blockDetail.loading}
-		<div class="card"><div class="card-body mono muted">loading…</div></div>
-	{:else if blockDetail.error}
-		<div class="card"><div class="card-body" style="color:var(--err)">{blockDetail.error}</div></div>
-	{:else if block}
+	{#if !block}
+		<div class="card">
+			<div class="card-body" style="padding:0">
+				<DataState loading={blockDetail.loading} error={blockDetail.error} label="block" />
+			</div>
+		</div>
+	{:else}
 		<!-- Summary banner -->
 		<div
 			class="card"
@@ -227,8 +233,6 @@
 		{:else}
 			<div class="card"><div class="card-body mono muted">no transactions in this block</div></div>
 		{/if}
-	{:else}
-		<div class="card"><div class="card-body mono muted">block not found</div></div>
 	{/if}
 </div>
 

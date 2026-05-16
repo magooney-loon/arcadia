@@ -19,6 +19,7 @@
 	import Chart from '$lib/components/Chart.svelte';
 	import AddrLink from '$lib/components/AddrLink.svelte';
 	import TxLink from '$lib/components/TxLink.svelte';
+	import DataState from '$lib/components/DataState.svelte';
 
 	type Window = '1h' | '24h' | '7d';
 	let selectedWindow = $state<Window>('24h');
@@ -181,7 +182,7 @@
 
 	<!-- Fee analytics · stat cards -->
 	{#if analyticsOverview.data}
-		<div class="grid" style="grid-template-columns:repeat(3,1fr);margin-top:12px">
+		<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));margin-top:12px">
 			<div class="stat">
 				<div class="label">Fee p50</div>
 				<div class="value" style="color:var(--info)">
@@ -214,7 +215,7 @@
 
 	<!-- Stablecoin volume breakdown + whales -->
 	{#if volume}
-		<div class="grid" style="grid-template-columns:repeat(5,1fr);margin-top:12px">
+		<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));margin-top:12px">
 			<div class="stat">
 				<div class="label" style="color:var(--ok)">USDC vol · {selectedWindow}</div>
 				<div class="value">
@@ -341,7 +342,7 @@
 						</div>
 					{/each}
 				{:else}
-					<p class="mono muted" style="padding:32px;text-align:center;font-size:11px">loading…</p>
+					<DataState loading={blocks.loading} error={blocks.error} label="blocks" />
 				{/if}
 			</div>
 		</div>
@@ -372,7 +373,7 @@
 						</div>
 					{/each}
 				{:else}
-					<p class="mono muted" style="padding:32px;text-align:center;font-size:11px">loading…</p>
+					<DataState loading={transactions.loading} error={transactions.error} label="transactions" />
 				{/if}
 			</div>
 		</div>
@@ -406,7 +407,11 @@
 						</div>
 					{/each}
 				{:else}
-					<p class="mono muted" style="padding:32px;text-align:center;font-size:11px">loading…</p>
+					<DataState
+						loading={analyticsAgentLeaderboard.loading}
+						error={analyticsAgentLeaderboard.error}
+						label="agents"
+					/>
 				{/if}
 			</div>
 		</div>
@@ -446,7 +451,12 @@
 						</div>
 					{/each}
 				{:else}
-					<p class="mono muted" style="padding:14px;font-size:11px">loading…</p>
+					<DataState
+						loading={analyticsBridgeFlow.loading}
+						error={analyticsBridgeFlow.error}
+						label="bridge data"
+						compact
+					/>
 				{/if}
 			</div>
 		</div>

@@ -5,12 +5,16 @@
 	import * as fmt from '$lib/fmt.js';
 	import { createSort } from '$lib/sort.svelte';
 	import AddrLink from '$lib/components/AddrLink.svelte';
+	import DataState from '$lib/components/DataState.svelte';
 
 	let walletInput = $state('');
 	let offset = $state(0);
 	const limit = 500;
 
-	onMount(() => load());
+	onMount(() => {
+		graph.data = null;
+		load();
+	});
 
 	function load() {
 		fetchEdges({
@@ -73,13 +77,9 @@
 	<div class="graph-stage" style="margin-bottom:12px">
 		{#if edges.length}
 			<ForceGraph {edges} />
-		{:else if graph.loading}
-			<div style="position:absolute;inset:0;display:grid;place-items:center">
-				<span class="mono dim" style="font-size:11px">loading…</span>
-			</div>
 		{:else}
 			<div style="position:absolute;inset:0;display:grid;place-items:center">
-				<span class="mono dim" style="font-size:11px">no edges to display</span>
+				<DataState loading={graph.loading} error={graph.error} label="edges" compact />
 			</div>
 		{/if}
 	</div>
@@ -120,19 +120,7 @@
 					</tr>
 				</thead>
 				<tbody>
-					{#if graph.loading}
-						<tr
-							><td colspan="7" style="text-align:center;color:var(--fg-4);padding:32px" class="mono"
-								>loading…</td
-							></tr
-						>
-					{:else if graph.error}
-						<tr
-							><td colspan="7" style="text-align:center;color:var(--err);padding:16px" class="mono"
-								>{graph.error}</td
-							></tr
-						>
-					{:else if edges.length}
+					{#if edges.length}
 						{#each sortedEdges as e (e.from_wallet + e.to_wallet)}
 							<tr>
 								<td class="addr"
@@ -149,11 +137,7 @@
 							</tr>
 						{/each}
 					{:else}
-						<tr
-							><td colspan="7" style="text-align:center;color:var(--fg-4);padding:32px" class="mono"
-								>no edges found</td
-							></tr
-						>
+						<DataState loading={graph.loading} error={graph.error} colspan={7} label="edges" />
 					{/if}
 				</tbody>
 			</table>

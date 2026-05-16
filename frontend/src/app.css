@@ -617,6 +617,8 @@ a {
 	margin-top: 6px;
 	letter-spacing: -0.02em;
 	font-variant-numeric: tabular-nums;
+	overflow-wrap: anywhere;
+	word-break: break-word;
 }
 .stat .unit {
 	color: var(--fg-3);
@@ -1165,6 +1167,13 @@ a {
 	}
 	.grid-2-eq {
 		grid-template-columns: 1fr;
+	}
+
+	.stat {
+		padding: 10px 12px;
+	}
+	.stat .value {
+		font-size: 20px;
 	}
 
 	.tbl td,

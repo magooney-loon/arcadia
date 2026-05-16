@@ -386,11 +386,18 @@
 
 	<!-- Status bar (desktop) -->
 	<footer class="statusbar">
-		<span class="seg">
-			<span class="dot {health.data?.syncing ? 'warn' : 'acc'}"></span>
+		<span
+			class="seg"
+			title={health.data?.syncing
+				? `Indexer is catching up · ${health.data?.lag_blocks ?? '?'} blocks behind. Some data may refresh slowly until sync completes.`
+				: 'Indexer is at chain tip'}
+		>
+			<span class="dot {health.data?.syncing ? 'warn' : 'acc'}" class:syncing-pulse={health.data?.syncing}></span>
 			indexer
-			<span class="v {health.data?.syncing ? '' : 'ok'}"
-				>{health.data?.syncing ? 'syncing' : 'live'}</span
+			<span class="v {health.data?.syncing ? 'warn' : 'ok'}"
+				>{health.data?.syncing
+					? `syncing · ${health.data?.lag_blocks ?? '?'} behind`
+					: 'live'}</span
 			>
 		</span>
 		<span class="seg">errors/h <span class="v">{health.data?.errors_1h ?? '—'}</span></span>
@@ -560,5 +567,17 @@
 	}
 	.nav-item.active .ico {
 		color: var(--accent);
+	}
+	.syncing-pulse {
+		animation: sync-pulse 1.4s ease-in-out infinite;
+	}
+	@keyframes sync-pulse {
+		0%,
+		100% {
+			opacity: 1;
+		}
+		50% {
+			opacity: 0.35;
+		}
 	}
 </style>

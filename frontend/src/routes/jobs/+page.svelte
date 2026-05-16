@@ -6,6 +6,7 @@
 	import * as fmt from '$lib/fmt.js';
 	import AddrLink from '$lib/components/AddrLink.svelte';
 	import TxLink from '$lib/components/TxLink.svelte';
+	import DataState from '$lib/components/DataState.svelte';
 
 	const TABS = [
 		{ label: 'All', status: '' },
@@ -22,7 +23,10 @@
 	let offset = $state(0);
 	const limit = 50;
 
-	onMount(() => load());
+	onMount(() => {
+		agentJobs.data = null;
+		load();
+	});
 
 	function load() {
 		fetchAgentJobs({
@@ -133,19 +137,7 @@
 					</tr>
 				</thead>
 				<tbody>
-					{#if agentJobs.loading}
-						<tr
-							><td colspan="7" style="text-align:center;color:var(--fg-4);padding:32px" class="mono"
-								>loading…</td
-							></tr
-						>
-					{:else if agentJobs.error}
-						<tr
-							><td colspan="7" style="text-align:center;color:var(--err);padding:16px" class="mono"
-								>{agentJobs.error}</td
-							></tr
-						>
-					{:else if jobs.length}
+					{#if jobs.length}
 						{#each sortedJobs as j (j.job_id)}
 							<tr>
 								<td
@@ -166,11 +158,12 @@
 							</tr>
 						{/each}
 					{:else}
-						<tr
-							><td colspan="7" style="text-align:center;color:var(--fg-4);padding:32px" class="mono"
-								>no jobs found</td
-							></tr
-						>
+						<DataState
+							loading={agentJobs.loading}
+							error={agentJobs.error}
+							colspan={7}
+							label="jobs"
+						/>
 					{/if}
 				</tbody>
 			</table>

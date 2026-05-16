@@ -5,6 +5,7 @@
 	import * as fmt from '$lib/fmt.js';
 	import { createSort } from '$lib/sort.svelte';
 	import AddrLink from '$lib/components/AddrLink.svelte';
+	import DataState from '$lib/components/DataState.svelte';
 
 	const STATUSES = ['all', 'created', 'taker_funded', 'maker_funded', 'settled', 'cancelled'];
 
@@ -12,7 +13,10 @@
 	let offset = $state(0);
 	const limit = 50;
 
-	onMount(() => load());
+	onMount(() => {
+		fx.data = null;
+		load();
+	});
 
 	function load() {
 		fetchFx({
@@ -98,19 +102,7 @@
 					</tr>
 				</thead>
 				<tbody>
-					{#if fx.loading}
-						<tr
-							><td colspan="7" style="text-align:center;color:var(--fg-4);padding:32px" class="mono"
-								>loading…</td
-							></tr
-						>
-					{:else if fx.error}
-						<tr
-							><td colspan="7" style="text-align:center;color:var(--err);padding:16px" class="mono"
-								>{fx.error}</td
-							></tr
-						>
-					{:else if fx.data?.trades.length}
+					{#if fx.data?.trades.length}
 						{#each sortedTrades as t, i (i)}
 							{@const inputTok = t.input_token as string}
 							{@const outputTok = t.output_token as string}
@@ -133,11 +125,7 @@
 							</tr>
 						{/each}
 					{:else}
-						<tr
-							><td colspan="7" style="text-align:center;color:var(--fg-4);padding:32px" class="mono"
-								>no results</td
-							></tr
-						>
+						<DataState loading={fx.loading} error={fx.error} colspan={7} label="trades" />
 					{/if}
 				</tbody>
 			</table>

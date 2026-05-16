@@ -6,6 +6,7 @@
 	import { stats } from '$lib/stores/stats.svelte';
 	import * as fmt from '$lib/fmt.js';
 	import AddrLink from '$lib/components/AddrLink.svelte';
+	import DataState from '$lib/components/DataState.svelte';
 
 	const sort = createSort('age', 'desc');
 
@@ -18,6 +19,7 @@
 	const limit = 50;
 
 	onMount(() => {
+		crosschain.data = null;
 		load();
 		fetchAnalyticsBridgeFlow();
 	});
@@ -149,19 +151,7 @@
 					</tr>
 				</thead>
 				<tbody>
-					{#if crosschain.loading}
-						<tr
-							><td colspan="8" style="text-align:center;color:var(--fg-4);padding:32px" class="mono"
-								>loading…</td
-							></tr
-						>
-					{:else if crosschain.error}
-						<tr
-							><td colspan="8" style="text-align:center;color:var(--err);padding:16px" class="mono"
-								>{crosschain.error}</td
-							></tr
-						>
-					{:else if crosschain.data?.events.length}
+					{#if crosschain.data?.events.length}
 						{#each sortedEvents as e (e.id)}
 							<tr>
 								<td><span class="chain">{fmt.domainName(e.source_domain)}</span></td>
@@ -180,11 +170,12 @@
 							</tr>
 						{/each}
 					{:else}
-						<tr
-							><td colspan="8" style="text-align:center;color:var(--fg-4);padding:32px" class="mono"
-								>no results</td
-							></tr
-						>
+						<DataState
+							loading={crosschain.loading}
+							error={crosschain.error}
+							colspan={8}
+							label="cross-chain events"
+						/>
 					{/if}
 				</tbody>
 			</table>
