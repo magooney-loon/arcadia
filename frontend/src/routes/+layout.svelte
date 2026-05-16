@@ -591,7 +591,8 @@
 	}
 
 	/* Navigation progress bar — thin bar at the top of the viewport
-	   that animates while a route chunk is being fetched. */
+	   that animates while a route is transitioning. Grows quickly
+	   to 60% then slows down; disappears when navigation completes. */
 	.nav-bar {
 		position: fixed;
 		top: 0;
@@ -601,30 +602,18 @@
 		z-index: 9999;
 		background: linear-gradient(90deg, var(--accent), var(--info));
 		transform-origin: left;
-		animation: nav-bar-grow 10s ease-out forwards;
+		animation: nav-bar-grow 1.2s ease-out forwards;
 		pointer-events: none;
 	}
 	@keyframes nav-bar-grow {
 		0% {
 			transform: scaleX(0);
 		}
-		15% {
-			transform: scaleX(0.3);
-		}
-		30% {
-			transform: scaleX(0.5);
-		}
-		50% {
-			transform: scaleX(0.65);
-		}
-		70% {
-			transform: scaleX(0.78);
-		}
-		85% {
-			transform: scaleX(0.85);
+		40% {
+			transform: scaleX(0.6);
 		}
 		100% {
-			transform: scaleX(0.92);
+			transform: scaleX(1);
 		}
 	}
 </style>
