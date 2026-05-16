@@ -12,6 +12,7 @@ require (
 require (
 	github.com/magooney-loon/pb-ext v0.0.0-20260512161344-7da57aaae8d6
 	github.com/pocketbase/dbx v1.12.0
+	modernc.org/sqlite v1.50.0
 )
 
 require (
@@ -90,6 +91,5 @@ require (
 	modernc.org/libc v1.72.0 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
-	modernc.org/sqlite v1.50.0 // indirect
 	rsc.io/tmplfunc v0.0.3 // indirect
 )
