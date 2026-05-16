@@ -34,10 +34,25 @@ const analyticsTopic = "analytics"
 // the larger `charts` payload to whichever clients are subscribed.
 // Also populates the in-memory REST cache so API handlers can serve
 // responses without hitting SQLite.
+//
+// When the indexer is catching up (high lag), broadcasts are throttled
+// more aggressively to avoid competing with the write transaction for
+// SQLite read access — this is what was causing the dashboard to freeze.
 func BroadcastIndexerUpdate(app core.App) {
 	now := time.Now().UnixMilli()
+
+	// Throttle more aggressively when catching up to avoid starving
+	// the indexer's write transaction of SQLite read bandwidth.
+	lag := currentLag(app)
+	interval := minIndexerInterval
+	if lag > 100 {
+		interval = 10 * time.Second // heavy sync — update every 10s
+	} else if lag > 20 {
+		interval = 5 * time.Second // moderate catchup — every 5s
+	}
+
 	last := lastIndexerBroadcast.Load()
-	if now-last < minIndexerInterval.Milliseconds() {
+	if now-last < interval.Milliseconds() {
 		return
 	}
 	if !lastIndexerBroadcast.CompareAndSwap(last, now) {
@@ -49,7 +64,7 @@ func BroadcastIndexerUpdate(app core.App) {
 	indexerPayload := buildIndexerPayload(app)
 
 	// Cache the individual components for REST handlers.
-	// TTL is generous: the next broadcast (≤1s) will overwrite.
+	// TTL is generous: the next broadcast will overwrite.
 	const ttl = 5 * time.Second
 	if s, ok := indexerPayload["stats"]; ok {
 		cache.Default.Set("stats", s, ttl)
@@ -64,20 +79,22 @@ func BroadcastIndexerUpdate(app core.App) {
 		cache.Default.Set("transactions:10", t, ttl)
 	}
 
-	// Charts payload
-	chartsData := map[string]any{
-		"block_stats": buildBlockStatsList(app, 200),
-	}
-	cache.Default.Set("block_stats:200", chartsData, ttl)
+	// Expensive list queries — skip while heavily syncing to avoid
+	// contending with the indexer for SQLite read access.
+	if lag <= 100 {
+		chartsData := map[string]any{
+			"block_stats": buildBlockStatsList(app, 200),
+		}
+		cache.Default.Set("block_stats:200", chartsData, ttl)
+		cache.Default.Set("blocks:50", buildBlocksList(app, 50), ttl)
+		cache.Default.Set("transactions:100", buildTransactionsList(app, 100), ttl)
+		cache.Default.Set("block_stats:50", buildBlockStatsList(app, 50), ttl)
 
-	// Also cache common block/tx list sizes used by list pages.
-	cache.Default.Set("blocks:50", buildBlocksList(app, 50), ttl)
-	cache.Default.Set("transactions:100", buildTransactionsList(app, 100), ttl)
-	cache.Default.Set("block_stats:50", buildBlockStatsList(app, 50), ttl)
+		_ = Broadcast(app, chartsTopic, chartsData)
+	}
 
 	// Send to SSE subscribers.
 	_ = Broadcast(app, indexerTopic, indexerPayload)
-	_ = Broadcast(app, chartsTopic, chartsData)
 }
 
 // BroadcastAnalyticsUpdate fires after a snapshot job finishes for the
@@ -97,6 +114,16 @@ func BroadcastAnalyticsUpdate(app core.App, window string) {
 	}
 
 	_ = Broadcast(app, analyticsTopic, payload)
+}
+
+// currentLag reads the indexer lag from the meta table. Returns 0 on error.
+func currentLag(app core.App) int {
+	val, err := repo.MetaValue(app, "lagBlocks")
+	if err != nil || val == "" {
+		return 0
+	}
+	n, _ := strconv.Atoi(val)
+	return n
 }
 
 // ── payload builders ──────────────────────────────────────────────────────────
@@ -151,17 +178,22 @@ func buildHealth(app core.App) map[string]any {
 	tip, _ := strconv.Atoi(metaMap["chainTip"])
 	lag, _ := strconv.Atoi(metaMap["lagBlocks"])
 
-	since := time.Now().UTC().Add(-time.Hour).Unix()
-	errEvents, _ := repo.ErrorEventsSince(app, since)
-
-	batches, _ := repo.RecentBatchDones(app, since, 20)
-	var avgBatchMs float64
-	if len(batches) > 0 {
-		var total int64
-		for _, r := range batches {
-			total += int64(r.GetInt("duration_ms"))
+	errors1h := 0
+	avgBatchMs := 0.0
+	// Skip expensive queries while syncing — the indexer needs those
+	// SQLite read slots more than the dashboard does.
+	if lag <= 10 {
+		since := time.Now().UTC().Add(-time.Hour).Unix()
+		if evts, err := repo.ErrorEventsSince(app, since); err == nil {
+			errors1h = len(evts)
 		}
-		avgBatchMs = float64(total) / float64(len(batches))
+		if batches, err := repo.RecentBatchDones(app, since, 20); err == nil && len(batches) > 0 {
+			var total int64
+			for _, r := range batches {
+				total += int64(r.GetInt("duration_ms"))
+			}
+			avgBatchMs = float64(total) / float64(len(batches))
+		}
 	}
 
 	return map[string]any{
@@ -169,7 +201,7 @@ func buildHealth(app core.App) map[string]any {
 		"chain_tip":          tip,
 		"lag_blocks":         lag,
 		"syncing":            lag > 10,
-		"errors_1h":          len(errEvents),
+		"errors_1h":          errors1h,
 		"avg_batch_ms":       avgBatchMs,
 	}
 }
