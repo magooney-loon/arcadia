@@ -29,7 +29,7 @@ StableFX settles USDC↔EURC swaps onchain. Every trade is indexed with implied 
 
 ### Prerequisites
 
-- **Go** 1.19+
+- **Go** 1.25+
 - **Node.js** 16+ (for frontend builds)
 - **npm** 8+
 - **Envio API token** (get one at https://envio.dev)
@@ -102,7 +102,7 @@ The script parses `batch_profile` lines and prints count, avg, p50, p95, and max
 - **App**: http://127.0.0.1:8090
 - **pb-ext dashboard**: http://127.0.0.1:8090/\_/\_
 - **PocketBase admin**: http://127.0.0.1:8090/_/
-- **OpenAPI docs**: http://127.0.0.1:8090/api/v1/swagger
+- **OpenAPI docs**: http://127.0.0.1:8090/api/docs/v1/swagger
 
 ### Frontend-only development
 
@@ -326,7 +326,7 @@ The indexer write path (`save_*` functions) does **not** go through the repo lay
 | Job | Schedule | What it does |
 |---|---|---|
 | `analyticsSnapshot` | Every 5 min | Aggregates transfers, fees, bridge flows, agent counts into `analytics_snapshots` for 1h / 24h / 7d windows |
-| `tokenAnalytics` | Every 30 min | 6-worker pool enriches token metadata via RPC, counts transfers/holders per token |
+| `tokenAnalytics` | Every 10 min | 6-worker pool enriches token metadata via RPC, counts transfers/holders per token |
 | `indexerHealth` | Every hour | Logs row counts for all collections and the current indexer cursor |
 | `indexerEventsCleanup` | Every hour | Deletes `indexer_events` records older than 2 hours |
 
@@ -342,15 +342,17 @@ See the Swagger UI at `/api/v1/swagger` for the full endpoint reference, request
 
 ### Realtime (SSE)
 
-Custom PocketBase subscriptions broadcast pre-computed payloads to connected clients via SSE, replacing the frontend's HTTP polling. Three topics cover the entire dashboard:
+Custom PocketBase subscriptions broadcast pre-computed payloads to connected clients via SSE, replacing HTTP polling. Three topics cover the entire dashboard:
 
 | Topic | Trigger | Payload | Who subscribes |
 |---|---|---|---|
 | `indexer` | After each indexer batch commit (~1Hz throttle) | `{stats, health, blocks[], transactions[]}` | Every tab (subscribed in `+layout.svelte`) |
-| `charts` | After each indexer batch commit (~1Hz throttle) | `{block_stats[]}` (200 rows) | Only tabs rendering the overview charts |
-| `analytics` | After each analytics snapshot job (every 5 min) | `{overview, bridgeFlow, volume, window}` | Every tab |
+| `charts` | After each indexer batch commit (~1Hz throttle) | `{block_stats[]}` (50 rows) | Only tabs rendering the overview charts |
+| `analytics` | After each analytics snapshot job (every 5 min) | `{window, overview, bridge_flow, volume}` | Every tab |
 
-See [`docs/Realtime.md`](docs/Realtime.md) for the full implementation plan.
+`internal/server/realtime/broadcaster.go` builds and fans out these payloads. `BroadcastIndexerUpdate` is called after each batch commit and throttles more aggressively when the indexer is catching up (10s interval at lag > 100 blocks, 5s at lag > 20, 1s otherwise) to avoid competing with the write transaction for SQLite read bandwidth. The same function also populates the in-memory REST cache so API handlers can serve responses without hitting SQLite between broadcasts.
+
+The frontend subscribes in `+layout.svelte` via `connectRealtime()` (`src/lib/realtime.ts`), which uses the PocketBase JS SDK's `pb.realtime.subscribe()`. The SDK manages the SSE connection lifecycle — auto-reconnect, clientId handshake, re-subscription on reconnect. Chart subscriptions are view-bound and managed separately via `connectCharts()` / `disconnectCharts()`.
 
 ---
 
