@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
-	import { blockDetail, fetchBlockDetail } from '$lib/stores/chain.svelte';
+	import { blockDetail } from '$lib/stores/chain.svelte';
 	import { stats } from '$lib/stores/stats.svelte';
 	import * as fmt from '$lib/fmt.js';
 	import AddrLink from '$lib/components/AddrLink.svelte';
@@ -10,13 +10,6 @@
 
 	const number = $derived(Number(page.params.number ?? 0));
 	const latestBlock = $derived(stats.data?.block_number ?? 0);
-
-	$effect(() => {
-		if (number) {
-			blockDetail.data = null;
-			fetchBlockDetail(number);
-		}
-	});
 
 	const data = $derived(blockDetail.data);
 	const block = $derived(data?.block);
@@ -156,19 +149,26 @@
 							</tr>
 							<tr>
 								<td class="mono muted lbl">Total fees</td>
-								<td class="mono">{fmt.usdc(blockStats.total_fee_usdc as string | number | null)}</td>
+								<td class="mono">{fmt.usdc(blockStats.total_fee_usdc as string | number | null)}</td
+								>
 							</tr>
 							<tr>
 								<td class="mono muted lbl">Avg fee/tx</td>
-								<td class="mono">{fmt.usdc(blockStats.avg_fee_usdc as string | number | null, 6)}</td>
+								<td class="mono"
+									>{fmt.usdc(blockStats.avg_fee_usdc as string | number | null, 6)}</td
+								>
 							</tr>
 							<tr>
 								<td class="mono muted lbl">USDC transferred</td>
-								<td class="mono">{fmt.usdc(blockStats.total_usdc_transferred as string | number | null)}</td>
+								<td class="mono"
+									>{fmt.usdc(blockStats.total_usdc_transferred as string | number | null)}</td
+								>
 							</tr>
 							<tr>
 								<td class="mono muted lbl">EURC transferred</td>
-								<td class="mono">{fmt.usdc(blockStats.total_eurc_transferred as string | number | null)}</td>
+								<td class="mono"
+									>{fmt.usdc(blockStats.total_eurc_transferred as string | number | null)}</td
+								>
 							</tr>
 							<tr>
 								<td class="mono muted lbl">Unique senders</td>
@@ -213,11 +213,9 @@
 									<td class="addr"><TxLink hash={tx.hash} /></td>
 									<td class="addr"><AddrLink address={tx.from_addr} /></td>
 									<td class="addr">
-										<AddrLink address={tx.to_addr ?? tx.contract_address as string | undefined} />
+										<AddrLink address={tx.to_addr ?? (tx.contract_address as string | undefined)} />
 									</td>
-									<td class="mono muted" style="font-size:11px"
-										>{fmt.methodName(tx.sighash)}</td
-									>
+									<td class="mono muted" style="font-size:11px">{fmt.methodName(tx.sighash)}</td>
 									<td class="num">{fmt.usdc(tx.fee_usdc, 6)}</td>
 									<td class="num">
 										<span style="color:{tx.status === 1 ? 'var(--ok)' : 'var(--err)'}">

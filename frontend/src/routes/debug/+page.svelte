@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { stats, fetchStats } from '$lib/stores/stats.svelte';
 	import { blockStats, fetchBlockStats } from '$lib/stores/blockStats.svelte';
 	import {
@@ -85,26 +84,6 @@
 	let historyLimit = $state('');
 	let leaderboardLimit = $state('');
 	let tokensSearch = $state('');
-
-	onMount(() => {
-		fetchStats();
-		fetchBlockStats(50);
-		fetchBlocks(50);
-		fetchTransactions();
-		fetchTraces();
-		fetchTransfers();
-		fetchCrosschain();
-		fetchFx();
-		fetchAgents();
-		fetchAgentJobs();
-		fetchEdges();
-		fetchHealth();
-		fetchAnalyticsOverview();
-		fetchAnalyticsFees();
-		fetchAnalyticsVolume();
-		fetchAnalyticsBridgeFlow();
-		fetchAgentLeaderboard();
-	});
 </script>
 
 <div class="view">

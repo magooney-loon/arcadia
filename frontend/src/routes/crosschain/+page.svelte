@@ -1,8 +1,7 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { createSort } from '$lib/sort.svelte';
 	import { crosschain, fetchCrosschain } from '$lib/stores/crosschain.svelte';
-	import { analyticsBridgeFlow, fetchAnalyticsBridgeFlow } from '$lib/stores/analytics.svelte';
+	import { analyticsBridgeFlow } from '$lib/stores/analytics.svelte';
 	import { stats } from '$lib/stores/stats.svelte';
 	import * as fmt from '$lib/fmt.js';
 	import AddrLink from '$lib/components/AddrLink.svelte';
@@ -17,12 +16,6 @@
 	let protocol = $state('all');
 	let offset = $state(0);
 	const limit = 50;
-
-	onMount(() => {
-		crosschain.data = null;
-		load();
-		fetchAnalyticsBridgeFlow();
-	});
 
 	function load() {
 		fetchCrosschain({
@@ -163,9 +156,7 @@
 								>
 								<td class="muted">{e.protocol}</td>
 								<td class="num">{fmt.usdc(e.amount_usdc)}</td>
-								<td class="addr"
-									><AddrLink address={e.sender ?? ''} /></td
-								>
+								<td class="addr"><AddrLink address={e.sender ?? ''} /></td>
 								<td class="num muted">{fmt.blockAge(e.block_number, latestBlock)}</td>
 							</tr>
 						{/each}

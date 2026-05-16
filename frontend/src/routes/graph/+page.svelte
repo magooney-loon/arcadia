@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { graph, fetchEdges } from '$lib/stores/graph.svelte';
 	import ForceGraph from '$lib/components/ForceGraph.svelte';
 	import * as fmt from '$lib/fmt.js';
@@ -10,11 +9,6 @@
 	let walletInput = $state('');
 	let offset = $state(0);
 	const limit = 500;
-
-	onMount(() => {
-		graph.data = null;
-		load();
-	});
 
 	function load() {
 		fetchEdges({
@@ -123,13 +117,9 @@
 					{#if edges.length}
 						{#each sortedEdges as e (e.from_wallet + e.to_wallet)}
 							<tr>
-								<td class="addr"
-									><AddrLink address={e.from_wallet} /></td
-								>
+								<td class="addr"><AddrLink address={e.from_wallet} /></td>
 								<td class="acc">→</td>
-								<td class="addr"
-									><AddrLink address={e.to_wallet} /></td
-								>
+								<td class="addr"><AddrLink address={e.to_wallet} /></td>
 								<td class="num">{fmt.num(e.tx_count)}</td>
 								<td class="num">{fmt.usdc(e.total_usdc_human)}</td>
 								<td>{e.from_is_agent ? '<span class="badge acc">agent</span>' : ''}</td>

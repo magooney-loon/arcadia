@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { resolve } from '$app/paths';
 	import { blocks, fetchBlocks } from '$lib/stores/chain.svelte';
 	import { blockStats, fetchBlockStats } from '$lib/stores/blockStats.svelte';
@@ -10,15 +9,6 @@
 
 	let limit = $state(50);
 	let offset = $state(0);
-
-	onMount(() => {
-		// Clear stale data from prior navigation so the page reliably
-		// renders <DataState> until the new fetch resolves.
-		blocks.data = null;
-		blockStats.data = null;
-		fetchBlocks(limit, offset);
-		fetchBlockStats(limit, offset);
-	});
 
 	function load() {
 		fetchBlocks(limit, offset);
@@ -95,20 +85,13 @@
 								>
 								<td class="muted">{fmt.tsAge(b.timestamp)}</td>
 								<td>{b.tx_count ?? 0}</td>
-								<td class="addr"
-									><AddrLink address={b.miner} /></td
-								>
+								<td class="addr"><AddrLink address={b.miner} /></td>
 								<td class="num">{fmt.pct(b.utilization_pct)}</td>
 								<td class="num">{stat ? fmt.usdc(stat.total_fee_usdc, 4) : '—'}</td>
 							</tr>
 						{/each}
 					{:else}
-						<DataState
-							loading={blocks.loading}
-							error={blocks.error}
-							colspan={6}
-							label="blocks"
-						/>
+						<DataState loading={blocks.loading} error={blocks.error} colspan={6} label="blocks" />
 					{/if}
 				</tbody>
 			</table>

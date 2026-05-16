@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { createSort } from '$lib/sort.svelte';
 	import { transfers, fetchTransfers } from '$lib/stores/transfers.svelte';
 	import { stats } from '$lib/stores/stats.svelte';
@@ -19,11 +18,6 @@
 	let tokenFilter = $state('all');
 	let offset = $state(0);
 	const limit = 50;
-
-	onMount(() => {
-		transfers.data = null;
-		load();
-	});
 
 	function load() {
 		fetchTransfers({

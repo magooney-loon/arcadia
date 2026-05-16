@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { createSort } from '$lib/sort.svelte';
 	import { analyticsAgentLeaderboard, fetchAgentLeaderboard } from '$lib/stores/analytics.svelte';
 	import * as fmt from '$lib/fmt.js';
@@ -7,11 +6,6 @@
 	import DataState from '$lib/components/DataState.svelte';
 
 	let limit = $state(50);
-
-	onMount(() => {
-		analyticsAgentLeaderboard.data = null;
-		fetchAgentLeaderboard(limit);
-	});
 
 	const board = $derived(analyticsAgentLeaderboard.data?.leaderboard ?? []);
 

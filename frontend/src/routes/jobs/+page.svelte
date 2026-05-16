@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { agentJobs, fetchAgentJobs } from '$lib/stores/agents.svelte';
 	import { stats } from '$lib/stores/stats.svelte';
 	import { createSort } from '$lib/sort.svelte';
@@ -22,11 +21,6 @@
 	let activeStatus = $state('');
 	let offset = $state(0);
 	const limit = 50;
-
-	onMount(() => {
-		agentJobs.data = null;
-		load();
-	});
 
 	function load() {
 		fetchAgentJobs({
@@ -140,15 +134,9 @@
 					{#if jobs.length}
 						{#each sortedJobs as j (j.job_id)}
 							<tr>
-								<td
-									><TxLink hash={j.job_id} /></td
-								>
-								<td class="addr"
-									><AddrLink address={j.employer_address} /></td
-								>
-								<td class="addr"
-									><AddrLink address={j.worker_address} /></td
-								>
+								<td><TxLink hash={j.job_id} /></td>
+								<td class="addr"><AddrLink address={j.employer_address} /></td>
+								<td class="addr"><AddrLink address={j.worker_address} /></td>
 								<td><span class="badge {fmt.jobBadge(j.status)}">{j.status}</span></td>
 								<td class="num">{fmt.usdc(j.payment_usdc)}</td>
 								<td class="num muted">{fmt.blockAge(j.created_at_block, latestBlock)}</td>

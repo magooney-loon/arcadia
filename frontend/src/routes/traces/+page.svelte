@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { traces, fetchTraces } from '$lib/stores/chain.svelte';
 	import { stats } from '$lib/stores/stats.svelte';
 	import { createSort } from '$lib/sort.svelte';
@@ -11,11 +10,6 @@
 	let txFilter = $state('');
 	let offset = $state(0);
 	const limit = 50;
-
-	onMount(() => {
-		traces.data = null;
-		load();
-	});
 
 	function load() {
 		fetchTraces({
@@ -54,10 +48,10 @@
 	>
 		<div class="mono" style="font-size:11px;color:var(--fg-2)">
 			<span style="color:var(--warn);font-weight:600">⚠ no data available</span>
-			— HyperSync does not expose traces for Arc Testnet. Traces are only served on select
-			networks via dedicated <span class="dim">*-traces.hypersync.xyz</span> endpoints (eth-traces, base-traces).
-			Backfilling from JSON-RPC <span class="dim">debug_traceBlockByNumber</span> against the Arc
-			RPC pool is possible but not yet wired up.
+			— HyperSync does not expose traces for Arc Testnet. Traces are only served on select networks via
+			dedicated <span class="dim">*-traces.hypersync.xyz</span> endpoints (eth-traces, base-traces).
+			Backfilling from JSON-RPC <span class="dim">debug_traceBlockByNumber</span> against the Arc RPC
+			pool is possible but not yet wired up.
 		</div>
 	</div>
 
@@ -112,27 +106,16 @@
 					{#if traces.data?.traces.length}
 						{#each sortedTraces as t (t.tx_hash + '_' + t.block_number)}
 							<tr>
-								<td
-									><TxLink hash={t.tx_hash} /></td
-								>
+								<td><TxLink hash={t.tx_hash} /></td>
 								<td><span class="badge muted">{t.call_type ?? t.trace_type ?? '—'}</span></td>
-								<td class="addr"
-									><AddrLink address={t.from_addr} /></td
-								>
-								<td class="addr"
-									><AddrLink address={t.to_addr} /></td
-								>
+								<td class="addr"><AddrLink address={t.from_addr} /></td>
+								<td class="addr"><AddrLink address={t.to_addr} /></td>
 								<td class="num muted">{fmt.num(t.gas_used)}</td>
 								<td class="num muted">{fmt.blockAge(t.block_number, latestBlock)}</td>
 							</tr>
 						{/each}
 					{:else}
-						<DataState
-							loading={traces.loading}
-							error={traces.error}
-							colspan={6}
-							label="traces"
-						/>
+						<DataState loading={traces.loading} error={traces.error} colspan={6} label="traces" />
 					{/if}
 				</tbody>
 			</table>

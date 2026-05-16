@@ -1,7 +1,7 @@
 <script lang="ts">
 	import '../app.css';
 	import { onMount } from 'svelte';
-	import { page } from '$app/state';
+	import { page, navigating } from '$app/state';
 	import { resolve } from '$app/paths';
 	import favicon from '$lib/assets/favicon.svg';
 	import { stats, fetchStats } from '$lib/stores/stats.svelte';
@@ -208,6 +208,12 @@
 </svelte:head>
 
 <div class="app">
+	<!-- Navigation progress bar — visible while SvelteKit is loading
+	     the target route's +page.ts load function (or JS chunk). -->
+	{#if navigating}
+		<div class="nav-bar" aria-hidden="true"></div>
+	{/if}
+
 	<!-- Logo (desktop) -->
 	<a class="logo" href={resolve('/overview/')}>
 		<div class="logo-mark">
@@ -392,7 +398,10 @@
 				? `Indexer is catching up · ${health.data?.lag_blocks ?? '?'} blocks behind. Some data may refresh slowly until sync completes.`
 				: 'Indexer is at chain tip'}
 		>
-			<span class="dot {health.data?.syncing ? 'warn' : 'acc'}" class:syncing-pulse={health.data?.syncing}></span>
+			<span
+				class="dot {health.data?.syncing ? 'warn' : 'acc'}"
+				class:syncing-pulse={health.data?.syncing}
+			></span>
 			indexer
 			<span class="v {health.data?.syncing ? 'warn' : 'ok'}"
 				>{health.data?.syncing
@@ -578,6 +587,44 @@
 		}
 		50% {
 			opacity: 0.35;
+		}
+	}
+
+	/* Navigation progress bar — thin bar at the top of the viewport
+	   that animates while a route chunk is being fetched. */
+	.nav-bar {
+		position: fixed;
+		top: 0;
+		left: 0;
+		height: 2px;
+		width: 100%;
+		z-index: 9999;
+		background: linear-gradient(90deg, var(--accent), var(--info));
+		transform-origin: left;
+		animation: nav-bar-grow 10s ease-out forwards;
+		pointer-events: none;
+	}
+	@keyframes nav-bar-grow {
+		0% {
+			transform: scaleX(0);
+		}
+		15% {
+			transform: scaleX(0.3);
+		}
+		30% {
+			transform: scaleX(0.5);
+		}
+		50% {
+			transform: scaleX(0.65);
+		}
+		70% {
+			transform: scaleX(0.78);
+		}
+		85% {
+			transform: scaleX(0.85);
+		}
+		100% {
+			transform: scaleX(0.92);
 		}
 	}
 </style>

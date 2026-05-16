@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { fx, fetchFx } from '$lib/stores/fx.svelte';
 	import { stats } from '$lib/stores/stats.svelte';
 	import * as fmt from '$lib/fmt.js';
@@ -12,11 +11,6 @@
 	let statusFilter = $state('all');
 	let offset = $state(0);
 	const limit = 50;
-
-	onMount(() => {
-		fx.data = null;
-		load();
-	});
 
 	function load() {
 		fetchFx({
@@ -114,12 +108,8 @@
 										? (t.implied_rate as number).toFixed(4)
 										: '—'}</td
 								>
-								<td class="addr"
-									><AddrLink address={t.maker} /></td
-								>
-								<td class="addr"
-									><AddrLink address={t.taker} /></td
-								>
+								<td class="addr"><AddrLink address={t.maker} /></td>
+								<td class="addr"><AddrLink address={t.taker} /></td>
 								<td><span class="badge {fmt.fxBadge(t.status)}">{t.status}</span></td>
 								<td class="num muted">{fmt.blockAge(t.block_number, latestBlock)}</td>
 							</tr>

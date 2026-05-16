@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
-	import { txDetail, fetchTxDetail } from '$lib/stores/chain.svelte';
+	import { txDetail } from '$lib/stores/chain.svelte';
 	import BlockLink from '$lib/components/BlockLink.svelte';
 	import { stats } from '$lib/stores/stats.svelte';
 	import * as fmt from '$lib/fmt.js';
@@ -10,15 +10,6 @@
 
 	const hash = $derived(page.params.hash ?? '');
 	const latestBlock = $derived(stats.data?.block_number ?? 0);
-
-	$effect(() => {
-		if (hash) {
-			// Clear any prior tx so the page reliably falls into the
-			// loading branch instead of flashing the previous one.
-			txDetail.data = null;
-			fetchTxDetail(hash);
-		}
-	});
 
 	const data = $derived(txDetail.data);
 	const tx = $derived(data?.transaction);
@@ -88,7 +79,10 @@
 			<div class="grid" style="grid-template-columns:repeat(4,1fr);gap:14px">
 				<div class="stat" style="padding:0;background:transparent;border:0">
 					<div class="label">Status</div>
-					<div class="value" style="font-size:18px;color:{tx.status === 1 ? 'var(--ok)' : 'var(--err)'}">
+					<div
+						class="value"
+						style="font-size:18px;color:{tx.status === 1 ? 'var(--ok)' : 'var(--err)'}"
+					>
 						{tx.status === 1 ? '✓ success' : '✗ failed'}
 					</div>
 				</div>
@@ -101,7 +95,9 @@
 				</div>
 				<div class="stat" style="padding:0;background:transparent;border:0">
 					<div class="label">Fee</div>
-					<div class="value" style="font-size:18px;color:var(--warn)">{fmt.usdc(tx.fee_usdc, 6)}</div>
+					<div class="value" style="font-size:18px;color:var(--warn)">
+						{fmt.usdc(tx.fee_usdc, 6)}
+					</div>
 				</div>
 				<div class="stat" style="padding:0;background:transparent;border:0">
 					<div class="label">Gas used</div>
@@ -215,12 +211,8 @@
 							{#each traces as t, i (i)}
 								<tr>
 									<td><span class="badge muted">{t.call_type ?? t.trace_type ?? '—'}</span></td>
-									<td class="addr"
-										><AddrLink address={t.from_addr} /></td
-									>
-									<td class="addr"
-										><AddrLink address={t.to_addr} /></td
-									>
+									<td class="addr"><AddrLink address={t.from_addr} /></td>
+									<td class="addr"><AddrLink address={t.to_addr} /></td>
 									<td class="num muted">{fmt.num(t.gas_used)}</td>
 								</tr>
 							{/each}

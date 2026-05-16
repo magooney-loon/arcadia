@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { transactions, fetchTransactions } from '$lib/stores/chain.svelte';
 	import { stats } from '$lib/stores/stats.svelte';
 	import * as fmt from '$lib/fmt.js';
@@ -13,11 +12,6 @@
 	let methodFilter = $state('all');
 	let offset = $state(0);
 	const limit = 100;
-
-	onMount(() => {
-		transactions.data = null;
-		fetchTransactions({ limit, offset });
-	});
 
 	function loadPage() {
 		fetchTransactions({ limit, offset });
@@ -103,13 +97,9 @@
 					{#if filtered().length}
 						{#each sortedTxs as t (t.hash)}
 							<tr>
-								<td
-									><TxLink hash={t.hash} /></td
-								>
+								<td><TxLink hash={t.hash} /></td>
 								<td><span class="badge info">{fmt.methodName(t.sighash)}</span></td>
-								<td class="addr"
-									><AddrLink address={t.from_addr} /></td
-								>
+								<td class="addr"><AddrLink address={t.from_addr} /></td>
 								<td class="muted">→</td>
 								<td class="addr"
 									>{#if t.is_contract_deploy}(new){:else}<AddrLink address={t.to_addr} />{/if}</td

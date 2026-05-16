@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { tokens, fetchTokens } from '$lib/stores/tokens.svelte';
 	import { createSort } from '$lib/sort.svelte';
 	import { resolve } from '$app/paths';
@@ -11,11 +10,6 @@
 	let statusFilter = $state('all');
 	let debounceTimer: ReturnType<typeof setTimeout> | undefined;
 	const sort = createSort('transfers', 'desc');
-
-	onMount(() => {
-		tokens.data = null;
-		fetchTokens(500);
-	});
 
 	function handleSearchInput() {
 		clearTimeout(debounceTimer);
@@ -200,12 +194,7 @@
 							</tr>
 						{/each}
 					{:else}
-						<DataState
-							loading={tokens.loading}
-							error={tokens.error}
-							colspan={9}
-							label="tokens"
-						/>
+						<DataState loading={tokens.loading} error={tokens.error} colspan={9} label="tokens" />
 					{/if}
 				</tbody>
 			</table>

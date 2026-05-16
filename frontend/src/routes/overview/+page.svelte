@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { resolve } from '$app/paths';
-	import { stats, fetchStats } from '$lib/stores/stats.svelte';
-	import { blocks, transactions, fetchBlocks, fetchTransactions } from '$lib/stores/chain.svelte';
+	import { stats } from '$lib/stores/stats.svelte';
+	import { blocks, transactions } from '$lib/stores/chain.svelte';
 	import { blockStats, fetchBlockStats } from '$lib/stores/blockStats.svelte';
 	import {
 		analyticsOverview,
@@ -33,22 +33,8 @@
 	}
 
 	onMount(() => {
-		// Initial REST fetch for instant first paint. After this, the
-		// `indexer` SSE topic (subscribed in +layout.svelte) keeps stats,
-		// blocks, transactions, and block_stats fresh — and the
-		// `analytics` SSE topic refreshes overview/bridge/volume on each
-		// snapshot job tick (every 5 min).
 		setRealtimeWindow(selectedWindow);
-		fetchStats();
-		fetchBlocks(10);
-		fetchTransactions({ limit: 10 });
-		refreshAnalytics();
-		// Chart data is on its own SSE topic — only subscribe while the
-		// overview page is mounted, so other tabs don't receive the big
-		// 200-row block_stats payload.
 		connectCharts();
-		// Agent leaderboard isn't on a realtime topic — refresh on a slow
-		// poll so it doesn't grow stale on long-lived tabs.
 		const lbId = setInterval(() => fetchAgentLeaderboard(5), 60000);
 		return () => {
 			clearInterval(lbId);
@@ -118,11 +104,15 @@
 			<div class="view-sub">Live chain state · arc testnet</div>
 		</div>
 		<div class="view-actions">
-			{#each (['1h', '24h', '7d'] as Window[]) as w (w)}
+			{#each ['1h', '24h', '7d'] as Window[] as w (w)}
 				<button
 					class="btn ghost {selectedWindow === w ? 'active' : ''}"
-					onclick={() => { selectedWindow = w; setRealtimeWindow(w); refreshAnalytics(); }}
-				>{w}</button>
+					onclick={() => {
+						selectedWindow = w;
+						setRealtimeWindow(w);
+						refreshAnalytics();
+					}}>{w}</button
+				>
 			{/each}
 		</div>
 	</div>
@@ -182,7 +172,10 @@
 
 	<!-- Fee analytics · stat cards -->
 	{#if analyticsOverview.data}
-		<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));margin-top:12px">
+		<div
+			class="grid"
+			style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));margin-top:12px"
+		>
 			<div class="stat">
 				<div class="label">Fee p50</div>
 				<div class="value" style="color:var(--info)">
@@ -206,7 +199,9 @@
 					style="color:{analyticsOverview.data.failed_tx_ratio > 0.05 ? 'var(--err)' : 'var(--ok)'}"
 				>
 					{#key analyticsOverview.data.snapshot_at}
-						<span class="flash-val">{(analyticsOverview.data.failed_tx_ratio * 100).toFixed(2)}%</span>
+						<span class="flash-val"
+							>{(analyticsOverview.data.failed_tx_ratio * 100).toFixed(2)}%</span
+						>
 					{/key}
 				</div>
 			</div>
@@ -215,7 +210,10 @@
 
 	<!-- Stablecoin volume breakdown + whales -->
 	{#if volume}
-		<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));margin-top:12px">
+		<div
+			class="grid"
+			style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));margin-top:12px"
+		>
 			<div class="stat">
 				<div class="label" style="color:var(--ok)">USDC vol · {selectedWindow}</div>
 				<div class="value">
@@ -267,7 +265,10 @@
 				</div>
 				<div class="mono dim" style="font-size:10px">
 					{#if largestTransfer.block}
-						<a href={resolve(`/blocks/${largestTransfer.block}/`)} style="text-decoration:none;color:inherit">block #{largestTransfer.block}</a>
+						<a
+							href={resolve(`/blocks/${largestTransfer.block}/`)}
+							style="text-decoration:none;color:inherit">block #{largestTransfer.block}</a
+						>
 					{:else}—{/if}
 				</div>
 			</div>
@@ -373,7 +374,11 @@
 						</div>
 					{/each}
 				{:else}
-					<DataState loading={transactions.loading} error={transactions.error} label="transactions" />
+					<DataState
+						loading={transactions.loading}
+						error={transactions.error}
+						label="transactions"
+					/>
 				{/if}
 			</div>
 		</div>
