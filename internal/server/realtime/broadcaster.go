@@ -79,16 +79,15 @@ func BroadcastIndexerUpdate(app core.App) {
 		cache.Default.Set("transactions:10", t, ttl)
 	}
 
-	// Expensive list queries — skip while heavily syncing to avoid
-	// contending with the indexer for SQLite read access.
-	if lag <= 100 {
+	// Expensive list queries — skip only when very far behind, otherwise the
+	// frontend falls back to REST and hits the same queries with worse
+	// caching characteristics.
+	if lag <= 500 {
 		chartsData := map[string]any{
-			"block_stats": buildBlockStatsList(app, 200),
+			"block_stats": buildBlockStatsList(app, 50),
 		}
-		cache.Default.Set("block_stats:200", chartsData, ttl)
 		cache.Default.Set("blocks:50", buildBlocksList(app, 50), ttl)
 		cache.Default.Set("transactions:100", buildTransactionsList(app, 100), ttl)
-		cache.Default.Set("block_stats:50", buildBlockStatsList(app, 50), ttl)
 
 		_ = Broadcast(app, chartsTopic, chartsData)
 	}

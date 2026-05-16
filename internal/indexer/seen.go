@@ -3,6 +3,7 @@ package indexer
 import (
 	"fmt"
 	"math/big"
+	"strings"
 
 	"github.com/enviodev/hypersync-client-go/types"
 	"github.com/pocketbase/dbx"
@@ -177,63 +178,65 @@ func blockRangeOf(res *types.QueryResponse) (uint64, uint64, bool) {
 	return lo, hi, has
 }
 
+// existingEdge holds just the columns flushEdgeDeltas needs to accumulate
+// against — avoids hydrating full *core.Records.
+type existingEdge struct {
+	TotalUsdc     string
+	TxCount       int
+	LastSeenBlock uint64
+}
+
 // loadEdgesFor prefetches wallet_edges rows for the (from,to) pairs we will
 // touch. Used by the deferred edge-flush in processBatch.
-func loadEdgesFor(app core.App, keys []edgeKey) (map[edgeKey]*core.Record, error) {
-	out := map[edgeKey]*core.Record{}
+//
+// Previously this loaded every edge for every distinct from_wallet, which
+// blew up for hot addresses (DEXes, exchanges) once wallet_edges grew. Now
+// we match on the exact (from, to) tuples via row-value IN, and select only
+// the three accumulating columns directly — no record hydration.
+func loadEdgesFor(app core.App, keys []edgeKey) (map[edgeKey]existingEdge, error) {
+	out := map[edgeKey]existingEdge{}
 	if len(keys) == 0 {
 		return out, nil
 	}
-	// distinct from-wallets
-	froms := map[string]struct{}{}
-	for _, k := range keys {
-		froms[k.from] = struct{}{}
-	}
-	want := map[edgeKey]struct{}{}
-	for _, k := range keys {
-		want[k] = struct{}{}
-	}
 
-	// PocketBase's filter DSL doesn't support IN, so use raw SQL via dbx
-	// to fetch matching record IDs, then hydrate into *core.Record.
-	params := dbx.Params{}
-	in := ""
-	i := 0
-	for f := range froms {
-		key := fmt.Sprintf("f%d", i)
-		params[key] = f
-		if i > 0 {
-			in += ","
+	// Chunk to stay well under SQLite's parameter limit. 2 params per pair,
+	// 1024 pairs = 2048 params per query.
+	const chunk = 1024
+	for start := 0; start < len(keys); start += chunk {
+		end := start + chunk
+		if end > len(keys) {
+			end = len(keys)
 		}
-		in += "{:" + key + "}"
-		i++
-	}
+		slice := keys[start:end]
 
-	type idRow struct {
-		ID string `db:"id"`
-	}
-	var idRows []idRow
-	if err := app.DB().NewQuery(
-		"SELECT id FROM wallet_edges WHERE from_wallet IN (" + in + ")",
-	).Bind(params).All(&idRows); err != nil {
-		return nil, fmt.Errorf("load edges: %w", err)
-	}
-	if len(idRows) == 0 {
-		return out, nil
-	}
+		params := dbx.Params{}
+		tuples := make([]string, len(slice))
+		for i, k := range slice {
+			pf := fmt.Sprintf("ef%d", i)
+			pt := fmt.Sprintf("et%d", i)
+			params[pf] = k.from
+			params[pt] = k.to
+			tuples[i] = fmt.Sprintf("({:%s},{:%s})", pf, pt)
+		}
 
-	ids := make([]string, len(idRows))
-	for i, r := range idRows {
-		ids[i] = r.ID
-	}
-	records, err := app.FindRecordsByIds("wallet_edges", ids)
-	if err != nil {
-		return nil, fmt.Errorf("load edges by ids: %w", err)
-	}
-	for _, r := range records {
-		k := edgeKey{r.GetString("from_wallet"), r.GetString("to_wallet")}
-		if _, hit := want[k]; hit {
-			out[k] = r
+		type row struct {
+			From    string `db:"from_wallet"`
+			To      string `db:"to_wallet"`
+			Total   string `db:"total_usdc"`
+			TxCount int    `db:"tx_count"`
+			LastSee uint64 `db:"last_seen_block"`
+		}
+		var rows []row
+		sql := "SELECT from_wallet, to_wallet, total_usdc, tx_count, last_seen_block " +
+			"FROM wallet_edges WHERE (from_wallet, to_wallet) IN (" +
+			strings.Join(tuples, ",") + ")"
+		if err := app.DB().NewQuery(sql).Bind(params).All(&rows); err != nil {
+			return nil, fmt.Errorf("load edges: %w", err)
+		}
+		for _, r := range rows {
+			out[edgeKey{r.From, r.To}] = existingEdge{
+				TotalUsdc: r.Total, TxCount: r.TxCount, LastSeenBlock: r.LastSee,
+			}
 		}
 	}
 	return out, nil

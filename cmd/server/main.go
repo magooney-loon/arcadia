@@ -80,36 +80,12 @@ func initApp(devMode bool) {
 	server.RegisterRoutes(srv.App())
 	jobs.RegisterJobs(srv.App())
 
-	// Apply SQLite PRAGMA tuning before the server starts serving requests.
-	// WAL + NORMAL synchronous is crash-safe and gives better write throughput.
-	// busy_timeout prevents SQLITE_BUSY errors under concurrent writer pressure.
-	// cache_size and temp_store improve sort/query performance at the cost of RAM.
-	srv.App().OnServe().BindFunc(func(e *core.ServeEvent) error {
-		db := e.App.DB()
-		for _, pragma := range []string{
-			// WAL mode allows concurrent readers while a writer holds the lock.
-			// This is the single most important setting for an app that has
-			// a background writer (indexer) and foreground readers (API).
-			"PRAGMA journal_mode=WAL",
-			"PRAGMA synchronous=NORMAL",
-			// busy_timeout: how long a blocked reader waits before giving up.
-			// 2s is enough for most batch commits; the indexer's transaction
-			// should never hold the lock longer than that.
-			"PRAGMA busy_timeout=2000",
-			"PRAGMA cache_size=-8000",
-			"PRAGMA temp_store=2",
-			"PRAGMA mmap_size=268435456",
-			// Checkpoint the WAL every 256 pages (~1MB) instead of the
-			// default 1000. Smaller checkpoints run faster and avoid the
-			// multi-second stall that blocks both reads and writes.
-			"PRAGMA wal_autocheckpoint=256",
-		} {
-			if _, err := db.NewQuery(pragma).Execute(); err != nil {
-				e.App.Logger().Warn("SQLite PRAGMA failed", "pragma", pragma, "error", err)
-			}
-		}
-		return e.Next()
-	})
+	// SQLite PRAGMAs are intentionally left as PocketBase's DSN-applied
+	// defaults (busy_timeout=10s, WAL, synchronous=NORMAL, cache=-32000,
+	// temp_store=MEMORY, foreign_keys=ON, journal_size_limit=200MB) which
+	// apply to every connection in both the concurrent and nonconcurrent
+	// pools. Earlier overrides via app.DB().NewQuery("PRAGMA …") only hit
+	// the writer connection and left the reader pool inconsistent.
 
 	srv.App().OnServe().BindFunc(func(e *core.ServeEvent) error {
 		app.SetupRecovery(srv.App(), e)

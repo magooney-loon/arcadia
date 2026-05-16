@@ -17,7 +17,7 @@ export const load: PageLoad = async () => {
 	fetchStats();
 	fetchBlocks(10);
 	fetchTransactions({ limit: 10 });
-	fetchBlockStats(200);
+	fetchBlockStats(50);
 	fetchAnalyticsOverview({ window: '24h' });
 	fetchAnalyticsBridgeFlow({ window: '24h' });
 	fetchAnalyticsVolume({ window: '24h' });

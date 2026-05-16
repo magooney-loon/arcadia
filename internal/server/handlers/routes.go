@@ -49,53 +49,40 @@ func InitVersionedSystem() *api.APIVersionManager {
 func registerV1Routes(router *api.VersionedAPIRouter) {
 	v1 := router.SetPrefix("/api/v1")
 
-	// live dashboard stats (latest block_stats row)
-	v1.GET("/stats", statsHandler)
-	// historical block stats for time-series charts
-	v1.GET("/block_stats", blockStatsHandler)
+	v1.GET("/stats", timed("stats", statsHandler))
+	v1.GET("/block_stats", timed("block_stats", blockStatsHandler))
 
-	// chain data
-	v1.GET("/blocks", blocksHandler)
-	v1.GET("/transactions", transactionsHandler)
-	v1.GET("/traces", tracesHandler)
+	v1.GET("/blocks", timed("blocks", blocksHandler))
+	v1.GET("/transactions", timed("transactions", transactionsHandler))
+	v1.GET("/traces", timed("traces", tracesHandler))
 
-	// token flows  — ?token=USDC|EURC|USYC, ?from=addr, ?to=addr
-	v1.GET("/transfers", transfersHandler)
+	v1.GET("/transfers", timed("transfers", transfersHandler))
 
-	// tokens
-	v1.GET("/tokens", tokensHandler)
-	v1.GET("/tokens/{address}", tokenDetailHandler)
+	v1.GET("/tokens", timed("tokens", tokensHandler))
+	v1.GET("/tokens/{address}", timed("token_detail", tokenDetailHandler))
 
-	// wallet profile + edges
-	v1.GET("/wallet/{address}", walletHandler)
+	v1.GET("/wallet/{address}", timed("wallet", walletHandler))
 
-	// cross-chain + FX
-	v1.GET("/crosschain", crosschainHandler)
-	v1.GET("/fx", fxHandler)
+	v1.GET("/crosschain", timed("crosschain", crosschainHandler))
+	v1.GET("/fx", timed("fx", fxHandler))
 
-	// agent economy
-	v1.GET("/agents", agentsHandler)
-	v1.GET("/agents/{address}", agentHandler)
-	v1.GET("/jobs", agentJobsHandler)
+	v1.GET("/agents", timed("agents", agentsHandler))
+	v1.GET("/agents/{address}", timed("agent", agentHandler))
+	v1.GET("/jobs", timed("jobs", agentJobsHandler))
 
-	// wallet graph edges (for 3D renderer)
-	v1.GET("/edges", edgesHandler)
+	v1.GET("/edges", timed("edges", edgesHandler))
 
-	// indexer health
-	v1.GET("/health", healthHandler)
+	v1.GET("/health", timed("health", healthHandler))
 
-	// unified search
-	v1.GET("/search", searchHandler)
+	v1.GET("/search", timed("search", searchHandler))
 
-	// single-record detail pages
-	v1.GET("/tx/{hash}", txDetailHandler)
-	v1.GET("/block/{number}", blockDetailHandler)
+	v1.GET("/tx/{hash}", timed("tx_detail", txDetailHandler))
+	v1.GET("/block/{number}", timed("block_detail", blockDetailHandler))
 
-	// analytics (snapshot-backed, window-scoped)
-	v1.GET("/analytics/overview", analyticsOverviewHandler)
-	v1.GET("/analytics/fees", analyticsFeesHandler)
-	v1.GET("/analytics/volume", analyticsVolumeHandler)
-	v1.GET("/analytics/bridge_flow", analyticsBridgeFlowHandler)
-	v1.GET("/analytics/agent_leaderboard", analyticsAgentLeaderboardHandler)
-	v1.GET("/analytics/history", analyticsHistoryHandler)
+	v1.GET("/analytics/overview", timed("analytics_overview", analyticsOverviewHandler))
+	v1.GET("/analytics/fees", timed("analytics_fees", analyticsFeesHandler))
+	v1.GET("/analytics/volume", timed("analytics_volume", analyticsVolumeHandler))
+	v1.GET("/analytics/bridge_flow", timed("analytics_bridge_flow", analyticsBridgeFlowHandler))
+	v1.GET("/analytics/agent_leaderboard", timed("analytics_agent_leaderboard", analyticsAgentLeaderboardHandler))
+	v1.GET("/analytics/history", timed("analytics_history", analyticsHistoryHandler))
 }

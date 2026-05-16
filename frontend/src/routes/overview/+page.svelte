@@ -25,7 +25,7 @@
 	let selectedWindow = $state<Window>('24h');
 
 	function refreshAnalytics() {
-		fetchBlockStats(200);
+		fetchBlockStats(50);
 		fetchAnalyticsOverview({ window: selectedWindow });
 		fetchAnalyticsBridgeFlow({ window: selectedWindow });
 		fetchAnalyticsVolume({ window: selectedWindow });
@@ -280,7 +280,7 @@
 		<div class="grid grid-2" style="margin-top:12px">
 			<div class="card">
 				<div class="card-head">
-					<div class="card-title">TPS · last 200 blocks</div>
+					<div class="card-title">TPS · last 50 blocks</div>
 					<div class="card-sub">transactions per second</div>
 				</div>
 				<div class="card-body" style="padding:4px 8px 8px">
@@ -289,7 +289,7 @@
 			</div>
 			<div class="card">
 				<div class="card-head">
-					<div class="card-title">Avg fee · last 200 blocks</div>
+					<div class="card-title">Avg fee · last 50 blocks</div>
 					<div class="card-sub">USDC per transaction</div>
 				</div>
 				<div class="card-body" style="padding:4px 8px 8px">
@@ -300,7 +300,7 @@
 		<div class="grid grid-2" style="margin-top:12px">
 			<div class="card">
 				<div class="card-head">
-					<div class="card-title">Tx count · last 200 blocks</div>
+					<div class="card-title">Tx count · last 50 blocks</div>
 					<div class="card-sub">transactions per block</div>
 				</div>
 				<div class="card-body" style="padding:4px 8px 8px">
@@ -309,7 +309,7 @@
 			</div>
 			<div class="card">
 				<div class="card-head">
-					<div class="card-title">Gas utilization · last 200 blocks</div>
+					<div class="card-title">Gas utilization · last 50 blocks</div>
 					<div class="card-sub">block capacity used</div>
 				</div>
 				<div class="card-body" style="padding:4px 8px 8px">

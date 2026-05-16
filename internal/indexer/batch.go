@@ -2,16 +2,69 @@ package indexer
 
 import (
 	"fmt"
+	"log"
 	"math/big"
 	"sort"
+	"sync"
+	"time"
 
 	"github.com/enviodev/hypersync-client-go/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/pocketbase/pocketbase/core"
 
 	"arcadia/internal/chain"
+	"arcadia/internal/rpc"
 	"arcadia/internal/utils"
 )
+
+// prefetchTokenMetadata resolves token metadata for every distinct Transfer-log
+// address in the batch *before* the write transaction opens, so that the
+// in-batch LookupTokenInfo calls inside RunInTransaction hit a warm in-memory
+// cache and never make a network or DB call while holding the write lock.
+//
+// Lookups run concurrently (bounded). Failures are absorbed into the cache as
+// LookupFailed so a single broken token does not stall future batches.
+func prefetchTokenMetadata(app core.App, res *types.QueryResponse) {
+	firstSeen := make(map[common.Address]uint64)
+	for i := range res.Data.Logs {
+		l := &res.Data.Logs[i]
+		if l.Topic0 == nil || l.Address == nil {
+			continue
+		}
+		if *l.Topic0 != chain.TopicTransfer {
+			continue
+		}
+		if *l.Address == chain.AddrAgentRegistry {
+			continue
+		}
+		var bn uint64
+		if l.BlockNumber != nil {
+			bn = l.BlockNumber.Uint64()
+		}
+		if existing, ok := firstSeen[*l.Address]; !ok || bn < existing {
+			firstSeen[*l.Address] = bn
+		}
+	}
+	if len(firstSeen) == 0 {
+		return
+	}
+
+	// Capped at 3: the point of prefetch is to move RPC out of the write tx,
+	// not to maximize concurrent writes against token_analytics. More workers
+	// just pile up writers competing with the indexer batch and API readers.
+	sem := make(chan struct{}, 3)
+	var wg sync.WaitGroup
+	for addr, bn := range firstSeen {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(a common.Address, b uint64) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			rpc.LookupTokenInfo(app, a, b)
+		}(addr, bn)
+	}
+	wg.Wait()
+}
 
 func processBatch(app core.App, res *types.QueryResponse) error {
 	perBlock := make(map[uint64]*blockAcc)
@@ -34,14 +87,31 @@ func processBatch(app core.App, res *types.QueryResponse) error {
 
 	edgeDeltas := make(map[edgeKey]*edgeDelta)
 
+	// Warm the token metadata cache before opening the write tx. Otherwise
+	// LookupTokenInfo inside saveTransfer would make synchronous RPC + DB
+	// calls while holding the SQLite write lock, freezing API readers.
+	tPrefetchStart := time.Now()
+	prefetchTokenMetadata(app, res)
+	prefetchMs := time.Since(tPrefetchStart).Milliseconds()
+
 	// One bulk dedupe lookup per relevant table — replaces the per-row SELECT
 	// that every save_* function used to do before INSERT.
+	tSeenStart := time.Now()
 	seen, err := loadBatchSeen(app, res)
 	if err != nil {
 		return err
 	}
+	seenMs := time.Since(tSeenStart).Milliseconds()
 
-	return app.RunInTransaction(func(txApp core.App) error {
+	var blocksMs, txsMs, logsMs, tracesMs, backfillMs, statsMs, edgesMs, agentsMs, txTotalMs int64
+	nBlocks := len(res.Data.Blocks)
+	nTxs := len(res.Data.Transactions)
+	nLogs := len(res.Data.Logs)
+	nTraces := len(res.Data.Traces)
+
+	tTxStart := time.Now()
+	txErr := app.RunInTransaction(func(txApp core.App) error {
+		tPhase := time.Now()
 		baseFeeByBlock := make(map[uint64]*big.Int)
 		blockTsByNum := make(map[uint64]int64)
 		for _, blk := range res.Data.Blocks {
@@ -59,6 +129,8 @@ func processBatch(app core.App, res *types.QueryResponse) error {
 			}
 			getAcc(blk.Number.Uint64())
 		}
+		blocksMs = time.Since(tPhase).Milliseconds()
+		tPhase = time.Now()
 
 		for _, tx := range res.Data.Transactions {
 			if tx.Hash == nil || tx.BlockNumber == nil {
@@ -89,6 +161,8 @@ func processBatch(app core.App, res *types.QueryResponse) error {
 				acc.totalFee.Add(acc.totalFee, fee)
 			}
 		}
+		txsMs = time.Since(tPhase).Milliseconds()
+		tPhase = time.Now()
 
 		for _, log := range res.Data.Logs {
 			if log.BlockNumber == nil {
@@ -122,6 +196,9 @@ func processBatch(app core.App, res *types.QueryResponse) error {
 			}
 		}
 
+		logsMs = time.Since(tPhase).Milliseconds()
+		tPhase = time.Now()
+
 		for _, trace := range res.Data.Traces {
 			if trace.TransactionHash == nil || trace.BlockNumber == nil {
 				continue
@@ -130,6 +207,8 @@ func processBatch(app core.App, res *types.QueryResponse) error {
 				return err
 			}
 		}
+		tracesMs = time.Since(tPhase).Milliseconds()
+		tPhase = time.Now()
 
 		// Compute per-block time deltas. Within the batch we use neighbouring
 		// timestamps; for the lowest block in the batch we look up its
@@ -172,6 +251,8 @@ func processBatch(app core.App, res *types.QueryResponse) error {
 				return fmt.Errorf("save block %d stats backfill: %w", bn, err)
 			}
 		}
+		backfillMs = time.Since(tPhase).Milliseconds()
+		tPhase = time.Now()
 
 		// Insert block_stats for every block we just created. Blocks that
 		// already existed (in seen.blocks but not in seen.newBlocks) keep
@@ -235,11 +316,15 @@ func processBatch(app core.App, res *types.QueryResponse) error {
 				return fmt.Errorf("save block_stats %d: %w", bn, err)
 			}
 		}
+		statsMs = time.Since(tPhase).Milliseconds()
+		tPhase = time.Now()
 
 		// One upsert per (from,to) pair, populated above by saveTransfer.
 		if err := flushEdgeDeltas(txApp, edgeDeltas); err != nil {
 			return err
 		}
+		edgesMs = time.Since(tPhase).Milliseconds()
+		tPhase = time.Now()
 
 		for addr, delta := range agentDeltas {
 			if delta.txCount == 0 && delta.feeWei.Sign() == 0 && delta.transferred.Sign() == 0 {
@@ -274,7 +359,16 @@ func processBatch(app core.App, res *types.QueryResponse) error {
 				return fmt.Errorf("update agent %s stats: %w", addr, err)
 			}
 		}
+		agentsMs = time.Since(tPhase).Milliseconds()
 
 		return nil
 	})
+	txTotalMs = time.Since(tTxStart).Milliseconds()
+
+	log.Printf("[indexer] batch_profile blocks=%d txs=%d logs=%d traces=%d | prefetch=%dms seen=%dms tx_total=%dms | blocks=%dms txs=%dms logs=%dms traces=%dms backfill=%dms stats=%dms edges=%dms agents=%dms",
+		nBlocks, nTxs, nLogs, nTraces,
+		prefetchMs, seenMs, txTotalMs,
+		blocksMs, txsMs, logsMs, tracesMs, backfillMs, statsMs, edgesMs, agentsMs)
+
+	return txErr
 }
