@@ -1,10 +1,8 @@
-import { getApiUrl } from '../../stores/config.svelte.js';
+import { apiFetch } from '../utils.js';
 import type { HealthResponse } from './types.js';
 
 export class HealthCrudClient {
-	async get(): Promise<HealthResponse> {
-		const res = await fetch(`${getApiUrl()}/api/v1/health`);
-		if (!res.ok) throw new Error(`health: ${res.status}`);
-		return res.json();
+	get(): Promise<HealthResponse> {
+		return apiFetch<HealthResponse>('/api/v1/health');
 	}
 }

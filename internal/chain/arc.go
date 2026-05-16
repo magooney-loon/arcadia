@@ -1,16 +1,16 @@
-package main
+package chain
 
 import (
 	"os"
 	"sync/atomic"
 
-	"github.com/enviodev/hypersync-client-go/utils"
+	hsutils "github.com/enviodev/hypersync-client-go/utils"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 )
 
-// arcRPCPool is the ordered list of public Arc RPC endpoints used for rotation.
-var arcRPCPool = []string{
+// ArcRPCPool is the ordered list of public Arc RPC endpoints used for rotation.
+var ArcRPCPool = []string{
 	ArcRPCPrimary,
 	ArcRPCBlockdaemon,
 	ArcRPCDRPC,
@@ -46,7 +46,7 @@ const (
 )
 
 // ArcNetworkID is the HyperSync internal key for the Arc Testnet client.
-var ArcNetworkID = utils.NetworkID(ArcChainID)
+var ArcNetworkID = hsutils.NetworkID(ArcChainID)
 
 // ── Contract addresses ────────────────────────────────────────────────────────
 
@@ -104,33 +104,21 @@ var (
 	TopicApproval = common.HexToHash("0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925")
 
 	// CCTP v2 — TokenMessengerV2 (verified from impl 0xf07c0ad1)
-	// DepositForBurn(address indexed burnToken, uint256 amount, address indexed depositor,
-	//   bytes32 mintRecipient, uint32 destinationDomain, bytes32 destinationTokenMessenger,
-	//   bytes32 destinationCaller, uint256 maxFee, uint32 indexed minFinalityThreshold, bytes hookData)
 	TopicDepositForBurn = crypto.Keccak256Hash([]byte("DepositForBurn(address,uint256,address,bytes32,uint32,bytes32,bytes32,uint256,uint32,bytes)"))
 
 	// CCTP v2 — TokenMessengerV2
-	// MintAndWithdraw(address indexed mintRecipient, uint256 amount, address indexed mintToken, uint256 feeCollected)
 	TopicMintAndWithdraw = crypto.Keccak256Hash([]byte("MintAndWithdraw(address,uint256,address,uint256)"))
 
 	// CCTP v2 — MessageTransmitterV2 (verified from impl 0xa849059b)
-	// MessageReceived(address indexed caller, uint32 sourceDomain, bytes32 indexed nonce,
-	//   bytes32 sender, uint32 indexed finalityThresholdExecuted, bytes messageBody)
 	TopicMessageReceived = crypto.Keccak256Hash([]byte("MessageReceived(address,uint32,bytes32,bytes32,uint32,bytes)"))
 
 	// GatewayWallet (verified from impl 0x44eeddc9)
-	// Deposited(address indexed token, address indexed depositor, address indexed sender, uint256 value)
 	TopicGatewayDeposited = crypto.Keccak256Hash([]byte("Deposited(address,address,address,uint256)"))
 
 	// GatewayWallet — outbound bridge (USDC leaving Arc)
-	// GatewayBurned(address indexed token, address indexed depositor, bytes32 indexed transferSpecHash,
-	//   uint32 destinationDomain, bytes32 destinationRecipient, address signer,
-	//   uint256 value, uint256 fee, uint256 fromAvailable, uint256 fromWithdrawing)
 	TopicGatewayBurned = crypto.Keccak256Hash([]byte("GatewayBurned(address,address,bytes32,uint32,bytes32,address,uint256,uint256,uint256,uint256)"))
 
 	// GatewayMinter (verified from impl 0x9ef4c7ad) — inbound bridge (USDC arriving on Arc)
-	// AttestationUsed(address indexed token, address indexed recipient, bytes32 indexed transferSpecHash,
-	//   uint32 sourceDomain, bytes32 sourceDepositor, bytes32 sourceSigner, uint256 value)
 	TopicAttestationUsed = crypto.Keccak256Hash([]byte("AttestationUsed(address,address,bytes32,uint32,bytes32,bytes32,uint256)"))
 
 	// ERC-8004 IdentityRegistry is ERC-721; agent registration mints a token.
@@ -147,31 +135,23 @@ var (
 	TopicFeesProcessed      = crypto.Keccak256Hash([]byte("FeesProcessed(uint256,uint256,uint256)"))
 
 	// ERC-8183 AgenticCommerce job lifecycle — verified from impl 0xA316fd02827242D537F84730F8a37D0BA5fd351a
-	// JobFunded(uint256 indexed jobId, address indexed client, uint256 amount)
-	TopicJobFunded = crypto.Keccak256Hash([]byte("JobFunded(uint256,address,uint256)"))
-	// JobSubmitted(uint256 indexed jobId, address indexed provider, bytes32 deliverable)
-	TopicJobSubmitted = crypto.Keccak256Hash([]byte("JobSubmitted(uint256,address,bytes32)"))
-	// JobCompleted(uint256 indexed jobId, address indexed evaluator, bytes32 reason)
-	TopicJobCompleted = crypto.Keccak256Hash([]byte("JobCompleted(uint256,address,bytes32)"))
-	// JobRejected(uint256 indexed jobId, address indexed rejector, bytes32 reason)
-	TopicJobRejected = crypto.Keccak256Hash([]byte("JobRejected(uint256,address,bytes32)"))
-	// PaymentReleased(uint256 indexed jobId, address indexed provider, uint256 amount)
+	TopicJobFunded       = crypto.Keccak256Hash([]byte("JobFunded(uint256,address,uint256)"))
+	TopicJobSubmitted    = crypto.Keccak256Hash([]byte("JobSubmitted(uint256,address,bytes32)"))
+	TopicJobCompleted    = crypto.Keccak256Hash([]byte("JobCompleted(uint256,address,bytes32)"))
+	TopicJobRejected     = crypto.Keccak256Hash([]byte("JobRejected(uint256,address,bytes32)"))
 	TopicPaymentReleased = crypto.Keccak256Hash([]byte("PaymentReleased(uint256,address,uint256)"))
-	// JobExpired(uint256 indexed jobId)
-	TopicJobExpired = crypto.Keccak256Hash([]byte("JobExpired(uint256)"))
+	TopicJobExpired      = crypto.Keccak256Hash([]byte("JobExpired(uint256)"))
 )
 
 // ── Environment variables ─────────────────────────────────────────────────────
 
 // EnvioAPIToken returns the HyperSync API token from the environment.
-// Get one at https://envio.dev
 func EnvioAPIToken() string {
 	return os.Getenv("ENVIO_API_TOKEN")
 }
 
 // NextRPCURL advances the round-robin counter and returns the next public Arc RPC endpoint.
-// Called on each indexer restart so errors/rate-limits naturally rotate to the next provider.
 func NextRPCURL() string {
 	idx := arcRPCIndex.Add(1) - 1
-	return arcRPCPool[idx%uint64(len(arcRPCPool))]
+	return ArcRPCPool[idx%uint64(len(ArcRPCPool))]
 }

@@ -17,7 +17,7 @@ export async function fetchEdges(filter: EdgeFilter = {}) {
 	try {
 		graph.data = await client.edges(filter);
 	} catch (e) {
-		graph.error = String(e);
+		if (!String(e).includes('cancelled')) graph.error = String(e);
 	} finally {
 		graph.loading = false;
 	}

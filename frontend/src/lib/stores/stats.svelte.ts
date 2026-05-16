@@ -17,7 +17,7 @@ export async function fetchStats() {
 	try {
 		stats.data = await client.get();
 	} catch (e) {
-		stats.error = String(e);
+		if (!String(e).includes('cancelled')) stats.error = String(e);
 	} finally {
 		stats.loading = false;
 	}

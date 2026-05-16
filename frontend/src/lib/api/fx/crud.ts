@@ -1,4 +1,4 @@
-import { getApiUrl } from '../../stores/config.svelte.js';
+import { apiFetch } from '../utils.js';
 import type { FxResponse, FxFilter } from './types.js';
 
 function qs(params: Record<string, string | number | undefined>): string {
@@ -11,10 +11,8 @@ function qs(params: Record<string, string | number | undefined>): string {
 }
 
 export class FxCrudClient {
-	async list(filter: FxFilter = {}): Promise<FxResponse> {
+	list(filter: FxFilter = {}): Promise<FxResponse> {
 		const { limit = 50, offset = 0, ...rest } = filter;
-		const res = await fetch(`${getApiUrl()}/api/v1/fx${qs({ limit, offset, ...rest })}`);
-		if (!res.ok) throw new Error(`fx: ${res.status}`);
-		return res.json();
+		return apiFetch<FxResponse>(`/api/v1/fx${qs({ limit, offset, ...rest })}`);
 	}
 }

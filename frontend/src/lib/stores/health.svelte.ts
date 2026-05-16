@@ -17,7 +17,7 @@ export async function fetchHealth() {
 	try {
 		health.data = await client.get();
 	} catch (e) {
-		health.error = String(e);
+		if (!String(e).includes('cancelled')) health.error = String(e);
 	} finally {
 		health.loading = false;
 	}

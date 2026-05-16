@@ -55,8 +55,16 @@ export const analyticsOverview = $state<OverviewState>({ data: null, loading: fa
 export const analyticsHistory = $state<HistoryState>({ data: null, loading: false, error: null });
 export const analyticsFees = $state<FeesState>({ data: null, loading: false, error: null });
 export const analyticsVolume = $state<VolumeState>({ data: null, loading: false, error: null });
-export const analyticsBridgeFlow = $state<BridgeFlowState>({ data: null, loading: false, error: null });
-export const analyticsAgentLeaderboard = $state<AgentLeaderboardState>({ data: null, loading: false, error: null });
+export const analyticsBridgeFlow = $state<BridgeFlowState>({
+	data: null,
+	loading: false,
+	error: null
+});
+export const analyticsAgentLeaderboard = $state<AgentLeaderboardState>({
+	data: null,
+	loading: false,
+	error: null
+});
 
 export async function fetchAnalyticsFees(filter: FeesFilter = {}) {
 	analyticsFees.loading = true;
@@ -64,7 +72,7 @@ export async function fetchAnalyticsFees(filter: FeesFilter = {}) {
 	try {
 		analyticsFees.data = await client.fees(filter);
 	} catch (e) {
-		analyticsFees.error = String(e);
+		if (!String(e).includes('cancelled')) analyticsFees.error = String(e);
 	} finally {
 		analyticsFees.loading = false;
 	}
@@ -76,7 +84,7 @@ export async function fetchAnalyticsVolume(filter: VolumeFilter = {}) {
 	try {
 		analyticsVolume.data = await client.volume(filter);
 	} catch (e) {
-		analyticsVolume.error = String(e);
+		if (!String(e).includes('cancelled')) analyticsVolume.error = String(e);
 	} finally {
 		analyticsVolume.loading = false;
 	}
@@ -88,7 +96,7 @@ export async function fetchAnalyticsBridgeFlow(filter: BridgeFlowFilter = {}) {
 	try {
 		analyticsBridgeFlow.data = await client.bridgeFlow(filter);
 	} catch (e) {
-		analyticsBridgeFlow.error = String(e);
+		if (!String(e).includes('cancelled')) analyticsBridgeFlow.error = String(e);
 	} finally {
 		analyticsBridgeFlow.loading = false;
 	}
@@ -100,7 +108,7 @@ export async function fetchAnalyticsOverview(filter: OverviewFilter = {}) {
 	try {
 		analyticsOverview.data = await client.overview(filter);
 	} catch (e) {
-		analyticsOverview.error = String(e);
+		if (!String(e).includes('cancelled')) analyticsOverview.error = String(e);
 	} finally {
 		analyticsOverview.loading = false;
 	}
@@ -112,7 +120,7 @@ export async function fetchAnalyticsHistory(filter: HistoryFilter = {}) {
 	try {
 		analyticsHistory.data = await client.history(filter);
 	} catch (e) {
-		analyticsHistory.error = String(e);
+		if (!String(e).includes('cancelled')) analyticsHistory.error = String(e);
 	} finally {
 		analyticsHistory.loading = false;
 	}
@@ -124,7 +132,7 @@ export async function fetchAgentLeaderboard(limit = 50) {
 	try {
 		analyticsAgentLeaderboard.data = await client.agentLeaderboard(limit);
 	} catch (e) {
-		analyticsAgentLeaderboard.error = String(e);
+		if (!String(e).includes('cancelled')) analyticsAgentLeaderboard.error = String(e);
 	} finally {
 		analyticsAgentLeaderboard.loading = false;
 	}

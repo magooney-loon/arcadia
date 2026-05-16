@@ -1,11 +1,11 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { createSort } from '$lib/sort.svelte';
 	import { crosschain, fetchCrosschain } from '$lib/stores/crosschain.svelte';
-	import { analyticsBridgeFlow, fetchAnalyticsBridgeFlow } from '$lib/stores/analytics.svelte';
+	import { analyticsBridgeFlow } from '$lib/stores/analytics.svelte';
 	import { stats } from '$lib/stores/stats.svelte';
 	import * as fmt from '$lib/fmt.js';
 	import AddrLink from '$lib/components/AddrLink.svelte';
+	import DataState from '$lib/components/DataState.svelte';
 
 	const sort = createSort('age', 'desc');
 
@@ -16,11 +16,6 @@
 	let protocol = $state('all');
 	let offset = $state(0);
 	const limit = 50;
-
-	onMount(() => {
-		load();
-		fetchAnalyticsBridgeFlow();
-	});
 
 	function load() {
 		fetchCrosschain({
@@ -149,19 +144,7 @@
 					</tr>
 				</thead>
 				<tbody>
-					{#if crosschain.loading}
-						<tr
-							><td colspan="8" style="text-align:center;color:var(--fg-4);padding:32px" class="mono"
-								>loading…</td
-							></tr
-						>
-					{:else if crosschain.error}
-						<tr
-							><td colspan="8" style="text-align:center;color:var(--err);padding:16px" class="mono"
-								>{crosschain.error}</td
-							></tr
-						>
-					{:else if crosschain.data?.events.length}
+					{#if crosschain.data?.events.length}
 						{#each sortedEvents as e (e.id)}
 							<tr>
 								<td><span class="chain">{fmt.domainName(e.source_domain)}</span></td>
@@ -173,18 +156,17 @@
 								>
 								<td class="muted">{e.protocol}</td>
 								<td class="num">{fmt.usdc(e.amount_usdc)}</td>
-								<td class="addr"
-									><AddrLink address={e.sender ?? ''} /></td
-								>
+								<td class="addr"><AddrLink address={e.sender ?? ''} /></td>
 								<td class="num muted">{fmt.blockAge(e.block_number, latestBlock)}</td>
 							</tr>
 						{/each}
 					{:else}
-						<tr
-							><td colspan="8" style="text-align:center;color:var(--fg-4);padding:32px" class="mono"
-								>no results</td
-							></tr
-						>
+						<DataState
+							loading={crosschain.loading}
+							error={crosschain.error}
+							colspan={8}
+							label="cross-chain events"
+						/>
 					{/if}
 				</tbody>
 			</table>

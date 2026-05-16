@@ -46,8 +46,18 @@ export interface BlockDetailState {
 export const blocks = $state<BlocksState>({ data: null, loading: false, error: null });
 export const transactions = $state<TransactionsState>({ data: null, loading: false, error: null });
 export const traces = $state<TracesState>({ data: null, loading: false, error: null });
-export const txDetail = $state<TxDetailState>({ hash: '', data: null, loading: false, error: null });
-export const blockDetail = $state<BlockDetailState>({ number: null, data: null, loading: false, error: null });
+export const txDetail = $state<TxDetailState>({
+	hash: '',
+	data: null,
+	loading: false,
+	error: null
+});
+export const blockDetail = $state<BlockDetailState>({
+	number: null,
+	data: null,
+	loading: false,
+	error: null
+});
 
 export async function fetchBlocks(limit = 50, offset = 0) {
 	blocks.loading = true;
@@ -55,7 +65,7 @@ export async function fetchBlocks(limit = 50, offset = 0) {
 	try {
 		blocks.data = await client.blocks(limit, offset);
 	} catch (e) {
-		blocks.error = String(e);
+		if (!String(e).includes('cancelled')) blocks.error = String(e);
 	} finally {
 		blocks.loading = false;
 	}
@@ -67,7 +77,7 @@ export async function fetchTransactions(filter: TransactionFilter = {}) {
 	try {
 		transactions.data = await client.transactions(filter);
 	} catch (e) {
-		transactions.error = String(e);
+		if (!String(e).includes('cancelled')) transactions.error = String(e);
 	} finally {
 		transactions.loading = false;
 	}
@@ -79,7 +89,7 @@ export async function fetchTraces(filter: TraceFilter = {}) {
 	try {
 		traces.data = await client.traces(filter);
 	} catch (e) {
-		traces.error = String(e);
+		if (!String(e).includes('cancelled')) traces.error = String(e);
 	} finally {
 		traces.loading = false;
 	}
@@ -93,7 +103,7 @@ export async function fetchTxDetail(hash: string) {
 	try {
 		txDetail.data = await client.txDetail(hash);
 	} catch (e) {
-		txDetail.error = String(e);
+		if (!String(e).includes('cancelled')) txDetail.error = String(e);
 	} finally {
 		txDetail.loading = false;
 	}
@@ -107,7 +117,7 @@ export async function fetchBlockDetail(number: number) {
 	try {
 		blockDetail.data = await client.blockDetail(number);
 	} catch (e) {
-		blockDetail.error = String(e);
+		if (!String(e).includes('cancelled')) blockDetail.error = String(e);
 	} finally {
 		blockDetail.loading = false;
 	}

@@ -1,17 +1,15 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { tokens, fetchTokens } from '$lib/stores/tokens.svelte';
 	import { createSort } from '$lib/sort.svelte';
 	import { resolve } from '$app/paths';
 	import * as fmt from '$lib/fmt.js';
 	import AddrLink from '$lib/components/AddrLink.svelte';
+	import DataState from '$lib/components/DataState.svelte';
 
 	let searchQuery = $state('');
 	let statusFilter = $state('all');
 	let debounceTimer: ReturnType<typeof setTimeout> | undefined;
 	const sort = createSort('transfers', 'desc');
-
-	onMount(() => fetchTokens(500));
 
 	function handleSearchInput() {
 		clearTimeout(debounceTimer);
@@ -153,18 +151,7 @@
 					</tr>
 				</thead>
 				<tbody>
-					{#if tokens.loading && !tokens.data}
-						<tr
-							><td colspan="9" class="muted" style="text-align:center;padding:32px">loading…</td
-							></tr
-						>
-					{:else if sortedTokens.length === 0}
-						<tr
-							><td colspan="9" class="muted" style="text-align:center;padding:32px"
-								>no tokens found</td
-							></tr
-						>
-					{:else}
+					{#if sortedTokens.length}
 						{#each sortedTokens as token (token.id)}
 							<tr>
 								<td>
@@ -206,6 +193,8 @@
 								</td>
 							</tr>
 						{/each}
+					{:else}
+						<DataState loading={tokens.loading} error={tokens.error} colspan={9} label="tokens" />
 					{/if}
 				</tbody>
 			</table>

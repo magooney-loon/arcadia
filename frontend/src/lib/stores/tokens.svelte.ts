@@ -17,7 +17,7 @@ export async function fetchTokens(limit = 100, offset = 0, search?: string) {
 	try {
 		tokens.data = await client.list(limit, offset, search);
 	} catch (e) {
-		tokens.error = String(e);
+		if (!String(e).includes('cancelled')) tokens.error = String(e);
 	} finally {
 		tokens.loading = false;
 	}
@@ -37,7 +37,7 @@ export async function fetchTokenDetail(address: string, limit = 50, offset = 0) 
 	try {
 		tokenDetail.data = await client.detail(address, limit, offset);
 	} catch (e) {
-		tokenDetail.error = String(e);
+		if (!String(e).includes('cancelled')) tokenDetail.error = String(e);
 	} finally {
 		tokenDetail.loading = false;
 	}

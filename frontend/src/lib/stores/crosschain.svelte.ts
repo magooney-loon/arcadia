@@ -17,7 +17,7 @@ export async function fetchCrosschain(filter: CrosschainFilter = {}) {
 	try {
 		crosschain.data = await client.list(filter);
 	} catch (e) {
-		crosschain.error = String(e);
+		if (!String(e).includes('cancelled')) crosschain.error = String(e);
 	} finally {
 		crosschain.loading = false;
 	}

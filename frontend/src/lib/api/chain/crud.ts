@@ -1,4 +1,4 @@
-import { getApiUrl } from '../../stores/config.svelte.js';
+import { apiFetch } from '../utils.js';
 import type {
 	BlocksResponse,
 	TransactionsResponse,
@@ -19,35 +19,25 @@ function qs(params: Record<string, string | number | undefined>): string {
 }
 
 export class ChainCrudClient {
-	async blocks(limit = 50, offset = 0): Promise<BlocksResponse> {
-		const res = await fetch(`${getApiUrl()}/api/v1/blocks${qs({ limit, offset })}`);
-		if (!res.ok) throw new Error(`blocks: ${res.status}`);
-		return res.json();
+	blocks(limit = 50, offset = 0): Promise<BlocksResponse> {
+		return apiFetch<BlocksResponse>(`/api/v1/blocks${qs({ limit, offset })}`);
 	}
 
-	async transactions(filter: TransactionFilter = {}): Promise<TransactionsResponse> {
+	transactions(filter: TransactionFilter = {}): Promise<TransactionsResponse> {
 		const { limit = 50, offset = 0, ...rest } = filter;
-		const res = await fetch(`${getApiUrl()}/api/v1/transactions${qs({ limit, offset, ...rest })}`);
-		if (!res.ok) throw new Error(`transactions: ${res.status}`);
-		return res.json();
+		return apiFetch<TransactionsResponse>(`/api/v1/transactions${qs({ limit, offset, ...rest })}`);
 	}
 
-	async traces(filter: TraceFilter = {}): Promise<TracesResponse> {
+	traces(filter: TraceFilter = {}): Promise<TracesResponse> {
 		const { limit = 50, offset = 0, ...rest } = filter;
-		const res = await fetch(`${getApiUrl()}/api/v1/traces${qs({ limit, offset, ...rest })}`);
-		if (!res.ok) throw new Error(`traces: ${res.status}`);
-		return res.json();
+		return apiFetch<TracesResponse>(`/api/v1/traces${qs({ limit, offset, ...rest })}`);
 	}
 
-	async txDetail(hash: string): Promise<TxDetailResponse> {
-		const res = await fetch(`${getApiUrl()}/api/v1/tx/${encodeURIComponent(hash)}`);
-		if (!res.ok) throw new Error(`tx detail: ${res.status}`);
-		return res.json();
+	txDetail(hash: string): Promise<TxDetailResponse> {
+		return apiFetch<TxDetailResponse>(`/api/v1/tx/${encodeURIComponent(hash)}`);
 	}
 
-	async blockDetail(number: number): Promise<BlockDetailResponse> {
-		const res = await fetch(`${getApiUrl()}/api/v1/block/${number}`);
-		if (!res.ok) throw new Error(`block detail: ${res.status}`);
-		return res.json();
+	blockDetail(number: number): Promise<BlockDetailResponse> {
+		return apiFetch<BlockDetailResponse>(`/api/v1/block/${number}`);
 	}
 }

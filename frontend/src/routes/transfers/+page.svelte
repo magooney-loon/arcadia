@@ -1,11 +1,11 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { createSort } from '$lib/sort.svelte';
 	import { transfers, fetchTransfers } from '$lib/stores/transfers.svelte';
 	import { stats } from '$lib/stores/stats.svelte';
 	import * as fmt from '$lib/fmt.js';
 	import AddrLink from '$lib/components/AddrLink.svelte';
 	import TxLink from '$lib/components/TxLink.svelte';
+	import DataState from '$lib/components/DataState.svelte';
 
 	const TOKENS = ['all', 'USDC', 'EURC', 'USYC', 'OTHER'];
 	const TOKEN_COLORS: Record<string, string> = {
@@ -18,8 +18,6 @@
 	let tokenFilter = $state('all');
 	let offset = $state(0);
 	const limit = 50;
-
-	onMount(() => load());
 
 	function load() {
 		fetchTransfers({
@@ -100,19 +98,7 @@
 					</tr>
 				</thead>
 				<tbody>
-					{#if transfers.loading}
-						<tr
-							><td colspan="7" style="text-align:center;color:var(--fg-4);padding:32px" class="mono"
-								>loading…</td
-							></tr
-						>
-					{:else if transfers.error}
-						<tr
-							><td colspan="7" style="text-align:center;color:var(--err);padding:16px" class="mono"
-								>{transfers.error}</td
-							></tr
-						>
-					{:else if transfers.data?.transfers.length}
+					{#if transfers.data?.transfers.length}
 						{#each sortedTransfers as t (t.id)}
 							<tr>
 								<td><TxLink hash={t.tx_hash} /></td>
@@ -129,11 +115,12 @@
 							</tr>
 						{/each}
 					{:else}
-						<tr
-							><td colspan="7" style="text-align:center;color:var(--fg-4);padding:32px" class="mono"
-								>no results</td
-							></tr
-						>
+						<DataState
+							loading={transfers.loading}
+							error={transfers.error}
+							colspan={7}
+							label="transfers"
+						/>
 					{/if}
 				</tbody>
 			</table>

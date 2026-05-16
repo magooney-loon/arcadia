@@ -1,19 +1,17 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { transactions, fetchTransactions } from '$lib/stores/chain.svelte';
 	import { stats } from '$lib/stores/stats.svelte';
 	import * as fmt from '$lib/fmt.js';
 	import { createSort } from '$lib/sort.svelte';
 	import AddrLink from '$lib/components/AddrLink.svelte';
 	import TxLink from '$lib/components/TxLink.svelte';
+	import DataState from '$lib/components/DataState.svelte';
 
 	const METHODS = ['all', 'transfer', 'approve', 'swap', 'execute', 'multicall', 'deploy'];
 
 	let methodFilter = $state('all');
 	let offset = $state(0);
 	const limit = 100;
-
-	onMount(() => fetchTransactions({ limit, offset }));
 
 	function loadPage() {
 		fetchTransactions({ limit, offset });
@@ -96,28 +94,12 @@
 					</tr>
 				</thead>
 				<tbody>
-					{#if transactions.loading}
-						<tr
-							><td colspan="8" style="text-align:center;color:var(--fg-4);padding:32px" class="mono"
-								>loading…</td
-							></tr
-						>
-					{:else if transactions.error}
-						<tr
-							><td colspan="8" style="text-align:center;color:var(--err);padding:16px" class="mono"
-								>{transactions.error}</td
-							></tr
-						>
-					{:else if filtered().length}
+					{#if filtered().length}
 						{#each sortedTxs as t (t.hash)}
 							<tr>
-								<td
-									><TxLink hash={t.hash} /></td
-								>
+								<td><TxLink hash={t.hash} /></td>
 								<td><span class="badge info">{fmt.methodName(t.sighash)}</span></td>
-								<td class="addr"
-									><AddrLink address={t.from_addr} /></td
-								>
+								<td class="addr"><AddrLink address={t.from_addr} /></td>
 								<td class="muted">→</td>
 								<td class="addr"
 									>{#if t.is_contract_deploy}(new){:else}<AddrLink address={t.to_addr} />{/if}</td
@@ -134,11 +116,12 @@
 							</tr>
 						{/each}
 					{:else}
-						<tr
-							><td colspan="8" style="text-align:center;color:var(--fg-4);padding:32px" class="mono"
-								>no results</td
-							></tr
-						>
+						<DataState
+							loading={transactions.loading}
+							error={transactions.error}
+							colspan={8}
+							label="transactions"
+						/>
 					{/if}
 				</tbody>
 			</table>

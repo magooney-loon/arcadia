@@ -1,16 +1,14 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { graph, fetchEdges } from '$lib/stores/graph.svelte';
 	import ForceGraph from '$lib/components/ForceGraph.svelte';
 	import * as fmt from '$lib/fmt.js';
 	import { createSort } from '$lib/sort.svelte';
 	import AddrLink from '$lib/components/AddrLink.svelte';
+	import DataState from '$lib/components/DataState.svelte';
 
 	let walletInput = $state('');
 	let offset = $state(0);
 	const limit = 500;
-
-	onMount(() => load());
 
 	function load() {
 		fetchEdges({
@@ -73,13 +71,9 @@
 	<div class="graph-stage" style="margin-bottom:12px">
 		{#if edges.length}
 			<ForceGraph {edges} />
-		{:else if graph.loading}
-			<div style="position:absolute;inset:0;display:grid;place-items:center">
-				<span class="mono dim" style="font-size:11px">loading…</span>
-			</div>
 		{:else}
 			<div style="position:absolute;inset:0;display:grid;place-items:center">
-				<span class="mono dim" style="font-size:11px">no edges to display</span>
+				<DataState loading={graph.loading} error={graph.error} label="edges" compact />
 			</div>
 		{/if}
 	</div>
@@ -120,28 +114,12 @@
 					</tr>
 				</thead>
 				<tbody>
-					{#if graph.loading}
-						<tr
-							><td colspan="7" style="text-align:center;color:var(--fg-4);padding:32px" class="mono"
-								>loading…</td
-							></tr
-						>
-					{:else if graph.error}
-						<tr
-							><td colspan="7" style="text-align:center;color:var(--err);padding:16px" class="mono"
-								>{graph.error}</td
-							></tr
-						>
-					{:else if edges.length}
+					{#if edges.length}
 						{#each sortedEdges as e (e.from_wallet + e.to_wallet)}
 							<tr>
-								<td class="addr"
-									><AddrLink address={e.from_wallet} /></td
-								>
+								<td class="addr"><AddrLink address={e.from_wallet} /></td>
 								<td class="acc">→</td>
-								<td class="addr"
-									><AddrLink address={e.to_wallet} /></td
-								>
+								<td class="addr"><AddrLink address={e.to_wallet} /></td>
 								<td class="num">{fmt.num(e.tx_count)}</td>
 								<td class="num">{fmt.usdc(e.total_usdc_human)}</td>
 								<td>{e.from_is_agent ? '<span class="badge acc">agent</span>' : ''}</td>
@@ -149,11 +127,7 @@
 							</tr>
 						{/each}
 					{:else}
-						<tr
-							><td colspan="7" style="text-align:center;color:var(--fg-4);padding:32px" class="mono"
-								>no edges found</td
-							></tr
-						>
+						<DataState loading={graph.loading} error={graph.error} colspan={7} label="edges" />
 					{/if}
 				</tbody>
 			</table>

@@ -1,0 +1,127 @@
+package utils
+
+import (
+	"fmt"
+	"math/big"
+
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/pocketbase/pocketbase/core"
+)
+
+// WeiToUSDC converts a fee in native USDC wei (18 decimals) to a human-readable string.
+func WeiToUSDC(wei *big.Int) string {
+	if wei == nil || wei.Sign() == 0 {
+		return "0"
+	}
+	divisor := new(big.Int).Exp(big.NewInt(10), big.NewInt(18), nil)
+	quot := new(big.Float).Quo(new(big.Float).SetInt(wei), new(big.Float).SetInt(divisor))
+	return quot.Text('f', 8)
+}
+
+// StablecoinHuman converts an ERC-20 stablecoin amount (6 decimals) to a human-readable string.
+func StablecoinHuman(raw *big.Int) string {
+	if raw == nil || raw.Sign() == 0 {
+		return "0"
+	}
+	divisor := new(big.Int).Exp(big.NewInt(10), big.NewInt(6), nil)
+	quot := new(big.Float).Quo(new(big.Float).SetInt(raw), new(big.Float).SetInt(divisor))
+	return quot.Text('f', 6)
+}
+
+// TokenAmountHuman converts a raw uint256 amount to a human-readable string using
+// the supplied decimals. Output precision is min(decimals, 8).
+func TokenAmountHuman(raw *big.Int, decimals uint8) string {
+	if raw == nil || raw.Sign() == 0 {
+		return "0"
+	}
+	divisor := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(decimals)), nil)
+	quot := new(big.Float).Quo(new(big.Float).SetInt(raw), new(big.Float).SetInt(divisor))
+	prec := int(decimals)
+	if prec > 8 {
+		prec = 8
+	}
+	return quot.Text('f', prec)
+}
+
+// WeiToUSDCFloat is the float64 sibling of WeiToUSDC, used to populate the
+// indexed numeric columns that analytics queries ORDER BY / SUM on.
+func WeiToUSDCFloat(wei *big.Int) float64 {
+	if wei == nil || wei.Sign() == 0 {
+		return 0
+	}
+	divisor := new(big.Float).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(18), nil))
+	v, _ := new(big.Float).Quo(new(big.Float).SetInt(wei), divisor).Float64()
+	return v
+}
+
+// StablecoinHumanFloat is the float64 sibling of StablecoinHuman.
+func StablecoinHumanFloat(raw *big.Int) float64 {
+	if raw == nil || raw.Sign() == 0 {
+		return 0
+	}
+	divisor := new(big.Float).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(6), nil))
+	v, _ := new(big.Float).Quo(new(big.Float).SetInt(raw), divisor).Float64()
+	return v
+}
+
+// TokenAmountHumanFloat is the float64 sibling of TokenAmountHuman.
+func TokenAmountHumanFloat(raw *big.Int, decimals uint8) float64 {
+	if raw == nil || raw.Sign() == 0 {
+		return 0
+	}
+	divisor := new(big.Float).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(decimals)), nil))
+	v, _ := new(big.Float).Quo(new(big.Float).SetInt(raw), divisor).Float64()
+	return v
+}
+
+// FindCollection returns a collection or a descriptive error. Prefer this over
+// MustCollection inside goroutines where a panic would not be caught.
+func FindCollection(app core.App, name string) (*core.Collection, error) {
+	c, err := app.FindCollectionByNameOrId(name)
+	if err != nil {
+		return nil, fmt.Errorf("collection %q not found: %w", name, err)
+	}
+	return c, nil
+}
+
+// MustCollection fetches a collection by name and panics if missing.
+// Deprecated: use FindCollection in code paths that can return an error.
+func MustCollection(app core.App, name string) *core.Collection {
+	c, err := FindCollection(app, name)
+	if err != nil {
+		panic(err.Error())
+	}
+	return c
+}
+
+// AddressFromTopic extracts an Ethereum address from a 32-byte topic (last 20 bytes).
+func AddressFromTopic(h *common.Hash) string {
+	if h == nil {
+		return ""
+	}
+	return common.BytesToAddress(h.Bytes()[12:]).Hex()
+}
+
+// AddressFromBytes32 extracts an Ethereum address from a 32-byte ABI-padded slice (last 20 bytes).
+func AddressFromBytes32(b []byte) string {
+	if len(b) < 32 {
+		return ""
+	}
+	return common.BytesToAddress(b[12:32]).Hex()
+}
+
+// ReadUint32 reads a uint32 from 32 ABI-padded bytes at offset in data.
+func ReadUint32(data []byte, offset int) uint32 {
+	if len(data) < offset+32 {
+		return 0
+	}
+	return uint32(new(big.Int).SetBytes(data[offset : offset+32]).Uint64())
+}
+
+// ReadBig reads a *big.Int from 32 ABI bytes at offset in data.
+func ReadBig(data []byte, offset int) *big.Int {
+	if len(data) < offset+32 {
+		return new(big.Int)
+	}
+	return new(big.Int).SetBytes(data[offset : offset+32])
+}

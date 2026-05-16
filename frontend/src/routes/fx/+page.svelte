@@ -1,18 +1,16 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { fx, fetchFx } from '$lib/stores/fx.svelte';
 	import { stats } from '$lib/stores/stats.svelte';
 	import * as fmt from '$lib/fmt.js';
 	import { createSort } from '$lib/sort.svelte';
 	import AddrLink from '$lib/components/AddrLink.svelte';
+	import DataState from '$lib/components/DataState.svelte';
 
 	const STATUSES = ['all', 'created', 'taker_funded', 'maker_funded', 'settled', 'cancelled'];
 
 	let statusFilter = $state('all');
 	let offset = $state(0);
 	const limit = 50;
-
-	onMount(() => load());
 
 	function load() {
 		fetchFx({
@@ -98,19 +96,7 @@
 					</tr>
 				</thead>
 				<tbody>
-					{#if fx.loading}
-						<tr
-							><td colspan="7" style="text-align:center;color:var(--fg-4);padding:32px" class="mono"
-								>loading…</td
-							></tr
-						>
-					{:else if fx.error}
-						<tr
-							><td colspan="7" style="text-align:center;color:var(--err);padding:16px" class="mono"
-								>{fx.error}</td
-							></tr
-						>
-					{:else if fx.data?.trades.length}
+					{#if fx.data?.trades.length}
 						{#each sortedTrades as t, i (i)}
 							{@const inputTok = t.input_token as string}
 							{@const outputTok = t.output_token as string}
@@ -122,22 +108,14 @@
 										? (t.implied_rate as number).toFixed(4)
 										: '—'}</td
 								>
-								<td class="addr"
-									><AddrLink address={t.maker} /></td
-								>
-								<td class="addr"
-									><AddrLink address={t.taker} /></td
-								>
+								<td class="addr"><AddrLink address={t.maker} /></td>
+								<td class="addr"><AddrLink address={t.taker} /></td>
 								<td><span class="badge {fmt.fxBadge(t.status)}">{t.status}</span></td>
 								<td class="num muted">{fmt.blockAge(t.block_number, latestBlock)}</td>
 							</tr>
 						{/each}
 					{:else}
-						<tr
-							><td colspan="7" style="text-align:center;color:var(--fg-4);padding:32px" class="mono"
-								>no results</td
-							></tr
-						>
+						<DataState loading={fx.loading} error={fx.error} colspan={7} label="trades" />
 					{/if}
 				</tbody>
 			</table>

@@ -1,19 +1,14 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { resolve } from '$app/paths';
 	import { blocks, fetchBlocks } from '$lib/stores/chain.svelte';
 	import { blockStats, fetchBlockStats } from '$lib/stores/blockStats.svelte';
 	import { createSort } from '$lib/sort.svelte';
 	import * as fmt from '$lib/fmt.js';
 	import AddrLink from '$lib/components/AddrLink.svelte';
+	import DataState from '$lib/components/DataState.svelte';
 
 	let limit = $state(50);
 	let offset = $state(0);
-
-	onMount(() => {
-		fetchBlocks(limit, offset);
-		fetchBlockStats(limit, offset);
-	});
 
 	function load() {
 		fetchBlocks(limit, offset);
@@ -77,19 +72,7 @@
 					</tr>
 				</thead>
 				<tbody>
-					{#if blocks.loading}
-						<tr
-							><td colspan="6" style="text-align:center;color:var(--fg-4);padding:32px" class="mono"
-								>loading…</td
-							></tr
-						>
-					{:else if blocks.error}
-						<tr
-							><td colspan="6" style="text-align:center;color:var(--err);padding:16px" class="mono"
-								>{blocks.error}</td
-							></tr
-						>
-					{:else if blocks.data?.blocks.length}
+					{#if blocks.data?.blocks.length}
 						{#each sortedBlocks as b (b.number)}
 							{@const stat = feesMap.get(b.number)}
 							<tr>
@@ -102,19 +85,13 @@
 								>
 								<td class="muted">{fmt.tsAge(b.timestamp)}</td>
 								<td>{b.tx_count ?? 0}</td>
-								<td class="addr"
-									><AddrLink address={b.miner} /></td
-								>
+								<td class="addr"><AddrLink address={b.miner} /></td>
 								<td class="num">{fmt.pct(b.utilization_pct)}</td>
 								<td class="num">{stat ? fmt.usdc(stat.total_fee_usdc, 4) : '—'}</td>
 							</tr>
 						{/each}
 					{:else}
-						<tr
-							><td colspan="6" style="text-align:center;color:var(--fg-4);padding:32px" class="mono"
-								>no data</td
-							></tr
-						>
+						<DataState loading={blocks.loading} error={blocks.error} colspan={6} label="blocks" />
 					{/if}
 				</tbody>
 			</table>

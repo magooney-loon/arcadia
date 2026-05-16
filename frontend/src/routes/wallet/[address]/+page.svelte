@@ -1,20 +1,17 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
-	import { wallet, fetchWallet } from '$lib/stores/wallet.svelte';
+	import { wallet } from '$lib/stores/wallet.svelte';
 	import { stats } from '$lib/stores/stats.svelte';
 	import * as fmt from '$lib/fmt.js';
 	import TxLink from '$lib/components/TxLink.svelte';
 	import AddrLink from '$lib/components/AddrLink.svelte';
+	import DataState from '$lib/components/DataState.svelte';
 
 	const address = $derived(page.params.address ?? '');
 	const latestBlock = $derived(stats.data?.block_number ?? 0);
 
 	let tab = $state<'transfers' | 'txs' | 'edges'>('transfers');
-
-	$effect(() => {
-		if (address) fetchWallet(address, 50, 0);
-	});
 
 	const data = $derived(wallet.data);
 	const isAgent = $derived(data?.is_agent === true);
@@ -62,11 +59,13 @@
 		</div>
 	</div>
 
-	{#if wallet.loading}
-		<div class="card"><div class="card-body mono muted">loading…</div></div>
-	{:else if wallet.error}
-		<div class="card"><div class="card-body" style="color:var(--err)">{wallet.error}</div></div>
-	{:else if data}
+	{#if !data}
+		<div class="card">
+			<div class="card-body" style="padding:0">
+				<DataState loading={wallet.loading} error={wallet.error} label="wallet" />
+			</div>
+		</div>
+	{:else}
 		<!-- Agent stats banner (only if registered ERC-8004 agent) -->
 		{#if isAgent && agent}
 			<div
@@ -100,7 +99,13 @@
 
 		<!-- Per-token flow summary -->
 		{#if tokenFlow().length}
-			<div class="grid" style="grid-template-columns:repeat({Math.min(tokenFlow().length, 4)},1fr);margin-bottom:12px">
+			<div
+				class="grid"
+				style="grid-template-columns:repeat({Math.min(
+					tokenFlow().length,
+					4
+				)},1fr);margin-bottom:12px"
+			>
 				{#each tokenFlow().slice(0, 4) as [sym, flow] (sym)}
 					<div class="stat">
 						<div class="label">{sym} net · recent 50</div>
@@ -145,7 +150,7 @@
 							</tr>
 						</thead>
 						<tbody>
-							{#each [...(data.received ?? []).map((t) => ({ ...t, dir: 'in' as const })), ...(data.sent ?? []).map((t) => ({ ...t, dir: 'out' as const }))].sort((a, b) => ((b as { block_number?: number }).block_number ?? 0) - ((a as { block_number?: number }).block_number ?? 0)) as t (((t as { id?: string }).id ?? '') + (t as { dir: string }).dir)}
+							{#each [...(data.received ?? []).map( (t) => ({ ...t, dir: 'in' as const }) ), ...(data.sent ?? []).map( (t) => ({ ...t, dir: 'out' as const }) )].sort((a, b) => ((b as { block_number?: number }).block_number ?? 0) - ((a as { block_number?: number }).block_number ?? 0)) as t (((t as { id?: string }).id ?? '') + (t as { dir: string }).dir)}
 								{@const tt = t as {
 									dir: 'in' | 'out';
 									tx_hash?: string;
@@ -164,9 +169,7 @@
 									<td><span class="badge muted">{tt.token_symbol ?? 'OTHER'}</span></td>
 									<td class="addr">
 										<a
-											href={resolve(
-												`/wallet/${tt.dir === 'in' ? tt.from_addr : tt.to_addr}/`
-											)}
+											href={resolve(`/wallet/${tt.dir === 'in' ? tt.from_addr : tt.to_addr}/`)}
 											style="text-decoration:none"
 										>
 											{fmt.addr(tt.dir === 'in' ? tt.from_addr : tt.to_addr)}
@@ -180,7 +183,11 @@
 								</tr>
 							{/each}
 							{#if !(data.sent?.length || data.received?.length)}
-								<tr><td colspan="6" class="mono muted" style="text-align:center;padding:32px">no transfers</td></tr>
+								<tr
+									><td colspan="6" class="mono muted" style="text-align:center;padding:32px"
+										>no transfers</td
+									></tr
+								>
 							{/if}
 						</tbody>
 					</table>
@@ -201,7 +208,7 @@
 							</tr>
 						</thead>
 						<tbody>
-							{#each [...(data.txs_received ?? []).map((t) => ({ ...t, dir: 'in' as const })), ...(data.txs_sent ?? []).map((t) => ({ ...t, dir: 'out' as const }))].sort((a, b) => ((b as { block_number?: number }).block_number ?? 0) - ((a as { block_number?: number }).block_number ?? 0)) as t (((t as { id?: string }).id ?? '') + (t as { dir: string }).dir)}
+							{#each [...(data.txs_received ?? []).map( (t) => ({ ...t, dir: 'in' as const }) ), ...(data.txs_sent ?? []).map( (t) => ({ ...t, dir: 'out' as const }) )].sort((a, b) => ((b as { block_number?: number }).block_number ?? 0) - ((a as { block_number?: number }).block_number ?? 0)) as t (((t as { id?: string }).id ?? '') + (t as { dir: string }).dir)}
 								{@const tt = t as {
 									dir: 'in' | 'out';
 									hash?: string;
@@ -220,7 +227,10 @@
 									<td>
 										<TxLink hash={tt.hash} />
 									</td>
-									<td><span class="mono" style="font-size:11px">{fmt.methodName(tt.sighash)}</span></td>
+									<td
+										><span class="mono" style="font-size:11px">{fmt.methodName(tt.sighash)}</span
+										></td
+									>
 									<td class="addr">
 										<AddrLink address={tt.dir === 'in' ? tt.from_addr : tt.to_addr} />
 									</td>
@@ -229,7 +239,11 @@
 								</tr>
 							{/each}
 							{#if !(data.txs_sent?.length || data.txs_received?.length)}
-								<tr><td colspan="6" class="mono muted" style="text-align:center;padding:32px">no transactions</td></tr>
+								<tr
+									><td colspan="6" class="mono muted" style="text-align:center;padding:32px"
+										>no transactions</td
+									></tr
+								>
 							{/if}
 						</tbody>
 					</table>
@@ -249,7 +263,7 @@
 							</tr>
 						</thead>
 						<tbody>
-							{#each [...(data.outgoing_edges ?? []).map((e) => ({ ...e, dir: 'out' as const })), ...(data.incoming_edges ?? []).map((e) => ({ ...e, dir: 'in' as const }))].sort((a, b) => (b.tx_count ?? 0) - (a.tx_count ?? 0)) as e (e.id + e.dir)}
+							{#each [...(data.outgoing_edges ?? []).map( (e) => ({ ...e, dir: 'out' as const }) ), ...(data.incoming_edges ?? []).map( (e) => ({ ...e, dir: 'in' as const }) )].sort((a, b) => (b.tx_count ?? 0) - (a.tx_count ?? 0)) as e (e.id + e.dir)}
 								<tr>
 									<td
 										><span class="badge {e.dir === 'in' ? 'ok' : 'err'}"
@@ -258,9 +272,7 @@
 									>
 									<td class="addr">
 										<a
-											href={resolve(
-												`/wallet/${e.dir === 'in' ? e.from_wallet : e.to_wallet}/`
-											)}
+											href={resolve(`/wallet/${e.dir === 'in' ? e.from_wallet : e.to_wallet}/`)}
 											style="text-decoration:none"
 										>
 											{fmt.addr(e.dir === 'in' ? e.from_wallet : e.to_wallet)}
@@ -272,7 +284,11 @@
 								</tr>
 							{/each}
 							{#if !(data.outgoing_edges?.length || data.incoming_edges?.length)}
-								<tr><td colspan="5" class="mono muted" style="text-align:center;padding:32px">no edges</td></tr>
+								<tr
+									><td colspan="5" class="mono muted" style="text-align:center;padding:32px"
+										>no edges</td
+									></tr
+								>
 							{/if}
 						</tbody>
 					</table>

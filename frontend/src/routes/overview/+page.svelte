@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { resolve } from '$app/paths';
-	import { stats, fetchStats } from '$lib/stores/stats.svelte';
-	import { blocks, transactions, fetchBlocks, fetchTransactions } from '$lib/stores/chain.svelte';
+	import { stats } from '$lib/stores/stats.svelte';
+	import { blocks, transactions } from '$lib/stores/chain.svelte';
 	import { blockStats, fetchBlockStats } from '$lib/stores/blockStats.svelte';
 	import {
 		analyticsOverview,
@@ -15,15 +15,17 @@
 		fetchAgentLeaderboard
 	} from '$lib/stores/analytics.svelte';
 	import * as fmt from '$lib/fmt.js';
+	import { setRealtimeWindow, connectCharts, disconnectCharts } from '$lib/realtime';
 	import Chart from '$lib/components/Chart.svelte';
 	import AddrLink from '$lib/components/AddrLink.svelte';
 	import TxLink from '$lib/components/TxLink.svelte';
+	import DataState from '$lib/components/DataState.svelte';
 
 	type Window = '1h' | '24h' | '7d';
 	let selectedWindow = $state<Window>('24h');
 
 	function refreshAnalytics() {
-		fetchBlockStats(200);
+		fetchBlockStats(50);
 		fetchAnalyticsOverview({ window: selectedWindow });
 		fetchAnalyticsBridgeFlow({ window: selectedWindow });
 		fetchAnalyticsVolume({ window: selectedWindow });
@@ -31,21 +33,12 @@
 	}
 
 	onMount(() => {
-		// Fast pool: live chain data (6s)
-		const refreshLive = () => {
-			fetchStats();
-			fetchBlocks(10);
-			fetchTransactions({ limit: 10 });
-		};
-
-		refreshLive();
-		refreshAnalytics();
-
-		const liveId = setInterval(refreshLive, 2000);
-		const analyticsId = setInterval(refreshAnalytics, 10000);
+		setRealtimeWindow(selectedWindow);
+		connectCharts();
+		const lbId = setInterval(() => fetchAgentLeaderboard(5), 60000);
 		return () => {
-			clearInterval(liveId);
-			clearInterval(analyticsId);
+			clearInterval(lbId);
+			disconnectCharts();
 		};
 	});
 
@@ -111,11 +104,15 @@
 			<div class="view-sub">Live chain state · arc testnet</div>
 		</div>
 		<div class="view-actions">
-			{#each (['1h', '24h', '7d'] as Window[]) as w (w)}
+			{#each ['1h', '24h', '7d'] as Window[] as w (w)}
 				<button
 					class="btn ghost {selectedWindow === w ? 'active' : ''}"
-					onclick={() => { selectedWindow = w; refreshAnalytics(); }}
-				>{w}</button>
+					onclick={() => {
+						selectedWindow = w;
+						setRealtimeWindow(w);
+						refreshAnalytics();
+					}}>{w}</button
+				>
 			{/each}
 		</div>
 	</div>
@@ -175,7 +172,10 @@
 
 	<!-- Fee analytics · stat cards -->
 	{#if analyticsOverview.data}
-		<div class="grid" style="grid-template-columns:repeat(3,1fr);margin-top:12px">
+		<div
+			class="grid"
+			style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));margin-top:12px"
+		>
 			<div class="stat">
 				<div class="label">Fee p50</div>
 				<div class="value" style="color:var(--info)">
@@ -199,7 +199,9 @@
 					style="color:{analyticsOverview.data.failed_tx_ratio > 0.05 ? 'var(--err)' : 'var(--ok)'}"
 				>
 					{#key analyticsOverview.data.snapshot_at}
-						<span class="flash-val">{(analyticsOverview.data.failed_tx_ratio * 100).toFixed(2)}%</span>
+						<span class="flash-val"
+							>{(analyticsOverview.data.failed_tx_ratio * 100).toFixed(2)}%</span
+						>
 					{/key}
 				</div>
 			</div>
@@ -208,7 +210,10 @@
 
 	<!-- Stablecoin volume breakdown + whales -->
 	{#if volume}
-		<div class="grid" style="grid-template-columns:repeat(5,1fr);margin-top:12px">
+		<div
+			class="grid"
+			style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));margin-top:12px"
+		>
 			<div class="stat">
 				<div class="label" style="color:var(--ok)">USDC vol · {selectedWindow}</div>
 				<div class="value">
@@ -260,7 +265,10 @@
 				</div>
 				<div class="mono dim" style="font-size:10px">
 					{#if largestTransfer.block}
-						<a href={resolve(`/blocks/${largestTransfer.block}/`)} style="text-decoration:none;color:inherit">block #{largestTransfer.block}</a>
+						<a
+							href={resolve(`/blocks/${largestTransfer.block}/`)}
+							style="text-decoration:none;color:inherit">block #{largestTransfer.block}</a
+						>
 					{:else}—{/if}
 				</div>
 			</div>
@@ -272,7 +280,7 @@
 		<div class="grid grid-2" style="margin-top:12px">
 			<div class="card">
 				<div class="card-head">
-					<div class="card-title">TPS · last 200 blocks</div>
+					<div class="card-title">TPS · last 50 blocks</div>
 					<div class="card-sub">transactions per second</div>
 				</div>
 				<div class="card-body" style="padding:4px 8px 8px">
@@ -281,7 +289,7 @@
 			</div>
 			<div class="card">
 				<div class="card-head">
-					<div class="card-title">Avg fee · last 200 blocks</div>
+					<div class="card-title">Avg fee · last 50 blocks</div>
 					<div class="card-sub">USDC per transaction</div>
 				</div>
 				<div class="card-body" style="padding:4px 8px 8px">
@@ -292,7 +300,7 @@
 		<div class="grid grid-2" style="margin-top:12px">
 			<div class="card">
 				<div class="card-head">
-					<div class="card-title">Tx count · last 200 blocks</div>
+					<div class="card-title">Tx count · last 50 blocks</div>
 					<div class="card-sub">transactions per block</div>
 				</div>
 				<div class="card-body" style="padding:4px 8px 8px">
@@ -301,7 +309,7 @@
 			</div>
 			<div class="card">
 				<div class="card-head">
-					<div class="card-title">Gas utilization · last 200 blocks</div>
+					<div class="card-title">Gas utilization · last 50 blocks</div>
 					<div class="card-sub">block capacity used</div>
 				</div>
 				<div class="card-body" style="padding:4px 8px 8px">
@@ -335,7 +343,7 @@
 						</div>
 					{/each}
 				{:else}
-					<p class="mono muted" style="padding:32px;text-align:center;font-size:11px">loading…</p>
+					<DataState loading={blocks.loading} error={blocks.error} label="blocks" />
 				{/if}
 			</div>
 		</div>
@@ -366,7 +374,11 @@
 						</div>
 					{/each}
 				{:else}
-					<p class="mono muted" style="padding:32px;text-align:center;font-size:11px">loading…</p>
+					<DataState
+						loading={transactions.loading}
+						error={transactions.error}
+						label="transactions"
+					/>
 				{/if}
 			</div>
 		</div>
@@ -400,7 +412,11 @@
 						</div>
 					{/each}
 				{:else}
-					<p class="mono muted" style="padding:32px;text-align:center;font-size:11px">loading…</p>
+					<DataState
+						loading={analyticsAgentLeaderboard.loading}
+						error={analyticsAgentLeaderboard.error}
+						label="agents"
+					/>
 				{/if}
 			</div>
 		</div>
@@ -440,7 +456,12 @@
 						</div>
 					{/each}
 				{:else}
-					<p class="mono muted" style="padding:14px;font-size:11px">loading…</p>
+					<DataState
+						loading={analyticsBridgeFlow.loading}
+						error={analyticsBridgeFlow.error}
+						label="bridge data"
+						compact
+					/>
 				{/if}
 			</div>
 		</div>

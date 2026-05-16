@@ -17,7 +17,7 @@ export async function fetchBlockStats(limit = 50, offset = 0) {
 	try {
 		blockStats.data = await client.list(limit, offset);
 	} catch (e) {
-		blockStats.error = String(e);
+		if (!String(e).includes('cancelled')) blockStats.error = String(e);
 	} finally {
 		blockStats.loading = false;
 	}
