@@ -54,8 +54,29 @@ export function setRealtimeWindow(window: string) {
 	activeWindow = window;
 }
 
+// safeSubscribe wraps pb.realtime.subscribe so a failed handshake
+// (e.g. "EventSource connect took too long" when the server is busy)
+// becomes a non-fatal console warning instead of an uncaught promise
+// rejection. The PocketBase SDK will auto-retry the connection in the
+// background, so a transient failure during heavy sync is recoverable.
+async function safeSubscribe(topic: string, handler: (e: unknown) => void) {
+	try {
+		await pb.realtime.subscribe(topic, handler);
+	} catch (err) {
+		console.warn(`[realtime] subscribe(${topic}) failed:`, err);
+	}
+}
+
+async function safeUnsubscribe(topic: string) {
+	try {
+		await pb.realtime.unsubscribe(topic);
+	} catch {
+		// best-effort; the SDK may already be disconnected
+	}
+}
+
 export async function connectRealtime() {
-	await pb.realtime.subscribe('indexer', (e: unknown) => {
+	await safeSubscribe('indexer', (e: unknown) => {
 		const p = e as IndexerPayload;
 		if (p.stats) stats.data = p.stats;
 		if (p.health) health.data = p.health;
@@ -63,7 +84,7 @@ export async function connectRealtime() {
 		if (p.transactions) transactions.data = p.transactions;
 	});
 
-	await pb.realtime.subscribe('analytics', (e: unknown) => {
+	await safeSubscribe('analytics', (e: unknown) => {
 		const p = e as AnalyticsPayload;
 		if (p.window !== activeWindow) return;
 		if (p.overview) analyticsOverview.data = p.overview;
@@ -73,20 +94,20 @@ export async function connectRealtime() {
 }
 
 export async function disconnectRealtime() {
-	await pb.realtime.unsubscribe('indexer');
-	await pb.realtime.unsubscribe('analytics');
+	await safeUnsubscribe('indexer');
+	await safeUnsubscribe('analytics');
 }
 
 // The `charts` topic carries the 200-row block_stats series. It's only
 // useful to pages that render charts (overview), so it's a separate
 // subscription with its own lifecycle — view-bound, not app-bound.
 export async function connectCharts() {
-	await pb.realtime.subscribe('charts', (e: unknown) => {
+	await safeSubscribe('charts', (e: unknown) => {
 		const p = e as ChartsPayload;
 		if (p.block_stats) blockStats.data = p.block_stats;
 	});
 }
 
 export async function disconnectCharts() {
-	await pb.realtime.unsubscribe('charts');
+	await safeUnsubscribe('charts');
 }

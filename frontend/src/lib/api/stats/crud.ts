@@ -1,10 +1,8 @@
-import { getApiUrl } from '../../stores/config.svelte.js';
+import { apiFetch } from '../utils.js';
 import type { StatsResponse } from './types.js';
 
 export class StatsCrudClient {
-	async get(): Promise<StatsResponse> {
-		const res = await fetch(`${getApiUrl()}/api/v1/stats`);
-		if (!res.ok) throw new Error(`stats: ${res.status}`);
-		return res.json();
+	get(): Promise<StatsResponse> {
+		return apiFetch<StatsResponse>('/api/v1/stats');
 	}
 }

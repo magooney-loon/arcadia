@@ -1,4 +1,4 @@
-import { getApiUrl } from '../../stores/config.svelte.js';
+import { apiFetch } from '../utils.js';
 import type {
 	FeesFilter,
 	FeesResponse,
@@ -22,40 +22,30 @@ function qs(params: Record<string, string | number | undefined | null>): string 
 	return s ? `?${s}` : '';
 }
 
+type AnyFilter = Record<string, string | number | undefined | null>;
+
 export class AnalyticsCrudClient {
-	async fees(filter: FeesFilter = {}): Promise<FeesResponse> {
-		const res = await fetch(`${getApiUrl()}/api/v1/analytics/fees${qs(filter as Record<string, string | number | undefined | null>)}`);
-		if (!res.ok) throw new Error(`analytics/fees: ${res.status}`);
-		return res.json();
+	fees(filter: FeesFilter = {}): Promise<FeesResponse> {
+		return apiFetch<FeesResponse>(`/api/v1/analytics/fees${qs(filter as AnyFilter)}`);
 	}
 
-	async volume(filter: VolumeFilter = {}): Promise<VolumeResponse> {
-		const res = await fetch(`${getApiUrl()}/api/v1/analytics/volume${qs(filter as Record<string, string | number | undefined | null>)}`);
-		if (!res.ok) throw new Error(`analytics/volume: ${res.status}`);
-		return res.json();
+	volume(filter: VolumeFilter = {}): Promise<VolumeResponse> {
+		return apiFetch<VolumeResponse>(`/api/v1/analytics/volume${qs(filter as AnyFilter)}`);
 	}
 
-	async bridgeFlow(filter: BridgeFlowFilter = {}): Promise<BridgeFlowResponse> {
-		const res = await fetch(`${getApiUrl()}/api/v1/analytics/bridge_flow${qs(filter as Record<string, string | number | undefined | null>)}`);
-		if (!res.ok) throw new Error(`analytics/bridge_flow: ${res.status}`);
-		return res.json();
+	bridgeFlow(filter: BridgeFlowFilter = {}): Promise<BridgeFlowResponse> {
+		return apiFetch<BridgeFlowResponse>(`/api/v1/analytics/bridge_flow${qs(filter as AnyFilter)}`);
 	}
 
-	async agentLeaderboard(limit = 50): Promise<AgentLeaderboardResponse> {
-		const res = await fetch(`${getApiUrl()}/api/v1/analytics/agent_leaderboard${qs({ limit })}`);
-		if (!res.ok) throw new Error(`analytics/agent_leaderboard: ${res.status}`);
-		return res.json();
+	agentLeaderboard(limit = 50): Promise<AgentLeaderboardResponse> {
+		return apiFetch<AgentLeaderboardResponse>(`/api/v1/analytics/agent_leaderboard${qs({ limit })}`);
 	}
 
-	async overview(filter: OverviewFilter = {}): Promise<OverviewResponse> {
-		const res = await fetch(`${getApiUrl()}/api/v1/analytics/overview${qs(filter as Record<string, string | number | undefined | null>)}`);
-		if (!res.ok) throw new Error(`analytics/overview: ${res.status}`);
-		return res.json();
+	overview(filter: OverviewFilter = {}): Promise<OverviewResponse> {
+		return apiFetch<OverviewResponse>(`/api/v1/analytics/overview${qs(filter as AnyFilter)}`);
 	}
 
-	async history(filter: HistoryFilter = {}): Promise<HistoryResponse> {
-		const res = await fetch(`${getApiUrl()}/api/v1/analytics/history${qs(filter as Record<string, string | number | undefined | null>)}`);
-		if (!res.ok) throw new Error(`analytics/history: ${res.status}`);
-		return res.json();
+	history(filter: HistoryFilter = {}): Promise<HistoryResponse> {
+		return apiFetch<HistoryResponse>(`/api/v1/analytics/history${qs(filter as AnyFilter)}`);
 	}
 }

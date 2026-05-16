@@ -1,4 +1,4 @@
-import { getApiUrl } from '../../stores/config.svelte.js';
+import { apiFetch } from '../utils.js';
 import type { WalletResponse } from './types.js';
 
 function qs(params: Record<string, string | number | undefined>): string {
@@ -11,9 +11,10 @@ function qs(params: Record<string, string | number | undefined>): string {
 }
 
 export class WalletCrudClient {
-	async get(address: string, limit = 50, offset = 0): Promise<WalletResponse> {
-		const res = await fetch(`${getApiUrl()}/api/v1/wallet/${address}${qs({ limit, offset })}`);
-		if (!res.ok) throw new Error(`wallet: ${res.status}`);
-		return res.json();
+	// Wallet endpoint runs 7 concurrent queries server-side, so it's
+	// the slowest single REST call we make — give it more headroom
+	// than the default before timing out.
+	get(address: string, limit = 50, offset = 0): Promise<WalletResponse> {
+		return apiFetch<WalletResponse>(`/api/v1/wallet/${address}${qs({ limit, offset })}`, {}, 25_000);
 	}
 }

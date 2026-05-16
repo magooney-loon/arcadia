@@ -1,4 +1,4 @@
-import { getApiUrl } from '../../stores/config.svelte.js';
+import { apiFetch } from '../utils.js';
 import type { TransfersResponse, TransferFilter } from './types.js';
 
 function qs(params: Record<string, string | number | undefined>): string {
@@ -11,12 +11,10 @@ function qs(params: Record<string, string | number | undefined>): string {
 }
 
 export class TransfersCrudClient {
-	async list(filter: TransferFilter = {}): Promise<TransfersResponse> {
+	list(filter: TransferFilter = {}): Promise<TransfersResponse> {
 		const { limit = 50, offset = 0, block, token, from, to } = filter;
-		const res = await fetch(
-			`${getApiUrl()}/api/v1/transfers${qs({ limit, offset, block, token, from, to })}`
+		return apiFetch<TransfersResponse>(
+			`/api/v1/transfers${qs({ limit, offset, block, token, from, to })}`
 		);
-		if (!res.ok) throw new Error(`transfers: ${res.status}`);
-		return res.json();
 	}
 }
