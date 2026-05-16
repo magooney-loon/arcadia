@@ -6,12 +6,50 @@ import (
 
 	"github.com/joho/godotenv"
 	app "github.com/magooney-loon/pb-ext/core"
+	"github.com/pocketbase/dbx"
+	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/core"
+	_ "modernc.org/sqlite"
 
 	"arcadia/internal/indexer"
 	"arcadia/internal/jobs"
 	"arcadia/internal/server"
 )
+
+// arcadiaPragmas are layered onto PocketBase's DSN-applied defaults via a
+// custom DBConnect so they take effect on every connection in both the
+// concurrent (reader) and nonconcurrent (writer) pools.
+//
+// Why each pragma:
+//   - busy_timeout(10000):       PocketBase default; restated because it must
+//                                come before journal_mode(WAL).
+//   - journal_mode(WAL):         required for concurrent readers + writer.
+//   - synchronous(NORMAL):       safe under WAL; faster than FULL.
+//   - foreign_keys(ON):          parity with PB default.
+//   - temp_store(MEMORY):        keep sort/group spills out of disk.
+//   - cache_size(-32000):        32 MB page cache per connection (PB default).
+//   - journal_size_limit(...):   cap WAL+journal disk usage at 200 MB.
+//   - wal_autocheckpoint(256):   trigger passive checkpoints every 256 pages
+//                                (~1 MB) instead of the 1000-page default so
+//                                WAL stays small under sustained writer load.
+//                                The idle TRUNCATE checkpoint in the indexer
+//                                handles the case where readers block passive
+//                                checkpoints from making progress.
+//   - mmap_size(268435456):      256 MB memory-mapped read window; cuts
+//                                read-side syscalls during sprint indexing.
+const arcadiaPragmas = "?_pragma=busy_timeout(10000)" +
+	"&_pragma=journal_mode(WAL)" +
+	"&_pragma=synchronous(NORMAL)" +
+	"&_pragma=foreign_keys(ON)" +
+	"&_pragma=temp_store(MEMORY)" +
+	"&_pragma=cache_size(-32000)" +
+	"&_pragma=journal_size_limit(200000000)" +
+	"&_pragma=wal_autocheckpoint(256)" +
+	"&_pragma=mmap_size(268435456)"
+
+func arcadiaDBConnect(dbPath string) (*dbx.DB, error) {
+	return dbx.Open("sqlite", dbPath+arcadiaPragmas)
+}
 
 func main() {
 	// Load .env if present — silently ignored if the file doesn't exist
@@ -56,21 +94,14 @@ func initApp(devMode bool) {
 		opts = append(opts, app.InNormalMode())
 	}
 
-	// Option 1: Use a custom PocketBase config
-	// pbConfig := &pocketbase.Config{
-	// 	DefaultDev:     true,
-	// 	DefaultDataDir: "./custom_pb_data",
-	// }
-	// opts = append(opts, app.WithConfig(pbConfig))
-
-	// Option 2: Use an existing PocketBase instance
-	// pb := pocketbase.New()
-	// opts = append(opts, app.WithPocketbase(pb))
-
-	// Set custom port programmatically
-	// os.Args = []string{"app", "serve", "--http=127.0.0.1:9090"}
-
-	// Note: WithConfig and WithPocketbase cannot be used together
+	// Inject tuned SQLite PRAGMAs via a custom DBConnect. This is the
+	// only hook that runs *before* the connection pools open, so the
+	// values apply to every connection in both the concurrent (reader)
+	// and nonconcurrent (writer) pools. Earlier attempts via
+	// app.DB().NewQuery("PRAGMA …") only hit the writer connection.
+	opts = append(opts, app.WithConfig(&pocketbase.Config{
+		DBConnect: arcadiaDBConnect,
+	}))
 
 	srv := app.New(opts...)
 
@@ -79,13 +110,6 @@ func initApp(devMode bool) {
 	server.RegisterCollections(srv.App())
 	server.RegisterRoutes(srv.App())
 	jobs.RegisterJobs(srv.App())
-
-	// SQLite PRAGMAs are intentionally left as PocketBase's DSN-applied
-	// defaults (busy_timeout=10s, WAL, synchronous=NORMAL, cache=-32000,
-	// temp_store=MEMORY, foreign_keys=ON, journal_size_limit=200MB) which
-	// apply to every connection in both the concurrent and nonconcurrent
-	// pools. Earlier overrides via app.DB().NewQuery("PRAGMA …") only hit
-	// the writer connection and left the reader pool inconsistent.
 
 	srv.App().OnServe().BindFunc(func(e *core.ServeEvent) error {
 		app.SetupRecovery(srv.App(), e)

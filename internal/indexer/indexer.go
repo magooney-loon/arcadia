@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pocketbase/pocketbase/core"
@@ -212,12 +213,62 @@ func logIndexerHeartbeat(ctx context.Context, app core.App, client interface {
 		log.Printf("[indexer] heartbeat | processing batch #%d for %s | block %d | tip %d | lag %d | completed_batches=%d", processingBatch, processingFor, currentBlock, tip, lag, batchCount)
 	} else {
 		log.Printf("[indexer] heartbeat | idle %s | block %d | tip %d | lag %d | batches=%d", idleFor, currentBlock, tip, lag, batchCount)
+		// Caught up + no batch in flight = safe window to truncate the WAL.
+		// Passive autocheckpoints can't make progress while readers hold open
+		// snapshots, so the WAL grows during sprint catch-up. A TRUNCATE
+		// checkpoint blocks until readers drain and then resets the WAL file
+		// to zero length.
+		if lag == 0 {
+			maybeTruncateWAL(app)
+		}
 	}
 	_ = utils.SetMetaValue(app, "chainTip", strconv.FormatUint(tip, 10))
 	_ = utils.SetMetaValue(app, "lagBlocks", strconv.FormatUint(lag, 10))
 	if persist {
 		recordIndexerEvent(app, "info", "heartbeat", "indexer heartbeat", indexerEventFields{"attempt": attempt, "batch": batchCount, "block": currentBlock, "tip": tip, "lag": lag})
 	}
+}
+
+// ── WAL maintenance ──────────────────────────────────────────────────────────
+
+// walCheckpointCooldown caps how often the idle TRUNCATE checkpoint runs.
+// The PRAGMA blocks until all readers drain to the head of the WAL, so we
+// don't want to issue one on every 15s heartbeat — once per minute is plenty
+// to keep the WAL file bounded.
+const walCheckpointCooldown = time.Minute
+
+var (
+	walCheckpointInflight atomic.Bool
+	lastWALCheckpointNano atomic.Int64
+)
+
+// maybeTruncateWAL fires a `PRAGMA wal_checkpoint(TRUNCATE)` in a goroutine
+// when (a) no other checkpoint is in flight and (b) the cooldown has elapsed.
+// Called from the indexer heartbeat when lag==0 and no batch is processing.
+func maybeTruncateWAL(app core.App) {
+	last := lastWALCheckpointNano.Load()
+	if last > 0 && time.Since(time.Unix(0, last)) < walCheckpointCooldown {
+		return
+	}
+	if !walCheckpointInflight.CompareAndSwap(false, true) {
+		return
+	}
+	go func() {
+		defer walCheckpointInflight.Store(false)
+		start := time.Now()
+		var busy, logPages, checkpointed int
+		// PRAGMA wal_checkpoint(TRUNCATE) returns one row: (busy, log, ckpt).
+		// busy==1 means a reader/writer prevented full progress; that's
+		// informational, not an error.
+		err := app.DB().NewQuery("PRAGMA wal_checkpoint(TRUNCATE)").Row(&busy, &logPages, &checkpointed)
+		elapsed := time.Since(start)
+		lastWALCheckpointNano.Store(time.Now().UnixNano())
+		if err != nil {
+			log.Printf("[indexer] wal_checkpoint(TRUNCATE) failed in %s: %v", elapsed, err)
+			return
+		}
+		log.Printf("[indexer] wal_checkpoint(TRUNCATE) busy=%d log_pages=%d checkpointed=%d in %s", busy, logPages, checkpointed, elapsed)
+	}()
 }
 
 // ── Cursor management ─────────────────────────────────────────────────────────
