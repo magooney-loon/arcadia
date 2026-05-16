@@ -87,11 +87,22 @@ func initApp(devMode bool) {
 	srv.App().OnServe().BindFunc(func(e *core.ServeEvent) error {
 		db := e.App.DB()
 		for _, pragma := range []string{
+			// WAL mode allows concurrent readers while a writer holds the lock.
+			// This is the single most important setting for an app that has
+			// a background writer (indexer) and foreground readers (API).
+			"PRAGMA journal_mode=WAL",
 			"PRAGMA synchronous=NORMAL",
-			"PRAGMA busy_timeout=5000",
+			// busy_timeout: how long a blocked reader waits before giving up.
+			// 2s is enough for most batch commits; the indexer's transaction
+			// should never hold the lock longer than that.
+			"PRAGMA busy_timeout=2000",
 			"PRAGMA cache_size=-8000",
 			"PRAGMA temp_store=2",
 			"PRAGMA mmap_size=268435456",
+			// Checkpoint the WAL every 256 pages (~1MB) instead of the
+			// default 1000. Smaller checkpoints run faster and avoid the
+			// multi-second stall that blocks both reads and writes.
+			"PRAGMA wal_autocheckpoint=256",
 		} {
 			if _, err := db.NewQuery(pragma).Execute(); err != nil {
 				e.App.Logger().Warn("SQLite PRAGMA failed", "pragma", pragma, "error", err)

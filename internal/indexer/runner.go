@@ -121,7 +121,9 @@ func runIndexer(ctx context.Context, app core.App, attempt int) error {
 				ch <- fetchResult{tip: tip, start: start, atTip: true}
 				return
 			}
-			toBlock := start + 200
+			// 50 blocks per batch keeps the SQLite write transaction short
+			// (typically <200ms) so API reads aren't starved.
+			toBlock := start + 50
 			if toBlock > tip+1 {
 				toBlock = tip + 1
 			}
@@ -250,12 +252,12 @@ func runIndexer(ctx context.Context, app core.App, attempt int) error {
 		if next < tip {
 			var sleepDur time.Duration
 			switch {
-			case remainingLag >= 200:
+			case remainingLag >= 500:
 				// sprint — no sleep; let the prefetch win the race
-			case remainingLag >= 50:
-				sleepDur = 100 * time.Millisecond
+			case remainingLag >= 100:
+				sleepDur = 50 * time.Millisecond
 			default:
-				sleepDur = 400 * time.Millisecond
+				sleepDur = 200 * time.Millisecond
 			}
 			if sleepDur > 0 {
 				select {
