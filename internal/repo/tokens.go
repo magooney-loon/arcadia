@@ -6,12 +6,22 @@ import (
 
 // ListTokens returns token analytics records, optionally filtered by search query.
 func ListTokens(app core.App, search string, limit, offset int) ([]*core.Record, error) {
-	if search != "" {
-		return FindRecords(app, "token_analytics",
-			"(LOWER(symbol) LIKE {:s} OR LOWER(name) LIKE {:s} OR LOWER(token_address) LIKE {:s})",
-			"-transfer_count", limit, offset, map[string]any{"s": "%" + search + "%"})
+	filter, params := buildTokenFilter(search)
+	return FindRecords(app, "token_analytics", filter, "-transfer_count", limit, offset, params)
+}
+
+// CountTokens returns the total number of token_analytics rows matching the search.
+func CountTokens(app core.App, search string) (int, error) {
+	filter, params := buildTokenFilter(search)
+	return CountWithFilter(app, "token_analytics", filter, params)
+}
+
+func buildTokenFilter(search string) (string, map[string]any) {
+	if search == "" {
+		return "", nil
 	}
-	return FindRecords(app, "token_analytics", "", "-transfer_count", limit, offset)
+	return "(LOWER(symbol) LIKE {:s} OR LOWER(name) LIKE {:s} OR LOWER(token_address) LIKE {:s})",
+		map[string]any{"s": "%" + search + "%"}
 }
 
 // TokenByAddress returns token analytics for a specific address.

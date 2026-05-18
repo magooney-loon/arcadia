@@ -15,6 +15,7 @@ export interface Transfer {
 export interface TransfersResponse {
 	transfers: Transfer[];
 	count: number;
+	total: number;
 }
 
 export interface TransferFilter {

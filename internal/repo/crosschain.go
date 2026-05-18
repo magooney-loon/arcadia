@@ -17,6 +17,17 @@ type CrosschainFilter struct {
 
 // ListCrosschainEvents returns crosschain events matching the filter.
 func ListCrosschainEvents(app core.App, f CrosschainFilter, limit, offset int) ([]*core.Record, error) {
+	filter, params := buildCrosschainFilter(f)
+	return FindRecords(app, "crosschain_events", filter, "-block_number", limit, offset, params)
+}
+
+// CountCrosschainEvents returns the total number of crosschain events matching the filter.
+func CountCrosschainEvents(app core.App, f CrosschainFilter) (int, error) {
+	filter, params := buildCrosschainFilter(f)
+	return CountWithFilter(app, "crosschain_events", filter, params)
+}
+
+func buildCrosschainFilter(f CrosschainFilter) (string, map[string]any) {
 	parts := []string{}
 	params := map[string]any{}
 	if f.Protocol != "" {
@@ -40,6 +51,5 @@ func ListCrosschainEvents(app core.App, f CrosschainFilter, limit, offset int) (
 	} else if f.Direction == "outbound" {
 		parts = append(parts, "source_domain = 26 && destination_domain != 26")
 	}
-	filter := strings.Join(parts, " && ")
-	return FindRecords(app, "crosschain_events", filter, "-block_number", limit, offset, params)
+	return strings.Join(parts, " && "), params
 }

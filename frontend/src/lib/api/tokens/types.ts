@@ -17,6 +17,7 @@ export interface Token {
 export interface TokensResponse {
 	tokens: Token[];
 	count: number;
+	total: number;
 }
 
 export interface TokenDetailResponse {

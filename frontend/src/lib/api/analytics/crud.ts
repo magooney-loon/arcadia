@@ -37,8 +37,10 @@ export class AnalyticsCrudClient {
 		return apiFetch<BridgeFlowResponse>(`/api/v1/analytics/bridge_flow${qs(filter as AnyFilter)}`);
 	}
 
-	agentLeaderboard(limit = 50): Promise<AgentLeaderboardResponse> {
-		return apiFetch<AgentLeaderboardResponse>(`/api/v1/analytics/agent_leaderboard${qs({ limit })}`);
+	agentLeaderboard(limit = 50, offset = 0): Promise<AgentLeaderboardResponse> {
+		return apiFetch<AgentLeaderboardResponse>(
+			`/api/v1/analytics/agent_leaderboard${qs({ limit, offset })}`
+		);
 	}
 
 	overview(filter: OverviewFilter = {}): Promise<OverviewResponse> {

@@ -18,6 +18,7 @@ export interface Block {
 export interface BlocksResponse {
 	blocks: Block[];
 	count: number;
+	total: number;
 }
 
 export interface Transaction {
@@ -50,6 +51,7 @@ export interface Transaction {
 export interface TransactionsResponse {
 	transactions: Transaction[];
 	count: number;
+	total: number;
 }
 
 export interface TransactionFilter {

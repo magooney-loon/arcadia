@@ -15,19 +15,22 @@ import (
 func crosschainHandler(c *core.RequestEvent) error {
 	limit, offset := limitOffset(c)
 
-	records, err := repo.ListCrosschainEvents(c.App, repo.CrosschainFilter{
+	f := repo.CrosschainFilter{
 		Protocol:  qp(c, "protocol", ""),
 		EventType: qp(c, "event_type", ""),
 		Sender:    qp(c, "sender", ""),
 		Recipient: qp(c, "recipient", ""),
 		Direction: qp(c, "direction", ""),
-	}, limit, offset)
+	}
+	records, err := repo.ListCrosschainEvents(c.App, f, limit, offset)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error()})
 	}
+	total, _ := repo.CountCrosschainEvents(c.App, f)
 	return c.JSON(http.StatusOK, map[string]any{
 		"events": recordsToMaps(records),
 		"count":  len(records),
+		"total":  total,
 	})
 }
 

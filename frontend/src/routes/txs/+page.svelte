@@ -6,12 +6,13 @@
 	import AddrLink from '$lib/components/AddrLink.svelte';
 	import TxLink from '$lib/components/TxLink.svelte';
 	import DataState from '$lib/components/DataState.svelte';
+	import Pagination from '$lib/components/Pagination.svelte';
 
 	const METHODS = ['all', 'transfer', 'approve', 'swap', 'execute', 'multicall', 'deploy'];
 
 	let methodFilter = $state('all');
 	let offset = $state(0);
-	const limit = 100;
+	const limit = 45;
 
 	function loadPage() {
 		fetchTransactions({ limit, offset });
@@ -128,22 +129,17 @@
 		</div>
 	</div>
 
-	<div class="filter-bar" style="margin-top:10px;justify-content:flex-end">
-		<button
-			class="btn ghost"
-			disabled={offset === 0}
-			onclick={() => {
-				offset = Math.max(0, offset - limit);
-				loadPage();
-			}}>← prev</button
-		>
-		<span class="mono dim" style="font-size:11px">offset {offset}</span>
-		<button
-			class="btn ghost"
-			onclick={() => {
-				offset += limit;
-				loadPage();
-			}}>next →</button
-		>
-	</div>
+	<Pagination
+		{offset}
+		{limit}
+		total={transactions.data?.total ?? 0}
+		onPrev={() => {
+			offset = Math.max(0, offset - limit);
+			loadPage();
+		}}
+		onNext={() => {
+			offset += limit;
+			loadPage();
+		}}
+	/>
 </div>

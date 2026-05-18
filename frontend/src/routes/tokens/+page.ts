@@ -6,6 +6,6 @@ export const load: PageLoad = async () => {
 	abortAll();
 	// Don't await — let the page render immediately with loading state
 	// while data fetches in the background
-	fetchTokens(500);
+	fetchTokens(30, 0);
 	return {};
 };

@@ -85,6 +85,7 @@ export interface AgentLeaderboardEntry {
 export interface AgentLeaderboardResponse {
 	leaderboard: AgentLeaderboardEntry[];
 	count: number;
+	total: number;
 }
 
 // ── /analytics/overview ───────────────────────────────────────────────────────

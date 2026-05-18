@@ -22,9 +22,11 @@ func agentsHandler(c *core.RequestEvent) error {
 	for i, r := range records {
 		out[i] = enrichAgentRecord(r)
 	}
+	total, _ := repo.CountAgents(c.App)
 	return c.JSON(http.StatusOK, map[string]any{
 		"agents": out,
 		"count":  len(records),
+		"total":  total,
 	})
 }
 
@@ -69,9 +71,11 @@ func agentJobsHandler(c *core.RequestEvent) error {
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error()})
 	}
+	total, _ := repo.CountJobs(c.App, f)
 	return c.JSON(http.StatusOK, map[string]any{
 		"jobs":  recordsToMaps(records),
 		"count": len(records),
+		"total": total,
 	})
 }
 
@@ -79,7 +83,7 @@ func agentJobsHandler(c *core.RequestEvent) error {
 // API_TAGS Agents
 func analyticsAgentLeaderboardHandler(c *core.RequestEvent) error {
 	cacheHeaders(c, 60)
-	limit, _ := limitOffset(c)
+	limit, offset := limitOffset(c)
 	if limit > 100 {
 		limit = 100
 	}
@@ -95,7 +99,7 @@ func analyticsAgentLeaderboardHandler(c *core.RequestEvent) error {
 
 	// Index-backed sort on the numeric mirror column avoids the old in-memory
 	// sprintf+ParseFloat-per-agent pass and lets us cap the result set in SQL.
-	agents, err := repo.AgentLeaderboard(c.App, limit, 0)
+	agents, err := repo.AgentLeaderboard(c.App, limit, offset)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error()})
 	}
@@ -118,8 +122,10 @@ func analyticsAgentLeaderboardHandler(c *core.RequestEvent) error {
 		result = append(result, entry)
 	}
 
+	total, _ := repo.CountAgents(c.App)
 	return c.JSON(http.StatusOK, map[string]any{
 		"leaderboard": result,
 		"count":       len(result),
+		"total":       total,
 	})
 }

@@ -5,16 +5,24 @@
 	import * as fmt from '$lib/fmt.js';
 	import AddrLink from '$lib/components/AddrLink.svelte';
 	import DataState from '$lib/components/DataState.svelte';
+	import Pagination from '$lib/components/Pagination.svelte';
 
 	let searchQuery = $state('');
 	let statusFilter = $state('all');
+	let offset = $state(0);
+	const limit = 30;
 	let debounceTimer: ReturnType<typeof setTimeout> | undefined;
 	const sort = createSort('transfers', 'desc');
+
+	function load() {
+		fetchTokens(limit, offset, searchQuery.trim() || undefined);
+	}
 
 	function handleSearchInput() {
 		clearTimeout(debounceTimer);
 		debounceTimer = setTimeout(() => {
-			fetchTokens(500, 0, searchQuery.trim() || undefined);
+			offset = 0;
+			load();
 		}, 300);
 	}
 
@@ -67,7 +75,7 @@
 	<div class="grid grid-stats">
 		<div class="stat">
 			<div class="label">Tokens</div>
-			<div class="value">{tokens.data?.count ?? '—'}</div>
+			<div class="value">{tokens.data?.total ?? '—'}</div>
 		</div>
 		<div class="stat">
 			<div class="label">Total transfers</div>
@@ -199,10 +207,19 @@
 				</tbody>
 			</table>
 		</div>
-		<div class="table-foot">
-			<span class="mono dim" style="font-size:10px"
-				>{sortedTokens.length} of {tokens.data?.count ?? 0} tokens</span
-			>
-		</div>
 	</div>
+
+	<Pagination
+		{offset}
+		{limit}
+		total={tokens.data?.total ?? 0}
+		onPrev={() => {
+			offset = Math.max(0, offset - limit);
+			load();
+		}}
+		onNext={() => {
+			offset += limit;
+			load();
+		}}
+	/>
 </div>

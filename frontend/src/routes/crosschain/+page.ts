@@ -7,7 +7,7 @@ export const load: PageLoad = async () => {
 	abortAll();
 	// Don't await — let the page render immediately with loading state
 	// while data fetches in the background
-	fetchCrosschain({ limit: 50, offset: 0 });
+	fetchCrosschain({ limit: 40, offset: 0 });
 	fetchAnalyticsBridgeFlow();
 	return {};
 };

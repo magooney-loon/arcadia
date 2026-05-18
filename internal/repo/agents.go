@@ -19,6 +19,11 @@ func AgentLeaderboard(app core.App, limit, offset int) ([]*core.Record, error) {
 	return FindRecords(app, "agents", "", "-usdc_transferred_num", limit, offset)
 }
 
+// CountAgents returns the total number of registered agents.
+func CountAgents(app core.App) (int, error) {
+	return CountWithFilter(app, "agents", "", nil)
+}
+
 // JobAgg holds aggregated job statistics per agent address.
 type JobAgg struct {
 	Addr         string  `db:"addr"`

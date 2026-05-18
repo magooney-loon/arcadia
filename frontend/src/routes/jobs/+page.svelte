@@ -5,6 +5,7 @@
 	import * as fmt from '$lib/fmt.js';
 	import AddrLink from '$lib/components/AddrLink.svelte';
 	import DataState from '$lib/components/DataState.svelte';
+	import Pagination from '$lib/components/Pagination.svelte';
 
 	const TABS = [
 		{ label: 'All', status: '' },
@@ -19,7 +20,7 @@
 
 	let activeStatus = $state('');
 	let offset = $state(0);
-	const limit = 50;
+	const limit = 40;
 
 	function load() {
 		fetchAgentJobs({
@@ -157,22 +158,17 @@
 		</div>
 	</div>
 
-	<div class="filter-bar" style="margin-top:10px;justify-content:flex-end">
-		<button
-			class="btn ghost"
-			disabled={offset === 0}
-			onclick={() => {
-				offset = Math.max(0, offset - limit);
-				load();
-			}}>← prev</button
-		>
-		<span class="mono dim" style="font-size:11px">offset {offset}</span>
-		<button
-			class="btn ghost"
-			onclick={() => {
-				offset += limit;
-				load();
-			}}>next →</button
-		>
-	</div>
+	<Pagination
+		{offset}
+		{limit}
+		total={agentJobs.data?.total ?? 0}
+		onPrev={() => {
+			offset = Math.max(0, offset - limit);
+			load();
+		}}
+		onNext={() => {
+			offset += limit;
+			load();
+		}}
+	/>
 </div>

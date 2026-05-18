@@ -15,6 +15,7 @@ export interface Agent {
 export interface AgentsResponse {
 	agents: Agent[];
 	count: number;
+	total: number;
 }
 
 export interface AgentJob {
@@ -39,6 +40,7 @@ export interface AgentResponse {
 export interface AgentJobsResponse {
 	jobs: AgentJob[];
 	count: number;
+	total: number;
 }
 
 export interface AgentJobsFilter {

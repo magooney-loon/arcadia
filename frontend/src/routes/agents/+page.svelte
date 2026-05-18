@@ -4,8 +4,14 @@
 	import * as fmt from '$lib/fmt.js';
 	import AddrLink from '$lib/components/AddrLink.svelte';
 	import DataState from '$lib/components/DataState.svelte';
+	import Pagination from '$lib/components/Pagination.svelte';
 
-	let limit = $state(50);
+	const limit = 40;
+	let offset = $state(0);
+
+	function load() {
+		fetchAgentLeaderboard(limit, offset);
+	}
 
 	const board = $derived(analyticsAgentLeaderboard.data?.leaderboard ?? []);
 
@@ -36,17 +42,17 @@
 			<div class="view-sub">ERC-8004 · registered agents on arc testnet</div>
 		</div>
 		<div class="view-actions">
-			<button class="btn ghost" onclick={() => fetchAgentLeaderboard(limit)}>Refresh</button>
+			<button class="btn ghost" onclick={load}>Refresh</button>
 		</div>
 	</div>
 
 	<div class="grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:12px">
 		<div class="stat">
 			<div class="label">Total registered</div>
-			<div class="value">{analyticsAgentLeaderboard.data?.count ?? '—'}</div>
+			<div class="value">{analyticsAgentLeaderboard.data?.total ?? '—'}</div>
 		</div>
 		<div class="stat">
-			<div class="label">In leaderboard</div>
+			<div class="label">On this page</div>
 			<div class="value">{board.length}</div>
 		</div>
 		<div class="stat">
@@ -133,4 +139,18 @@
 			</table>
 		</div>
 	</div>
+
+	<Pagination
+		{offset}
+		{limit}
+		total={analyticsAgentLeaderboard.data?.total ?? 0}
+		onPrev={() => {
+			offset = Math.max(0, offset - limit);
+			load();
+		}}
+		onNext={() => {
+			offset += limit;
+			load();
+		}}
+	/>
 </div>

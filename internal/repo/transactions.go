@@ -20,6 +20,12 @@ func ListTransactions(app core.App, f TransactionFilter, limit, offset int) ([]*
 	return FindRecords(app, "transactions", filter, "-block_number", limit, offset, params)
 }
 
+// CountTransactions returns the total number of transactions matching the filter.
+func CountTransactions(app core.App, f TransactionFilter) (int, error) {
+	filter, params := buildTxFilter(f)
+	return CountWithFilter(app, "transactions", filter, params)
+}
+
 // TransactionByHash returns the transaction with the given hash, or nil if not found.
 func TransactionByHash(app core.App, hash string) (*core.Record, error) {
 	return LatestRecord(app, "transactions", "hash = {:h}", "", map[string]any{"h": hash})

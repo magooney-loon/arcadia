@@ -16,6 +16,17 @@ type JobFilter struct {
 
 // ListJobs returns agent jobs matching the given filter.
 func ListJobs(app core.App, f JobFilter, limit, offset int) ([]*core.Record, error) {
+	filter, params := buildJobFilter(f)
+	return FindRecords(app, "agent_jobs", filter, "-created_at_block", limit, offset, params)
+}
+
+// CountJobs returns the total number of agent jobs matching the filter.
+func CountJobs(app core.App, f JobFilter) (int, error) {
+	filter, params := buildJobFilter(f)
+	return CountWithFilter(app, "agent_jobs", filter, params)
+}
+
+func buildJobFilter(f JobFilter) (string, map[string]any) {
 	parts := []string{}
 	params := map[string]any{}
 	if f.Status != "" {
@@ -30,8 +41,7 @@ func ListJobs(app core.App, f JobFilter, limit, offset int) ([]*core.Record, err
 		parts = append(parts, "worker_address = {:w}")
 		params["w"] = f.Worker
 	}
-	filter := strings.Join(parts, " && ")
-	return FindRecords(app, "agent_jobs", filter, "-created_at_block", limit, offset, params)
+	return strings.Join(parts, " && "), params
 }
 
 // JobsByAddress returns jobs where the address is either employer or worker.

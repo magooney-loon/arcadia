@@ -17,6 +17,7 @@ export interface CrosschainEvent {
 export interface CrosschainResponse {
 	events: CrosschainEvent[];
 	count: number;
+	total: number;
 }
 
 export interface CrosschainFilter {

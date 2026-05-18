@@ -2,7 +2,9 @@ package repo
 
 import (
 	"fmt"
+	"strings"
 
+	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/core"
 )
 
@@ -49,6 +51,30 @@ func RowCount(app core.App, table string) (int, error) {
 		N int `db:"n"`
 	}
 	if err := app.DB().NewQuery("SELECT COUNT(*) AS n FROM " + table).One(&row); err != nil {
+		return 0, fmt.Errorf("count %s: %w", table, err)
+	}
+	return row.N, nil
+}
+
+// CountWithFilter returns the number of rows in a table matching the supplied
+// PocketBase-style filter. The filter string uses the same syntax accepted by
+// FindRecordsByFilter (e.g. "block_number = {:bn} && from_addr = {:fa}") and
+// the same {:param} placeholders. The "&&" and "||" operators are rewritten to
+// SQL "AND"/"OR" before executing the COUNT(*) so the filter can be authored
+// once and used by both list and count queries.
+func CountWithFilter(app core.App, table, filter string, params map[string]any) (int, error) {
+	sql := "SELECT COUNT(*) AS n FROM " + table
+	if filter != "" {
+		sql += " WHERE " + strings.ReplaceAll(strings.ReplaceAll(filter, "&&", "AND"), "||", "OR")
+	}
+	var row struct {
+		N int `db:"n"`
+	}
+	q := app.DB().NewQuery(sql)
+	if len(params) > 0 {
+		q = q.Bind(dbx.Params(params))
+	}
+	if err := q.One(&row); err != nil {
 		return 0, fmt.Errorf("count %s: %w", table, err)
 	}
 	return row.N, nil

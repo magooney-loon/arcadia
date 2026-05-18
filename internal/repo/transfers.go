@@ -22,6 +22,12 @@ func ListTransfers(app core.App, f TransferFilter, limit, offset int) ([]*core.R
 	return FindRecords(app, "transfers", filter, "-block_number", limit, offset, params)
 }
 
+// CountTransfers returns the total number of transfers matching the filter.
+func CountTransfers(app core.App, f TransferFilter) (int, error) {
+	filter, params := buildTransferFilter(f)
+	return CountWithFilter(app, "transfers", filter, params)
+}
+
 // TransfersByTokenAddress returns transfers for a specific token.
 func TransfersByTokenAddress(app core.App, tokenAddr string, limit, offset int) ([]*core.Record, error) {
 	return FindRecords(app, "transfers", "token_address = {:a}", "-block_number", limit, offset, map[string]any{"a": tokenAddr})

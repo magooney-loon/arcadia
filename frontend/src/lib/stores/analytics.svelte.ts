@@ -126,11 +126,11 @@ export async function fetchAnalyticsHistory(filter: HistoryFilter = {}) {
 	}
 }
 
-export async function fetchAgentLeaderboard(limit = 50) {
+export async function fetchAgentLeaderboard(limit = 50, offset = 0) {
 	analyticsAgentLeaderboard.loading = true;
 	analyticsAgentLeaderboard.error = null;
 	try {
-		analyticsAgentLeaderboard.data = await client.agentLeaderboard(limit);
+		analyticsAgentLeaderboard.data = await client.agentLeaderboard(limit, offset);
 	} catch (e) {
 		if (!String(e).includes('cancelled')) analyticsAgentLeaderboard.error = String(e);
 	} finally {

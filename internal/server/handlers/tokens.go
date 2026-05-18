@@ -37,9 +37,11 @@ func transfersHandler(c *core.RequestEvent) error {
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error()})
 	}
+	total, _ := repo.CountTransfers(c.App, f)
 	return c.JSON(http.StatusOK, map[string]any{
 		"transfers": recordsToMaps(records),
 		"count":     len(records),
+		"total":     total,
 	})
 }
 
@@ -53,10 +55,11 @@ func tokensHandler(c *core.RequestEvent) error {
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error()})
 	}
-
+	total, _ := repo.CountTokens(c.App, search)
 	return c.JSON(http.StatusOK, map[string]any{
 		"tokens": recordsToMaps(records),
 		"count":  len(records),
+		"total":  total,
 	})
 }
 
