@@ -4,7 +4,6 @@
 	import { createSort } from '$lib/sort.svelte';
 	import * as fmt from '$lib/fmt.js';
 	import AddrLink from '$lib/components/AddrLink.svelte';
-	import TxLink from '$lib/components/TxLink.svelte';
 	import DataState from '$lib/components/DataState.svelte';
 
 	const TABS = [
@@ -134,7 +133,7 @@
 					{#if jobs.length}
 						{#each sortedJobs as j (j.job_id)}
 							<tr>
-								<td><TxLink hash={j.job_id} /></td>
+								<td class="mono muted dim" style="font-size:11px">{fmt.hash(j.job_id)}</td>
 								<td class="addr"><AddrLink address={j.employer_address} /></td>
 								<td class="addr"><AddrLink address={j.worker_address} /></td>
 								<td><span class="badge {fmt.jobBadge(j.status)}">{j.status}</span></td>

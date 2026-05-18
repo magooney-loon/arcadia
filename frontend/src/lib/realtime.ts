@@ -10,7 +10,7 @@
 import { pb } from '$lib/stores/config.svelte';
 import { stats } from '$lib/stores/stats.svelte';
 import { health } from '$lib/stores/health.svelte';
-import { blocks, transactions } from '$lib/stores/chain.svelte';
+import { liveBlocks, liveTransactions } from '$lib/stores/chain.svelte';
 import { blockStats } from '$lib/stores/blockStats.svelte';
 import {
 	analyticsOverview,
@@ -80,8 +80,8 @@ export async function connectRealtime() {
 		const p = e as IndexerPayload;
 		if (p.stats) stats.data = p.stats;
 		if (p.health) health.data = p.health;
-		if (p.blocks) blocks.data = p.blocks;
-		if (p.transactions) transactions.data = p.transactions;
+		if (p.blocks) liveBlocks.data = p.blocks;
+		if (p.transactions) liveTransactions.data = p.transactions;
 	});
 
 	await safeSubscribe('analytics', (e: unknown) => {

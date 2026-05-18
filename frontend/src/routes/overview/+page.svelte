@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { resolve } from '$app/paths';
 	import { stats } from '$lib/stores/stats.svelte';
-	import { blocks, transactions } from '$lib/stores/chain.svelte';
+	import { liveBlocks, liveTransactions, seedLiveBlocks, seedLiveTransactions } from '$lib/stores/chain.svelte';
 	import { blockStats, fetchBlockStats } from '$lib/stores/blockStats.svelte';
 	import {
 		analyticsOverview,
@@ -35,6 +35,8 @@
 	onMount(() => {
 		setRealtimeWindow(selectedWindow);
 		connectCharts();
+		seedLiveBlocks(10);
+		seedLiveTransactions(10);
 		const lbId = setInterval(() => fetchAgentLeaderboard(5), 60000);
 		return () => {
 			clearInterval(lbId);
@@ -331,8 +333,8 @@
 				</div>
 			</div>
 			<div class="card-body" style="padding:0">
-				{#if blocks.data?.blocks.length}
-					{#each blocks.data.blocks as b (b.number)}
+				{#if liveBlocks.data?.blocks.length}
+					{#each liveBlocks.data.blocks as b (b.number)}
 						<div class="live-row">
 							<a class="num" href={resolve(`/blocks/${b.number}/`)} style="text-decoration:none"
 								>#{b.number}</a
@@ -343,7 +345,7 @@
 						</div>
 					{/each}
 				{:else}
-					<DataState loading={blocks.loading} error={blocks.error} label="blocks" />
+					<DataState loading={liveBlocks.loading} error={liveBlocks.error} label="blocks" />
 				{/if}
 			</div>
 		</div>
@@ -358,8 +360,8 @@
 				</div>
 			</div>
 			<div class="card-body" style="padding:0">
-				{#if transactions.data?.transactions.length}
-					{#each transactions.data.transactions as t (t.hash)}
+				{#if liveTransactions.data?.transactions.length}
+					{#each liveTransactions.data.transactions as t (t.hash)}
 						<div class="live-row" style="white-space:nowrap;overflow:hidden">
 							<TxLink hash={t.hash} />
 							<span
@@ -375,8 +377,8 @@
 					{/each}
 				{:else}
 					<DataState
-						loading={transactions.loading}
-						error={transactions.error}
+						loading={liveTransactions.loading}
+						error={liveTransactions.error}
 						label="transactions"
 					/>
 				{/if}

@@ -695,7 +695,6 @@ a {
 }
 .tbl tbody tr:hover {
 	background: var(--bg-hover);
-	cursor: pointer;
 }
 .tbl tbody tr:last-child {
 	border-bottom: 0;

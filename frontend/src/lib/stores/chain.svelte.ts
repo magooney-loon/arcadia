@@ -45,6 +45,35 @@ export interface BlockDetailState {
 
 export const blocks = $state<BlocksState>({ data: null, loading: false, error: null });
 export const transactions = $state<TransactionsState>({ data: null, loading: false, error: null });
+
+// SSE-only feeds for the overview's "Latest blocks / Latest transactions" panels.
+// Seeded once on overview mount; then kept fresh exclusively by SSE.
+export const liveBlocks = $state<BlocksState>({ data: null, loading: false, error: null });
+export const liveTransactions = $state<TransactionsState>({ data: null, loading: false, error: null });
+
+export async function seedLiveBlocks(limit = 10) {
+	if (liveBlocks.data) return; // already seeded or SSE beat us to it
+	liveBlocks.loading = true;
+	try {
+		liveBlocks.data = await client.blocks(limit, 0);
+	} catch {
+		// non-fatal — SSE will populate on next tick
+	} finally {
+		liveBlocks.loading = false;
+	}
+}
+
+export async function seedLiveTransactions(limit = 10) {
+	if (liveTransactions.data) return;
+	liveTransactions.loading = true;
+	try {
+		liveTransactions.data = await client.transactions({ limit, offset: 0 });
+	} catch {
+		// non-fatal
+	} finally {
+		liveTransactions.loading = false;
+	}
+}
 export const traces = $state<TracesState>({ data: null, loading: false, error: null });
 export const txDetail = $state<TxDetailState>({
 	hash: '',
