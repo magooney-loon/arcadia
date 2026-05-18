@@ -13,7 +13,7 @@ export function formatTimestamp(timestamp: string): string {
 // short enough that a stalled request doesn't starve the browser's
 // per-host connection pool — which is what makes the app feel frozen
 // (it also blocks SvelteKit's lazy-loaded route chunks).
-const DEFAULT_TIMEOUT_MS = 15_000;
+const DEFAULT_TIMEOUT_MS = 5_000;
 
 // ── In-flight request tracking ──────────────────────────────────────
 // Every `apiFetch` call registers its AbortController here. Calling
