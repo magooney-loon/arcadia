@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { forceSimulation, forceLink, forceManyBody, forceCenter, forceCollide } from 'd3-force';
 	import * as fmt from '$lib/fmt.js';
 
@@ -350,7 +352,7 @@
 	function handleClick() {
 		const node = findNodeAt(mouseX, mouseY);
 		if (node) {
-			window.open(fmt.explorerAddr(node.id), '_blank', 'noopener');
+			goto(resolve(`/wallet/${node.id}/`));
 		}
 	}
 
