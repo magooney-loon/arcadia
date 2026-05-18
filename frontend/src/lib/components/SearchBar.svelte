@@ -2,6 +2,9 @@
 	import { onMount } from 'svelte';
 	import { resolve } from '$app/paths';
 	import { goto } from '$app/navigation';
+	import { flip } from 'svelte/animate';
+	import { fade, slide } from 'svelte/transition';
+	import { cubicOut } from 'svelte/easing';
 	import * as fmt from '$lib/fmt.js';
 	import { DOMAIN_NAMES } from '$lib/fmt.js';
 	import { search, runSearch, clearSearch } from '$lib/stores/search.svelte';
@@ -280,7 +283,7 @@
 			clearSearch();
 			return;
 		}
-		debounceTimer = setTimeout(() => triggerSearch(q), 220);
+		debounceTimer = setTimeout(() => triggerSearch(q), 300);
 	}
 
 	function activate(it: FlatItem) {
@@ -394,54 +397,78 @@
 	{/if}
 
 	{#if showDropdown}
-		<div class="search-results" role="listbox">
-			{#if search.loading}
-				<div class="search-result-item muted">searching…</div>
+		<div
+			class="search-results"
+			role="listbox"
+			transition:slide={{ duration: 160, easing: cubicOut }}
+		>
+			{#if search.loading && items.length === 0}
+				<div class="search-result-item muted" transition:fade={{ duration: 120 }}>searching…</div>
 			{:else if search.error}
-				<div class="search-result-item err-text">{search.error}</div>
+				<div class="search-result-item err-text" transition:fade={{ duration: 120 }}>
+					{search.error}
+				</div>
 			{/if}
 
 			{#if !search.loading && items.length === 0 && searchQuery.trim()}
-				<div class="search-result-item muted">no matches — try a different query</div>
+				<div class="search-result-item muted" transition:fade={{ duration: 120 }}>
+					no matches — try a different query
+				</div>
 			{/if}
 
-			{#each grouped as g, gi (g.section + gi)}
-				{#if gi > 0}
-					<div class="search-divider"></div>
-				{/if}
-				<div class="search-section-label">{g.section}</div>
-				{#each g.items as it (it.key)}
-					{#if it.isRecent}
-						<button
-							type="button"
-							class="search-result-item"
-							class:active={it._idx === activeIndex}
-							onmousemove={() => (activeIndex = it._idx)}
-							onmousedown={(e) => {
-								e.preventDefault();
-								activate(it);
-							}}
-						>
-							<span class="badge {it.badgeClass}">{it.badge}</span>
-							<span class:mono={it.mono}>{it.label}</span>
-						</button>
-					{:else}
-						<a
-							class="search-result-item"
-							class:active={it._idx === activeIndex}
-							href={resolve(it.path as '/')}
-							onmousemove={() => (activeIndex = it._idx)}
-							onclick={() => activate(it)}
-						>
-							<span class="badge {it.badgeClass}">{it.badge}</span>
-							<span class:mono={it.mono}>{it.label}</span>
-							{#if it.sublabel}
-								<span class="dim">{it.sublabel}</span>
-							{/if}
-						</a>
-					{/if}
+			<div class="results-list" class:loading={search.loading}>
+				{#each grouped as g, gi (g.section)}
+					<div
+						class="search-group"
+						animate:flip={{ duration: 220, easing: cubicOut }}
+						in:fade={{ duration: 140 }}
+						out:fade={{ duration: 80 }}
+					>
+						{#if gi > 0}
+							<div class="search-divider"></div>
+						{/if}
+						<div class="search-section-label">{g.section}</div>
+						{#each g.items as it (it.key)}
+							<div
+								class="result-row"
+								animate:flip={{ duration: 220, easing: cubicOut }}
+								in:fade={{ duration: 140 }}
+								out:fade={{ duration: 80 }}
+							>
+								{#if it.isRecent}
+									<button
+										type="button"
+										class="search-result-item"
+										class:active={it._idx === activeIndex}
+										onmousemove={() => (activeIndex = it._idx)}
+										onmousedown={(e) => {
+											e.preventDefault();
+											activate(it);
+										}}
+									>
+										<span class="badge {it.badgeClass}">{it.badge}</span>
+										<span class:mono={it.mono}>{it.label}</span>
+									</button>
+								{:else}
+									<a
+										class="search-result-item"
+										class:active={it._idx === activeIndex}
+										href={resolve(it.path as '/')}
+										onmousemove={() => (activeIndex = it._idx)}
+										onclick={() => activate(it)}
+									>
+										<span class="badge {it.badgeClass}">{it.badge}</span>
+										<span class:mono={it.mono}>{it.label}</span>
+										{#if it.sublabel}
+											<span class="dim">{it.sublabel}</span>
+										{/if}
+									</a>
+								{/if}
+							</div>
+						{/each}
+					</div>
 				{/each}
-			{/each}
+			</div>
 		</div>
 	{/if}
 </div>
@@ -479,5 +506,15 @@
 		bottom: 0;
 		width: 2px;
 		background: var(--acc, #64dca0);
+	}
+	.results-list {
+		transition: opacity 160ms ease;
+	}
+	.results-list.loading {
+		opacity: 0.55;
+	}
+	.result-row,
+	.search-group {
+		will-change: transform;
 	}
 </style>

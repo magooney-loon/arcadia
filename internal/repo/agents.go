@@ -26,11 +26,16 @@ func CountAgents(app core.App) (int, error) {
 	return CountWithFilter(app, "agents", "", nil)
 }
 
-// SearchAgents searches agents by address using LIKE, limited to the given number of results.
+// SearchAgents searches agents by address, limited to the given number of results.
+// Uses PocketBase's `~` operator (case-insensitive contains) — raw SQL functions
+// like LOWER() are not understood by the PB filter parser.
 func SearchAgents(app core.App, q string, limit int) ([]*core.Record, error) {
-	q = strings.ToLower(q)
-	return FindRecords(app, "agents", "LOWER(agent_address) LIKE {:s}", "-usdc_transferred_num", limit, 0,
-		map[string]any{"s": "%" + q + "%"})
+	q = strings.TrimSpace(q)
+	if q == "" {
+		return FindRecords(app, "agents", "", "-usdc_transferred_num", limit, 0)
+	}
+	return FindRecords(app, "agents", "agent_address ~ {:s}", "-usdc_transferred_num", limit, 0,
+		map[string]any{"s": q})
 }
 
 // JobAgg holds aggregated job statistics per agent address.

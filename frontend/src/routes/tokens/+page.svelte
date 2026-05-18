@@ -7,23 +7,13 @@
 	import DataState from '$lib/components/DataState.svelte';
 	import Pagination from '$lib/components/Pagination.svelte';
 
-	let searchQuery = $state('');
 	let statusFilter = $state('all');
 	let offset = $state(0);
 	const limit = 30;
-	let debounceTimer: ReturnType<typeof setTimeout> | undefined;
 	const sort = createSort('transfers', 'desc');
 
 	function load() {
-		fetchTokens(limit, offset, searchQuery.trim() || undefined);
-	}
-
-	function handleSearchInput() {
-		clearTimeout(debounceTimer);
-		debounceTimer = setTimeout(() => {
-			offset = 0;
-			load();
-		}, 300);
+		fetchTokens(limit, offset);
 	}
 
 	const STATUSES = ['all', 'active', 'failed'];
@@ -69,10 +59,13 @@
 			<div class="view-title">Tokens</div>
 			<div class="view-sub">Discovered ERC-20 tokens on Arc testnet</div>
 		</div>
+		<div class="view-actions">
+			<button class="btn ghost" onclick={load}>Refresh</button>
+		</div>
 	</div>
 
 	<!-- Summary stats -->
-	<div class="grid grid-stats">
+	<div class="grid grid-stats" style="margin-bottom:14px">
 		<div class="stat">
 			<div class="label">Tokens</div>
 			<div class="value">{tokens.data?.total ?? '—'}</div>
@@ -95,31 +88,21 @@
 		</div>
 	</div>
 
-	<!-- Filters -->
-	<div class="card" style="padding:10px 14px">
-		<div class="filter-bar" style="gap:10px;flex-wrap:wrap">
-			<input
-				bind:value={searchQuery}
-				oninput={handleSearchInput}
-				placeholder="Search symbol, name, or address…"
-				style="flex:1;min-width:200px"
-			/>
-			{#each STATUSES as s (s)}
-				<button
-					class="btn ghost {statusFilter === s ? 'active' : ''}"
-					onclick={() => (statusFilter = s)}
-				>
-					{#if s === 'all'}All
-					{:else if s === 'active'}✓ Active
-					{:else}✗ Failed{/if}
-				</button>
-			{/each}
-		</div>
+	<div class="filter-bar">
+		{#each STATUSES as s (s)}
+			<button
+				class="chip {statusFilter === s ? 'on' : ''}"
+				onclick={() => (statusFilter = s)}
+			>
+				{#if s === 'all'}all
+				{:else if s === 'active'}active
+				{:else}failed{/if}
+			</button>
+		{/each}
 	</div>
 
-	<!-- Table -->
 	<div class="card">
-		<div class="table-wrap">
+		<div class="card-body flush">
 			<table class="tbl">
 				<thead>
 					<tr>
