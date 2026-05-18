@@ -4,6 +4,7 @@ package handlers
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/pocketbase/pocketbase/core"
 
@@ -21,6 +22,11 @@ func crosschainHandler(c *core.RequestEvent) error {
 		Sender:    qp(c, "sender", ""),
 		Recipient: qp(c, "recipient", ""),
 		Direction: qp(c, "direction", ""),
+	}
+	if chain := qp(c, "chain", ""); chain != "" {
+		if n, err := strconv.Atoi(chain); err == nil {
+			f.Chain = n
+		}
 	}
 	records, err := repo.ListCrosschainEvents(c.App, f, limit, offset)
 	if err != nil {

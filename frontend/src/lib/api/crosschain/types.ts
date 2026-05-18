@@ -28,4 +28,5 @@ export interface CrosschainFilter {
 	sender?: string;
 	recipient?: string;
 	direction?: 'inbound' | 'outbound';
+	chain?: number;
 }

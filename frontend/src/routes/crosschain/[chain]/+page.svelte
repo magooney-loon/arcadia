@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import { createSort } from '$lib/sort.svelte';
 	import { crosschain, fetchCrosschain } from '$lib/stores/crosschain.svelte';
@@ -17,31 +18,14 @@
 	let direction = $state('all');
 	let protocol = $state('all');
 	let offset = $state(0);
-	const limit = 40;
+	const limit = 50;
 
-	function load() {
-		fetchCrosschain({
-			direction: direction === 'all' ? undefined : (direction as 'inbound' | 'outbound'),
-			protocol: protocol === 'all' ? undefined : (protocol as 'cctp' | 'gateway'),
-			limit,
-			offset
-		});
-	}
+	const chainId = $derived(Number(page.params.chain ?? 0));
+	const chainName = $derived(fmt.domainName(chainId));
 
 	const latestBlock = $derived(stats.data?.block_number ?? 0);
 	const bf = $derived(analyticsBridgeFlow.data);
-
-	const sortedEvents = $derived(
-		sort.apply(crosschain.data?.events ?? [], {
-			from_chain: (e) => fmt.domainName(e.source_domain) ?? '',
-			to_chain: (e) => fmt.domainName(e.destination_domain) ?? '',
-			event: (e) => e.event_type ?? '',
-			protocol: (e) => e.protocol ?? '',
-			amount: (e) => parseFloat(e.amount_usdc ?? '0') || 0,
-			sender: (e) => e.sender ?? '',
-			age: (e) => e.block_number ?? 0
-		})
-	);
+	const chainFlow = $derived(bf?.by_chain?.[chainName] ?? null);
 
 	const EVENT_BADGE: Record<string, string> = {
 		burn: 'err',
@@ -49,35 +33,58 @@
 		deposit: 'info',
 		withdraw: 'warn'
 	};
+
+	function load() {
+		fetchCrosschain({
+			chain: chainId,
+			direction: direction === 'all' ? undefined : (direction as 'inbound' | 'outbound'),
+			protocol: protocol === 'all' ? undefined : (protocol as 'cctp' | 'gateway'),
+			limit,
+			offset
+		});
+	}
+
+	const sortedEvents = $derived(
+		sort.apply(crosschain.data?.events ?? [], {
+			direction: (e) => (e.source_domain === chainId ? '→ Arc' : '← Arc'),
+			event: (e) => e.event_type ?? '',
+			protocol: (e) => e.protocol ?? '',
+			amount: (e) => parseFloat(e.amount_usdc ?? '0') || 0,
+			counterparty: (e) =>
+				fmt.domainName(e.source_domain === chainId ? e.destination_domain : e.source_domain) ?? '',
+			party: (e) => (e.source_domain === chainId ? (e.recipient ?? '') : (e.sender ?? '')),
+			age: (e) => e.block_number ?? 0
+		})
+	);
 </script>
 
 <div class="view">
 	<div class="view-head">
 		<div>
-			<div class="view-title">Cross-chain</div>
-			<div class="view-sub">CCTP mints & burns · inbound and outbound · 24h</div>
+			<div class="view-title">{chainName}</div>
+			<div class="view-sub">Domain ID #{chainId}</div>
 		</div>
 	</div>
 
-	<!-- Summary stats -->
+	<!-- Summary stats from by_chain data -->
 	<div class="grid grid-stats" style="grid-template-columns:repeat(4,1fr);margin-bottom:12px">
 		<div class="stat">
-			<div class="label">Inbound count</div>
-			<div class="value">{fmt.num(bf?.inbound_count)}</div>
+			<div class="label">Inbound vol</div>
+			<div class="value">{fmt.usdc(chainFlow?.inbound_vol)}</div>
 			<div class="delta up">↘ arriving on Arc</div>
 		</div>
 		<div class="stat">
-			<div class="label">Inbound vol</div>
-			<div class="value">{fmt.usdc(bf?.inbound_vol)}</div>
-		</div>
-		<div class="stat">
-			<div class="label">Outbound count</div>
-			<div class="value">{fmt.num(bf?.outbound_count)}</div>
-			<div class="delta down">↗ leaving Arc</div>
+			<div class="label">Inbound count</div>
+			<div class="value">{fmt.num(chainFlow?.inbound_count)}</div>
 		</div>
 		<div class="stat">
 			<div class="label">Outbound vol</div>
-			<div class="value">{fmt.usdc(bf?.outbound_vol)}</div>
+			<div class="value">{fmt.usdc(chainFlow?.outbound_vol)}</div>
+			<div class="delta down">↗ leaving Arc</div>
+		</div>
+		<div class="stat">
+			<div class="label">Outbound count</div>
+			<div class="value">{fmt.num(chainFlow?.outbound_count)}</div>
 		</div>
 	</div>
 
@@ -108,20 +115,16 @@
 	<div class="card">
 		<div class="card-head">
 			<div class="card-title">Messages</div>
-			<div class="card-sub">CCTP · Gateway</div>
+			<div class="card-sub">{chainName} · CCTP · Gateway</div>
 		</div>
 		<div class="card-body flush">
 			<table class="tbl">
 				<thead>
 					<tr>
-						<th
-							class="sortable {sort.indicator('from_chain') || ''}"
-							onclick={() => sort.toggle('from_chain')}>from chain</th
-						>
 						<th></th>
 						<th
-							class="sortable {sort.indicator('to_chain') || ''}"
-							onclick={() => sort.toggle('to_chain')}>to chain</th
+							class="sortable {sort.indicator('direction') || ''}"
+							onclick={() => sort.toggle('direction')}>dir</th
 						>
 						<th
 							class="sortable {sort.indicator('event') || ''}"
@@ -136,8 +139,12 @@
 							onclick={() => sort.toggle('amount')}>amount</th
 						>
 						<th
-							class="sortable {sort.indicator('sender') || ''}"
-							onclick={() => sort.toggle('sender')}>sender</th
+							class="sortable {sort.indicator('counterparty') || ''}"
+							onclick={() => sort.toggle('counterparty')}>counterparty</th
+						>
+						<th
+							class="sortable {sort.indicator('party') || ''}"
+							onclick={() => sort.toggle('party')}>sender / recipient</th
 						>
 						<th
 							class="num sortable {sort.indicator('age') || ''}"
@@ -148,29 +155,30 @@
 				<tbody>
 					{#if crosschain.data?.events.length}
 						{#each sortedEvents as e (e.id)}
+							{@const isOutbound = e.source_domain === chainId}
 							<tr>
-								<td
-									><a
-										href={resolve(`/crosschain/${e.source_domain ?? 0}/`)}
-										style="text-decoration:none;color:inherit"
-										><span class="chain">{fmt.domainName(e.source_domain)}</span></a
-									></td
-								>
-								<td class="acc">→</td>
-								<td
-									><a
-										href={resolve(`/crosschain/${e.destination_domain ?? 0}/`)}
-										style="text-decoration:none;color:inherit"
-										><span class="chain">{fmt.domainName(e.destination_domain)}</span></a
-									></td
-								>
+								<td class="acc">{isOutbound ? '→' : '←'}</td>
+								<td class="muted">{isOutbound ? 'out' : 'in'}</td>
 								<td
 									><span class="badge {EVENT_BADGE[e.event_type] ?? 'muted'}">{e.event_type}</span
 									></td
 								>
 								<td class="muted">{e.protocol}</td>
 								<td class="num">{fmt.usdc(e.amount_usdc)}</td>
-								<td class="addr"><AddrLink address={e.sender ?? ''} /></td>
+								<td>
+									<a
+										href={resolve(
+											`/crosschain/${(isOutbound ? e.destination_domain : e.source_domain) ?? 0}/`
+										)}
+										style="text-decoration:none;color:inherit"
+										><span class="chain"
+											>{fmt.domainName(isOutbound ? e.destination_domain : e.source_domain)}</span
+										></a
+									>
+								</td>
+								<td class="addr"
+									><AddrLink address={isOutbound ? (e.recipient ?? '') : (e.sender ?? '')} /></td
+								>
 								<td class="num muted">{fmt.blockAge(e.block_number, latestBlock)}</td>
 							</tr>
 						{/each}

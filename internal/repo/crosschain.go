@@ -13,6 +13,7 @@ type CrosschainFilter struct {
 	Sender    string
 	Recipient string
 	Direction string // "inbound" or "outbound"
+	Chain     int    // specific domain ID to filter by
 }
 
 // ListCrosschainEvents returns crosschain events matching the filter.
@@ -46,7 +47,10 @@ func buildCrosschainFilter(f CrosschainFilter) (string, map[string]any) {
 		parts = append(parts, "recipient = {:r}")
 		params["r"] = f.Recipient
 	}
-	if f.Direction == "inbound" {
+	if f.Chain != 0 {
+		parts = append(parts, "(source_domain = {:cd} || destination_domain = {:cd})")
+		params["cd"] = f.Chain
+	} else if f.Direction == "inbound" {
 		parts = append(parts, "destination_domain = 26")
 	} else if f.Direction == "outbound" {
 		parts = append(parts, "source_domain = 26 && destination_domain != 26")

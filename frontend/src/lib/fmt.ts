@@ -124,6 +124,13 @@ export function domainName(id?: number | null): string {
 	return DOMAIN_NAMES[id] ?? `chain-${id}`;
 }
 
+export function domainId(name: string): number | null {
+	for (const [id, n] of Object.entries(DOMAIN_NAMES)) {
+		if (n === name) return Number(id);
+	}
+	return null;
+}
+
 export function methodName(sig?: string | null): string {
 	if (!sig) return '—';
 	return SIGHASH[sig] ?? sig.slice(0, 10);

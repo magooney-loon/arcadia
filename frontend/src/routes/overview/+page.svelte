@@ -2,7 +2,12 @@
 	import { onMount } from 'svelte';
 	import { resolve } from '$app/paths';
 	import { stats } from '$lib/stores/stats.svelte';
-	import { liveBlocks, liveTransactions, seedLiveBlocks, seedLiveTransactions } from '$lib/stores/chain.svelte';
+	import {
+		liveBlocks,
+		liveTransactions,
+		seedLiveBlocks,
+		seedLiveTransactions
+	} from '$lib/stores/chain.svelte';
 	import { blockStats, fetchBlockStats } from '$lib/stores/blockStats.svelte';
 	import {
 		analyticsOverview,
@@ -446,7 +451,12 @@
 					</div>
 					{#each chainEntries as [chain, flow] (chain)}
 						<div class="flow">
-							<span class="chain">{chain}</span>
+							<span class="chain"
+								><a
+									href={resolve(`/crosschain/${fmt.domainId(chain) ?? 0}/`)}
+									style="text-decoration:none;color:inherit">{chain}</a
+								></span
+							>
 							<span class="arrow">↔</span>
 							<span class="mono" style="font-size:11px;color:var(--ok)"
 								>↘ {fmt.usdc(flow.inbound_vol)}</span
