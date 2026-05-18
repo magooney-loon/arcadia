@@ -57,29 +57,51 @@
 	let dragging = false;
 	let dragStart = { x: 0, y: 0 };
 	let transformStart = { x: 0, y: 0 };
-	let running = $state(false);
-	let rafId = 0;
+
+	// FNV-1a 32-bit hash → deterministic positions from the wallet id.
+	function hash32(s: string): number {
+		let h = 0x811c9dc5;
+		for (let i = 0; i < s.length; i++) {
+			h ^= s.charCodeAt(i);
+			h = Math.imul(h, 0x01000193);
+		}
+		return h >>> 0;
+	}
+
+	function seededPosition(id: string): { x: number; y: number } {
+		const h = hash32(id);
+		const u = (h & 0xffff) / 0xffff;
+		const v = ((h >>> 16) & 0xffff) / 0xffff;
+		const angle = u * Math.PI * 2;
+		const radius = Math.sqrt(v) * 220;
+		return {
+			x: width / 2 + Math.cos(angle) * radius,
+			y: height / 2 + Math.sin(angle) * radius
+		};
+	}
 
 	function buildGraph(edges: Edge[]) {
 		const nodeMap: Record<string, SimNode> = {};
 
 		for (const edge of edges) {
 			if (!nodeMap[edge.from_wallet]) {
+				const p = seededPosition(edge.from_wallet);
 				nodeMap[edge.from_wallet] = {
 					id: edge.from_wallet,
 					isAgent: edge.from_is_agent ?? false,
-					x: width / 2 + (Math.random() - 0.5) * 200,
-					y: height / 2 + (Math.random() - 0.5) * 200,
+					x: p.x,
+					y: p.y,
 					vx: 0,
 					vy: 0
 				};
 			}
 			if (!nodeMap[edge.to_wallet]) {
+				const p = seededPosition(edge.to_wallet);
 				nodeMap[edge.to_wallet] = {
 					id: edge.to_wallet,
 					isAgent: edge.to_is_agent ?? false,
-					x: width / 2 + (Math.random() - 0.5) * 200,
-					y: height / 2 + (Math.random() - 0.5) * 200,
+					x: p.x,
+					y: p.y,
 					vx: 0,
 					vy: 0
 				};
@@ -108,7 +130,7 @@
 					.id((d) => d.id)
 					.distance((d) => {
 						const norm = (d.volume - minVol) / volRange;
-						return 60 - norm * 30; // high volume = closer
+						return 60 - norm * 30;
 					})
 					.strength(0.4)
 			)
@@ -121,7 +143,7 @@
 			.alphaDecay(0.02)
 			.stop();
 
-		// Pre-warm
+		// Pre-warm so the layout is settled deterministically.
 		for (let i = 0; i < 300; i++) sim.tick();
 		sim.alpha(0).stop();
 
@@ -130,9 +152,9 @@
 
 	function volColor(vol: number, minVol: number, volRange: number): string {
 		const norm = Math.min(1, (vol - minVol) / volRange);
-		const r = Math.round(60 + norm * 49); // 60 → 109
-		const g = Math.round(100 + norm * 113); // 100 → 213
-		const b = Math.round(140 + norm * 110); // 140 → 250
+		const r = Math.round(60 + norm * 49);
+		const g = Math.round(100 + norm * 113);
+		const b = Math.round(140 + norm * 110);
 		return `rgba(${r},${g},${b},${0.3 + norm * 0.45})`;
 	}
 
@@ -149,7 +171,6 @@
 		ctx.translate(transform.x, transform.y);
 		ctx.scale(transform.k, transform.k);
 
-		// Volume range
 		const volumes = links.map((l) => l.volume).filter((v) => v > 0);
 		const maxVol = volumes.length ? Math.max(...volumes) : 1;
 		const minVol = volumes.length ? Math.min(...volumes) : 0;
@@ -174,7 +195,6 @@
 			const r = node.isAgent ? 5 : 3;
 			const isHovered = hoveredNode === node;
 
-			// Glow for hovered
 			if (isHovered) {
 				ctx.beginPath();
 				ctx.arc(node.x, node.y, r + 6, 0, Math.PI * 2);
@@ -228,13 +248,12 @@
 	}
 
 	function findNodeAt(mx: number, my: number): SimNode | null {
-		// Convert screen coords to graph coords
 		const gx = (mx - transform.x) / transform.k;
 		const gy = (my - transform.y) / transform.k;
 
 		for (let i = nodes.length - 1; i >= 0; i--) {
 			const n = nodes[i];
-			const r = (n.isAgent ? 5 : 3) + 4; // hit radius with padding
+			const r = (n.isAgent ? 5 : 3) + 4;
 			const dx = gx - n.x;
 			const dy = gy - n.y;
 			if (dx * dx + dy * dy <= r * r) return n;
@@ -327,24 +346,6 @@
 		zoomPct = Math.round(k * 100);
 		draw();
 	}
-	function tickLoop() {
-		if (!running || !sim) return;
-		sim.tick();
-		draw();
-		rafId = requestAnimationFrame(tickLoop);
-	}
-	export function toggleSimulation() {
-		if (!sim) return;
-		if (running) {
-			running = false;
-			cancelAnimationFrame(rafId);
-			sim.alpha(0).stop();
-		} else {
-			running = true;
-			sim.alpha(0.8).restart();
-			tickLoop();
-		}
-	}
 
 	function handleClick() {
 		const node = findNodeAt(mouseX, mouseY);
@@ -362,13 +363,10 @@
 
 	$effect(() => {
 		if (!canvas || !edges.length) return;
-		if (running) {
-			running = false;
-			cancelAnimationFrame(rafId);
-		}
 		transform = { x: 0, y: 0, k: 1 };
 		zoomPct = 100;
 		buildGraph(edges);
+		fitToView();
 	});
 
 	onMount(() => {
@@ -383,7 +381,6 @@
 		canvas.style.width = width + 'px';
 		canvas.style.height = height + 'px';
 
-		// Resize observer
 		const ro = new ResizeObserver((entries) => {
 			for (const entry of entries) {
 				const { width: w, height: h } = entry.contentRect;
@@ -402,13 +399,8 @@
 		return () => {
 			ro.disconnect();
 			sim?.stop();
-			cancelAnimationFrame(rafId);
 		};
 	});
-
-	export function isRunning(): boolean {
-		return running;
-	}
 </script>
 
 <div class="fg-wrap">
@@ -427,33 +419,29 @@
 		<button class="fg-btn" onclick={zoomIn} title="Zoom in" aria-label="Zoom in">+</button>
 		<button class="fg-btn" onclick={zoomOut} title="Zoom out" aria-label="Zoom out">−</button>
 		<button class="fg-btn" onclick={fitToView} title="Fit to view" aria-label="Fit to view">
-			<svg viewBox="0 0 14 14" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.4">
+			<svg
+				viewBox="0 0 14 14"
+				width="12"
+				height="12"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="1.4"
+			>
 				<path d="M2 5 V2 H5 M9 2 H12 V5 M12 9 V12 H9 M5 12 H2 V9" />
 			</svg>
 		</button>
 		<button class="fg-btn" onclick={resetView} title="Reset view" aria-label="Reset view">
-			<svg viewBox="0 0 14 14" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.4">
+			<svg
+				viewBox="0 0 14 14"
+				width="12"
+				height="12"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="1.4"
+			>
 				<path d="M11 4 A4 4 0 1 0 12 8" />
 				<path d="M11 1.5 V4 H8.5" />
 			</svg>
-		</button>
-		<button
-			class="fg-btn"
-			class:on={running}
-			onclick={toggleSimulation}
-			title={running ? 'Pause simulation' : 'Run simulation'}
-			aria-label={running ? 'Pause simulation' : 'Run simulation'}
-		>
-			{#if running}
-				<svg viewBox="0 0 14 14" width="10" height="10" fill="currentColor">
-					<rect x="3" y="2" width="3" height="10" />
-					<rect x="8" y="2" width="3" height="10" />
-				</svg>
-			{:else}
-				<svg viewBox="0 0 14 14" width="10" height="10" fill="currentColor">
-					<path d="M3 2 L12 7 L3 12 Z" />
-				</svg>
-			{/if}
 		</button>
 		<div class="fg-zoom-label mono" aria-live="polite">{zoomPct}%</div>
 	</div>
@@ -503,11 +491,6 @@
 		background: rgba(109, 213, 250, 0.12);
 		color: #9ae4ff;
 		border-color: rgba(109, 213, 250, 0.3);
-	}
-	.fg-btn.on {
-		background: rgba(109, 213, 250, 0.18);
-		color: #9ae4ff;
-		border-color: rgba(109, 213, 250, 0.4);
 	}
 	.fg-zoom-label {
 		text-align: center;
