@@ -29,10 +29,7 @@
 		})
 	);
 
-	const totalEscrow = $derived(board.reduce((s, a) => s + (a.total_escrow ?? 0), 0));
-	const inFlightJobs = $derived(
-		board.reduce((s, a) => s + (a.job_count - a.paid_jobs - a.rejected_jobs), 0)
-	);
+	const summary = $derived(analyticsAgentLeaderboard.data?.summary);
 </script>
 
 <div class="view">
@@ -57,11 +54,11 @@
 		</div>
 		<div class="stat">
 			<div class="label">Jobs in-flight</div>
-			<div class="value">{inFlightJobs}</div>
+			<div class="value">{summary?.jobs_in_flight ?? '—'}</div>
 		</div>
 		<div class="stat">
 			<div class="label">Total escrow</div>
-			<div class="value">{fmt.usdc(totalEscrow)}</div>
+			<div class="value">{summary ? fmt.usdc(summary.total_escrow) : '—'}</div>
 		</div>
 	</div>
 

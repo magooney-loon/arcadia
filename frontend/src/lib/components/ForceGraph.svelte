@@ -49,11 +49,16 @@
 	let mouseX = 0;
 	let mouseY = 0;
 
-	// Transform state for pan/zoom
+	// Transform state for pan/zoom (intentionally NOT $state — reading it inside
+	// the build-graph $effect would otherwise subscribe the effect and cause the
+	// simulation to rebuild on every zoom/pan).
 	let transform = { x: 0, y: 0, k: 1 };
+	let zoomPct = $state(100);
 	let dragging = false;
 	let dragStart = { x: 0, y: 0 };
 	let transformStart = { x: 0, y: 0 };
+	let running = $state(false);
+	let rafId = 0;
 
 	function buildGraph(edges: Edge[]) {
 		const nodeMap: Record<string, SimNode> = {};
@@ -270,20 +275,75 @@
 		canvas.style.cursor = hoveredNode ? 'pointer' : 'grab';
 	}
 
-	function handleWheel(e: WheelEvent) {
-		e.preventDefault();
-		const rect = canvas.getBoundingClientRect();
-		const mx = e.clientX - rect.left;
-		const my = e.clientY - rect.top;
-
-		const delta = e.deltaY > 0 ? 0.9 : 1.1;
-		const newK = Math.max(0.2, Math.min(5, transform.k * delta));
-
-		// Zoom towards mouse position
+	function zoomAt(mx: number, my: number, factor: number) {
+		const newK = Math.max(0.2, Math.min(5, transform.k * factor));
 		transform.x = mx - (mx - transform.x) * (newK / transform.k);
 		transform.y = my - (my - transform.y) * (newK / transform.k);
 		transform.k = newK;
+		zoomPct = Math.round(newK * 100);
 		draw();
+	}
+
+	function handleWheel(e: WheelEvent) {
+		e.preventDefault();
+		const rect = canvas.getBoundingClientRect();
+		zoomAt(e.clientX - rect.left, e.clientY - rect.top, e.deltaY > 0 ? 0.9 : 1.1);
+	}
+
+	export function zoomIn() {
+		zoomAt(width / 2, height / 2, 1.25);
+	}
+	export function zoomOut() {
+		zoomAt(width / 2, height / 2, 0.8);
+	}
+	export function resetView() {
+		transform = { x: 0, y: 0, k: 1 };
+		zoomPct = 100;
+		draw();
+	}
+	export function fitToView() {
+		if (!nodes.length) return;
+		let minX = Infinity,
+			minY = Infinity,
+			maxX = -Infinity,
+			maxY = -Infinity;
+		for (const n of nodes) {
+			if (n.x < minX) minX = n.x;
+			if (n.y < minY) minY = n.y;
+			if (n.x > maxX) maxX = n.x;
+			if (n.y > maxY) maxY = n.y;
+		}
+		const pad = 40;
+		const gw = Math.max(1, maxX - minX);
+		const gh = Math.max(1, maxY - minY);
+		const k = Math.min((width - pad * 2) / gw, (height - pad * 2) / gh, 3);
+		const cx = (minX + maxX) / 2;
+		const cy = (minY + maxY) / 2;
+		transform = {
+			k,
+			x: width / 2 - cx * k,
+			y: height / 2 - cy * k
+		};
+		zoomPct = Math.round(k * 100);
+		draw();
+	}
+	function tickLoop() {
+		if (!running || !sim) return;
+		sim.tick();
+		draw();
+		rafId = requestAnimationFrame(tickLoop);
+	}
+	export function toggleSimulation() {
+		if (!sim) return;
+		if (running) {
+			running = false;
+			cancelAnimationFrame(rafId);
+			sim.alpha(0).stop();
+		} else {
+			running = true;
+			sim.alpha(0.8).restart();
+			tickLoop();
+		}
 	}
 
 	function handleClick() {
@@ -302,7 +362,12 @@
 
 	$effect(() => {
 		if (!canvas || !edges.length) return;
+		if (running) {
+			running = false;
+			cancelAnimationFrame(rafId);
+		}
 		transform = { x: 0, y: 0, k: 1 };
+		zoomPct = 100;
 		buildGraph(edges);
 	});
 
@@ -337,17 +402,119 @@
 		return () => {
 			ro.disconnect();
 			sim?.stop();
+			cancelAnimationFrame(rafId);
 		};
 	});
+
+	export function isRunning(): boolean {
+		return running;
+	}
 </script>
 
-<canvas
-	bind:this={canvas}
-	onmousemove={handleMouseMove}
-	onmousedown={handleMouseDown}
-	onmouseup={handleMouseUp}
-	onclick={handleClick}
-	onwheel={handleWheel}
-	onmouseleave={handleMouseLeave}
-	style="cursor:grab;width:100%;height:100%;display:block"
-></canvas>
+<div class="fg-wrap">
+	<canvas
+		bind:this={canvas}
+		onmousemove={handleMouseMove}
+		onmousedown={handleMouseDown}
+		onmouseup={handleMouseUp}
+		onclick={handleClick}
+		onwheel={handleWheel}
+		onmouseleave={handleMouseLeave}
+		style="cursor:grab;width:100%;height:100%;display:block"
+	></canvas>
+
+	<div class="fg-controls" aria-label="Graph controls">
+		<button class="fg-btn" onclick={zoomIn} title="Zoom in" aria-label="Zoom in">+</button>
+		<button class="fg-btn" onclick={zoomOut} title="Zoom out" aria-label="Zoom out">−</button>
+		<button class="fg-btn" onclick={fitToView} title="Fit to view" aria-label="Fit to view">
+			<svg viewBox="0 0 14 14" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.4">
+				<path d="M2 5 V2 H5 M9 2 H12 V5 M12 9 V12 H9 M5 12 H2 V9" />
+			</svg>
+		</button>
+		<button class="fg-btn" onclick={resetView} title="Reset view" aria-label="Reset view">
+			<svg viewBox="0 0 14 14" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.4">
+				<path d="M11 4 A4 4 0 1 0 12 8" />
+				<path d="M11 1.5 V4 H8.5" />
+			</svg>
+		</button>
+		<button
+			class="fg-btn"
+			class:on={running}
+			onclick={toggleSimulation}
+			title={running ? 'Pause simulation' : 'Run simulation'}
+			aria-label={running ? 'Pause simulation' : 'Run simulation'}
+		>
+			{#if running}
+				<svg viewBox="0 0 14 14" width="10" height="10" fill="currentColor">
+					<rect x="3" y="2" width="3" height="10" />
+					<rect x="8" y="2" width="3" height="10" />
+				</svg>
+			{:else}
+				<svg viewBox="0 0 14 14" width="10" height="10" fill="currentColor">
+					<path d="M3 2 L12 7 L3 12 Z" />
+				</svg>
+			{/if}
+		</button>
+		<div class="fg-zoom-label mono" aria-live="polite">{zoomPct}%</div>
+	</div>
+</div>
+
+<style>
+	.fg-wrap {
+		position: relative;
+		width: 100%;
+		height: 100%;
+	}
+	.fg-controls {
+		position: absolute;
+		top: 10px;
+		right: 10px;
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		background: rgba(20, 20, 28, 0.7);
+		backdrop-filter: blur(8px);
+		border: 1px solid var(--border-2, #2a2a35);
+		border-radius: 6px;
+		padding: 4px;
+		z-index: 2;
+	}
+	.fg-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 26px;
+		height: 26px;
+		background: transparent;
+		border: 1px solid transparent;
+		border-radius: 4px;
+		color: var(--fg-2, #c0c0c8);
+		font-size: 14px;
+		font-family: inherit;
+		line-height: 1;
+		cursor: pointer;
+		padding: 0;
+		transition:
+			background 120ms ease,
+			color 120ms ease,
+			border-color 120ms ease;
+	}
+	.fg-btn:hover {
+		background: rgba(109, 213, 250, 0.12);
+		color: #9ae4ff;
+		border-color: rgba(109, 213, 250, 0.3);
+	}
+	.fg-btn.on {
+		background: rgba(109, 213, 250, 0.18);
+		color: #9ae4ff;
+		border-color: rgba(109, 213, 250, 0.4);
+	}
+	.fg-zoom-label {
+		text-align: center;
+		font-size: 10px;
+		color: var(--fg-3, #909098);
+		padding-top: 2px;
+		border-top: 1px solid var(--border-1, #1c1c24);
+		margin-top: 2px;
+	}
+</style>

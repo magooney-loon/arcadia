@@ -122,8 +122,12 @@
 								<td class="addr"><AddrLink address={e.to_wallet} /></td>
 								<td class="num">{fmt.num(e.tx_count)}</td>
 								<td class="num">{fmt.usdc(e.total_usdc_human)}</td>
-								<td>{e.from_is_agent ? '<span class="badge acc">agent</span>' : ''}</td>
-								<td>{e.to_is_agent ? '<span class="badge acc">agent</span>' : ''}</td>
+								<td>
+									{#if e.from_is_agent}<span class="badge acc">agent</span>{/if}
+								</td>
+								<td>
+									{#if e.to_is_agent}<span class="badge acc">agent</span>{/if}
+								</td>
 							</tr>
 						{/each}
 					{:else}

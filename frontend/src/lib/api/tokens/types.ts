@@ -14,10 +14,18 @@ export interface Token {
 	lookup_failed: boolean;
 }
 
+export interface TokensSummary {
+	total: number;
+	total_transfers: number;
+	active: number;
+	failed: number;
+}
+
 export interface TokensResponse {
 	tokens: Token[];
 	count: number;
 	total: number;
+	summary?: TokensSummary;
 }
 
 export interface TokenDetailResponse {

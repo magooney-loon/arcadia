@@ -123,9 +123,28 @@ func analyticsAgentLeaderboardHandler(c *core.RequestEvent) error {
 	}
 
 	total, _ := repo.CountAgents(c.App)
+
+	// Aggregate totals across ALL agents (not just the current page) so the
+	// page can show honest "total escrow" / "in-flight jobs" stats.
+	var totalEscrow float64
+	var totalJobs, totalPaid, totalRejected int
+	for _, s := range jobStats {
+		totalEscrow += s.TotalEscrow
+		totalJobs += s.JobCount
+		totalPaid += s.PaidJobs
+		totalRejected += s.RejectedJobs
+	}
+
 	return c.JSON(http.StatusOK, map[string]any{
 		"leaderboard": result,
 		"count":       len(result),
 		"total":       total,
+		"summary": map[string]any{
+			"total_escrow":   totalEscrow,
+			"jobs_total":     totalJobs,
+			"jobs_paid":      totalPaid,
+			"jobs_rejected":  totalRejected,
+			"jobs_in_flight": totalJobs - totalPaid - totalRejected,
+		},
 	})
 }

@@ -9,7 +9,7 @@
 
 	let statusFilter = $state('all');
 	let offset = $state(0);
-	const limit = 30;
+	const limit = 45;
 	const sort = createSort('transfers', 'desc');
 
 	function load() {
@@ -38,9 +38,7 @@
 		})
 	);
 
-	const totalTransfers = $derived(
-		(tokens.data?.tokens ?? []).reduce((sum, t) => sum + (t.transfer_count ?? 0), 0)
-	);
+	const summary = $derived(tokens.data?.summary);
 
 	function formatSupply(raw: string | undefined, human: string | undefined): string {
 		if (human && human !== '0') return human;
@@ -64,36 +62,29 @@
 		</div>
 	</div>
 
-	<!-- Summary stats -->
+	<!-- Summary stats (totals across all matching tokens, not just current page) -->
 	<div class="grid grid-stats" style="margin-bottom:14px">
 		<div class="stat">
 			<div class="label">Tokens</div>
-			<div class="value">{tokens.data?.total ?? '—'}</div>
+			<div class="value">{summary?.total ?? tokens.data?.total ?? '—'}</div>
 		</div>
 		<div class="stat">
 			<div class="label">Total transfers</div>
-			<div class="value">{fmt.num(totalTransfers)}</div>
+			<div class="value">{summary ? fmt.num(summary.total_transfers) : '—'}</div>
 		</div>
 		<div class="stat">
 			<div class="label">Active</div>
-			<div class="value" style="color:var(--ok)">
-				{(tokens.data?.tokens ?? []).filter((t) => !t.lookup_failed).length}
-			</div>
+			<div class="value" style="color:var(--ok)">{summary?.active ?? '—'}</div>
 		</div>
 		<div class="stat">
 			<div class="label">Failed lookup</div>
-			<div class="value" style="color:var(--err)">
-				{(tokens.data?.tokens ?? []).filter((t) => t.lookup_failed).length}
-			</div>
+			<div class="value" style="color:var(--err)">{summary?.failed ?? '—'}</div>
 		</div>
 	</div>
 
 	<div class="filter-bar">
 		{#each STATUSES as s (s)}
-			<button
-				class="chip {statusFilter === s ? 'on' : ''}"
-				onclick={() => (statusFilter = s)}
-			>
+			<button class="chip {statusFilter === s ? 'on' : ''}" onclick={() => (statusFilter = s)}>
 				{#if s === 'all'}all
 				{:else if s === 'active'}active
 				{:else}failed{/if}

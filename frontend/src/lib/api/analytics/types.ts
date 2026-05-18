@@ -82,10 +82,19 @@ export interface AgentLeaderboardEntry {
 	[key: string]: unknown;
 }
 
+export interface AgentLeaderboardSummary {
+	total_escrow: number;
+	jobs_total: number;
+	jobs_paid: number;
+	jobs_rejected: number;
+	jobs_in_flight: number;
+}
+
 export interface AgentLeaderboardResponse {
 	leaderboard: AgentLeaderboardEntry[];
 	count: number;
 	total: number;
+	summary?: AgentLeaderboardSummary;
 }
 
 // ── /analytics/overview ───────────────────────────────────────────────────────

@@ -14,25 +14,6 @@ func ListTokens(app core.App, search string, limit, offset int) ([]*core.Record,
 	return FindRecords(app, "token_analytics", filter, "-transfer_count", limit, offset, params)
 }
 
-// CountTokens returns the total number of token_analytics rows matching the search.
-func CountTokens(app core.App, search string) (int, error) {
-	if strings.TrimSpace(search) == "" {
-		return RowCount(app, "token_analytics")
-	}
-	q := strings.ToLower(strings.TrimSpace(search))
-	var row struct {
-		N int `db:"n"`
-	}
-	err := app.DB().NewQuery(`SELECT COUNT(*) AS n FROM token_analytics
-		WHERE LOWER(symbol) LIKE {:s} OR LOWER(name) LIKE {:s} OR LOWER(token_address) LIKE {:s}`).
-		Bind(dbx.Params{"s": "%" + q + "%"}).
-		One(&row)
-	if err != nil {
-		return 0, fmt.Errorf("count token_analytics: %w", err)
-	}
-	return row.N, nil
-}
-
 // buildTokenFilter returns a PocketBase filter expression (uses the `~` contains
 // operator which PB translates to a case-insensitive LIKE — raw SQL functions
 // like LOWER() are not understood by the PB filter parser).
@@ -59,4 +40,33 @@ func SearchTokens(app core.App, q string, limit int) ([]*core.Record, error) {
 // AllTokenAnalytics returns all token analytics records (used for bulk updates).
 func AllTokenAnalytics(app core.App) ([]*core.Record, error) {
 	return FindRecords(app, "token_analytics", "", "", 0, 0)
+}
+
+// TokenSummary holds aggregate stats across the whole token_analytics table
+// (optionally filtered by the same search string used by ListTokens).
+type TokenSummary struct {
+	Total          int   `db:"total"`
+	TotalTransfers int64 `db:"total_transfers"`
+	Active         int   `db:"active"`
+	Failed         int   `db:"failed"`
+}
+
+// TokensSummary returns aggregate counts/sums across all matching token rows.
+func TokensSummary(app core.App, search string) (TokenSummary, error) {
+	sql := `SELECT
+		COUNT(*) AS total,
+		COALESCE(SUM(transfer_count), 0) AS total_transfers,
+		SUM(CASE WHEN lookup_failed THEN 0 ELSE 1 END) AS active,
+		SUM(CASE WHEN lookup_failed THEN 1 ELSE 0 END) AS failed
+	FROM token_analytics`
+	params := dbx.Params{}
+	if s := strings.ToLower(strings.TrimSpace(search)); s != "" {
+		sql += " WHERE LOWER(symbol) LIKE {:s} OR LOWER(name) LIKE {:s} OR LOWER(token_address) LIKE {:s}"
+		params["s"] = "%" + s + "%"
+	}
+	var out TokenSummary
+	if err := app.DB().NewQuery(sql).Bind(params).One(&out); err != nil {
+		return out, fmt.Errorf("token summary: %w", err)
+	}
+	return out, nil
 }

@@ -55,11 +55,17 @@ func tokensHandler(c *core.RequestEvent) error {
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error()})
 	}
-	total, _ := repo.CountTokens(c.App, search)
+	summary, _ := repo.TokensSummary(c.App, search)
 	return c.JSON(http.StatusOK, map[string]any{
 		"tokens": recordsToMaps(records),
 		"count":  len(records),
-		"total":  total,
+		"total":  summary.Total,
+		"summary": map[string]any{
+			"total":           summary.Total,
+			"total_transfers": summary.TotalTransfers,
+			"active":          summary.Active,
+			"failed":          summary.Failed,
+		},
 	})
 }
 
