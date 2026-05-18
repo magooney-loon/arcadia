@@ -1,14 +1,21 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"log"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/joho/godotenv"
 	app "github.com/magooney-loon/pb-ext/core"
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/core"
+	"github.com/pocketbase/pocketbase/tools/router"
 	_ "modernc.org/sqlite"
 
 	"arcadia/internal/indexer"
@@ -46,6 +53,57 @@ const arcadiaPragmas = "?_pragma=busy_timeout(10000)" +
 	"&_pragma=journal_size_limit(200000000)" +
 	"&_pragma=wal_autocheckpoint(256)" +
 	"&_pragma=mmap_size(268435456)"
+
+// spaFallback holds the preloaded 200.html content for SPA routing.
+type spaFallback struct {
+	indexHTML string
+	modTime   time.Time
+}
+
+func newSpaFallback() *spaFallback {
+	path := "./pb_public/200.html"
+	data, err := os.ReadFile(path)
+	if err != nil {
+		exePath, exeErr := os.Executable()
+		if exeErr == nil {
+			exeDir := filepath.Dir(exePath)
+			for _, p := range []string{
+				filepath.Join(exeDir, "pb_public", "200.html"),
+				filepath.Join(exeDir, "../pb_public", "200.html"),
+			} {
+				if data, err = os.ReadFile(p); err == nil {
+					break
+				}
+			}
+		}
+	}
+	if err != nil {
+		return &spaFallback{}
+	}
+	info, _ := os.Stat(path)
+	var modTime time.Time
+	if info != nil {
+		modTime = info.ModTime()
+	}
+	return &spaFallback{indexHTML: string(data), modTime: modTime}
+}
+
+// isAssetPath returns true for paths that look like static assets
+// so we never serve the SPA shell for those.
+func isAssetPath(path string) bool {
+	if strings.HasPrefix(path, "/_app/") {
+		return true
+	}
+	ext := strings.ToLower(filepath.Ext(path))
+	switch ext {
+	case ".js", ".mjs", ".css", ".map", ".json",
+		".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp", ".ico",
+		".woff", ".woff2", ".ttf", ".eot", ".otf",
+		".wasm", ".webmanifest":
+		return true
+	}
+	return false
+}
 
 func arcadiaDBConnect(dbPath string) (*dbx.DB, error) {
 	return dbx.Open("sqlite", dbPath+arcadiaPragmas)
@@ -114,6 +172,34 @@ func initApp(devMode bool) {
 	srv.App().OnServe().BindFunc(func(e *core.ServeEvent) error {
 		app.SetupRecovery(srv.App(), e)
 		indexer.StartIndexer(srv.App())
+
+		// SPA fallback: when the static file handler returns a 404 ApiError
+		// for a non-API GET request, serve pb_public/200.html instead so
+		// SvelteKit's client-side router handles dynamic routes.
+		spa := newSpaFallback()
+		e.Router.BindFunc(func(c *core.RequestEvent) error {
+			err := c.Next()
+			// Only intercept 404 ApiErrors on GET requests.
+			if err == nil || c.Request.Method != http.MethodGet {
+				return err
+			}
+			var apiErr *router.ApiError
+			if !errors.As(err, &apiErr) || apiErr.Status != http.StatusNotFound {
+				return err
+			}
+			path := c.Request.URL.Path
+			if strings.HasPrefix(path, "/api/") || strings.HasPrefix(path, "/_") || isAssetPath(path) {
+				return err
+			}
+			if spa.indexHTML != "" {
+				c.Response.Header().Set("Content-Type", "text/html; charset=utf-8")
+				c.Response.WriteHeader(http.StatusOK)
+				http.ServeContent(c.Response, c.Request, "index.html", spa.modTime, strings.NewReader(spa.indexHTML))
+				return nil
+			}
+			return err
+		})
+
 		return e.Next()
 	})
 
