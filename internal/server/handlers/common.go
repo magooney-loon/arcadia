@@ -6,35 +6,12 @@ import (
 	"fmt"
 	"math/big"
 	"strconv"
-	"time"
 
 	"github.com/pocketbase/pocketbase/core"
 
 	"arcadia/internal/repo"
 	"arcadia/internal/utils"
 )
-
-// timed wraps a handler with a wall-clock timer that logs any request taking
-// longer than slowHandlerThreshold. Used to identify which endpoint causes
-// the frontend's 15s timeouts during indexer sprint.
-const slowHandlerThreshold = 500 * time.Millisecond
-
-func timed(name string, h func(*core.RequestEvent) error) func(*core.RequestEvent) error {
-	return func(c *core.RequestEvent) error {
-		start := time.Now()
-		err := h(c)
-		elapsed := time.Since(start)
-		if elapsed >= slowHandlerThreshold {
-			c.App.Logger().Warn("slow_handler",
-				"name", name,
-				"elapsed_ms", elapsed.Milliseconds(),
-				"path", c.Request.URL.Path,
-				"query", c.Request.URL.RawQuery,
-			)
-		}
-		return err
-	}
-}
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 

@@ -49,40 +49,40 @@ func InitVersionedSystem() *api.APIVersionManager {
 func registerV1Routes(router *api.VersionedAPIRouter) {
 	v1 := router.SetPrefix("/api/v1")
 
-	v1.GET("/stats", timed("stats", statsHandler))
-	v1.GET("/block_stats", timed("block_stats", blockStatsHandler))
+	v1.GET("/stats", statsHandler)
+	v1.GET("/block_stats", blockStatsHandler)
 
-	v1.GET("/blocks", timed("blocks", blocksHandler))
-	v1.GET("/transactions", timed("transactions", transactionsHandler))
-	v1.GET("/traces", timed("traces", tracesHandler))
+	v1.GET("/blocks", blocksHandler)
+	v1.GET("/transactions", transactionsHandler)
+	v1.GET("/traces", tracesHandler)
 
-	v1.GET("/transfers", timed("transfers", transfersHandler))
+	v1.GET("/transfers", transfersHandler)
 
-	v1.GET("/tokens", timed("tokens", tokensHandler))
-	v1.GET("/tokens/{address}", timed("token_detail", tokenDetailHandler))
+	v1.GET("/tokens", tokensHandler)
+	v1.GET("/tokens/{address}", tokenDetailHandler)
 
-	v1.GET("/wallet/{address}", timed("wallet", walletHandler))
+	v1.GET("/wallet/{address}", walletHandler)
 
-	v1.GET("/crosschain", timed("crosschain", crosschainHandler))
-	v1.GET("/fx", timed("fx", fxHandler))
+	v1.GET("/crosschain", crosschainHandler)
+	v1.GET("/fx", fxHandler)
 
-	v1.GET("/agents", timed("agents", agentsHandler))
-	v1.GET("/agents/{address}", timed("agent", agentHandler))
-	v1.GET("/jobs", timed("jobs", agentJobsHandler))
+	v1.GET("/agents", agentsHandler)
+	v1.GET("/agents/{address}", agentHandler)
+	v1.GET("/jobs", agentJobsHandler)
 
-	v1.GET("/edges", timed("edges", edgesHandler))
+	v1.GET("/edges", edgesHandler)
 
-	v1.GET("/health", timed("health", healthHandler))
+	v1.GET("/health", healthHandler)
 
-	v1.GET("/search", timed("search", searchHandler))
+	v1.GET("/search", searchHandler)
 
-	v1.GET("/tx/{hash}", timed("tx_detail", txDetailHandler))
-	v1.GET("/block/{number}", timed("block_detail", blockDetailHandler))
+	v1.GET("/tx/{hash}", txDetailHandler)
+	v1.GET("/block/{number}", blockDetailHandler)
 
-	v1.GET("/analytics/overview", timed("analytics_overview", analyticsOverviewHandler))
-	v1.GET("/analytics/fees", timed("analytics_fees", analyticsFeesHandler))
-	v1.GET("/analytics/volume", timed("analytics_volume", analyticsVolumeHandler))
-	v1.GET("/analytics/bridge_flow", timed("analytics_bridge_flow", analyticsBridgeFlowHandler))
-	v1.GET("/analytics/agent_leaderboard", timed("analytics_agent_leaderboard", analyticsAgentLeaderboardHandler))
-	v1.GET("/analytics/history", timed("analytics_history", analyticsHistoryHandler))
+	v1.GET("/analytics/overview", analyticsOverviewHandler)
+	v1.GET("/analytics/fees", analyticsFeesHandler)
+	v1.GET("/analytics/volume", analyticsVolumeHandler)
+	v1.GET("/analytics/bridge_flow", analyticsBridgeFlowHandler)
+	v1.GET("/analytics/agent_leaderboard", analyticsAgentLeaderboardHandler)
+	v1.GET("/analytics/history", analyticsHistoryHandler)
 }
