@@ -92,34 +92,33 @@ func tracesHandler(c *core.RequestEvent) error {
 	})
 }
 
-// API_DESC Unified search by tx hash (0x+64), address (0x+40), or block number
+// API_DESC Unified search by tx hash (0x+64), address (0x+40), block number, or free-text against tokens/agents.
 // API_TAGS Chain
 func searchHandler(c *core.RequestEvent) error {
-	q := strings.TrimSpace(qp(c, "q", ""))
-	if q == "" {
+	raw := strings.TrimSpace(qp(c, "q", ""))
+	if raw == "" {
 		return c.JSON(http.StatusBadRequest, map[string]any{"error": "q required"})
 	}
+	q := strings.ToLower(raw)
 
+	// Exact tx hash
 	if len(q) == 66 && strings.HasPrefix(q, "0x") {
 		tx, _ := repo.TransactionByHash(c.App, q)
 		if tx != nil {
 			return c.JSON(http.StatusOK, map[string]any{"type": "tx", "result": tx.PublicExport()})
 		}
-		return c.JSON(http.StatusOK, map[string]any{"type": "not_found"})
+		// fall through to multi
 	}
 
+	// Exact address (agent / token / wallet)
 	if len(q) == 42 && strings.HasPrefix(q, "0x") {
-		// Check agent first
-		agent, _ := repo.AgentByAddress(c.App, q)
-		if agent != nil {
+		if agent, _ := repo.AgentByAddress(c.App, q); agent != nil {
 			return c.JSON(http.StatusOK, map[string]any{
 				"type":   "agent",
 				"result": map[string]any{"address": q, "is_agent": true, "agent": agent.PublicExport()},
 			})
 		}
-		// Check token
-		token, _ := repo.TokenByAddress(c.App, strings.ToLower(q))
-		if token != nil {
+		if token, _ := repo.TokenByAddress(c.App, q); token != nil {
 			return c.JSON(http.StatusOK, map[string]any{
 				"type":   "token",
 				"result": token.PublicExport(),
@@ -131,18 +130,38 @@ func searchHandler(c *core.RequestEvent) error {
 		})
 	}
 
+	// Pure number -> block
 	if isNumeric(q) {
 		num, _ := strconv.Atoi(q)
 		block, _ := repo.BlockByNumber(c.App, int64(num))
 		if block != nil {
 			return c.JSON(http.StatusOK, map[string]any{"type": "block", "result": block.PublicExport()})
 		}
+		// fall through (maybe it's a token symbol like "1INCH")
+	}
+
+	// Partial 0x prefix -> try a few targeted prefix lookups
+	if strings.HasPrefix(q, "0x") && len(q) >= 4 {
+		// Prefix-match against tx hash + addresses + tokens via lowercased columns.
+		// Token search already covers token_address; also try agents by address prefix.
+		tokens, _ := repo.SearchTokens(c.App, q, 5)
+		agents, _ := repo.SearchAgents(c.App, q, 5)
+		if len(tokens) > 0 || len(agents) > 0 {
+			out := map[string]any{"type": "multi"}
+			if len(tokens) > 0 {
+				out["tokens"] = recordsToMaps(tokens)
+			}
+			if len(agents) > 0 {
+				out["agents"] = recordsToMaps(agents)
+			}
+			return c.JSON(http.StatusOK, out)
+		}
 		return c.JSON(http.StatusOK, map[string]any{"type": "not_found"})
 	}
 
 	// Free-text search: look across tokens and agents
-	tokens, _ := repo.SearchTokens(c.App, q, 5)
-	agents, _ := repo.SearchAgents(c.App, q, 5)
+	tokens, _ := repo.SearchTokens(c.App, q, 8)
+	agents, _ := repo.SearchAgents(c.App, q, 8)
 
 	if len(tokens) == 0 && len(agents) == 0 {
 		return c.JSON(http.StatusOK, map[string]any{"type": "not_found"})

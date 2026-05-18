@@ -14,8 +14,15 @@
 	const DIRECTIONS = ['all', 'inbound', 'outbound'];
 	const PROTOCOLS = ['all', 'cctp', 'gateway'];
 
+	// Chains available for filtering (exclude Arc Testnet itself)
+	const CHAIN_OPTIONS = Object.entries(fmt.DOMAIN_NAMES)
+		.filter(([id]) => Number(id) !== 26)
+		.map(([id, name]) => ({ id: Number(id), name }))
+		.sort((a, b) => a.name.localeCompare(b.name));
+
 	let direction = $state('all');
 	let protocol = $state('all');
+	let chainId = $state<number>(0);
 	let offset = $state(0);
 	const limit = 40;
 
@@ -23,6 +30,7 @@
 		fetchCrosschain({
 			direction: direction === 'all' ? undefined : (direction as 'inbound' | 'outbound'),
 			protocol: protocol === 'all' ? undefined : (protocol as 'cctp' | 'gateway'),
+			chain: chainId || undefined,
 			limit,
 			offset
 		});
@@ -82,6 +90,21 @@
 	</div>
 
 	<div class="filter-bar">
+		<span class="mono dim" style="font-size:10px">chain</span>
+		<select
+			class="chain-select"
+			bind:value={chainId}
+			onchange={() => {
+				offset = 0;
+				load();
+			}}
+		>
+			<option value={0}>all chains</option>
+			{#each CHAIN_OPTIONS as c (c.id)}
+				<option value={c.id}>{c.name}</option>
+			{/each}
+		</select>
+		<span class="mono dim" style="font-size:10px;margin-left:8px">direction</span>
 		{#each DIRECTIONS as d (d)}
 			<button
 				class="chip {direction === d ? 'on' : ''}"
@@ -201,3 +224,27 @@
 		}}
 	/>
 </div>
+
+<style>
+	.chain-select {
+		appearance: none;
+		background: var(--bg-2);
+		border: 1px solid var(--border-2);
+		border-radius: 4px;
+		color: var(--fg-1);
+		font: inherit;
+		font-size: 11px;
+		padding: 4px 24px 4px 8px;
+		cursor: pointer;
+		outline: none;
+		background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23666'/%3E%3C/svg%3E");
+		background-repeat: no-repeat;
+		background-position: right 8px center;
+	}
+	.chain-select:hover {
+		border-color: var(--accent);
+	}
+	.chain-select:focus {
+		border-color: var(--accent);
+	}
+</style>

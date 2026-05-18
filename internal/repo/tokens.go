@@ -1,6 +1,8 @@
 package repo
 
 import (
+	"strings"
+
 	"github.com/pocketbase/pocketbase/core"
 )
 
@@ -20,8 +22,9 @@ func buildTokenFilter(search string) (string, map[string]any) {
 	if search == "" {
 		return "", nil
 	}
+	q := strings.ToLower(strings.TrimSpace(search))
 	return "(LOWER(symbol) LIKE {:s} OR LOWER(name) LIKE {:s} OR LOWER(token_address) LIKE {:s})",
-		map[string]any{"s": "%" + search + "%"}
+		map[string]any{"s": "%" + q + "%"}
 }
 
 // TokenByAddress returns token analytics for a specific address.
