@@ -1,5 +1,8 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import canteenLogo from '$lib/assets/canteen-logo.png';
+	import circleIcon from '$lib/assets/circle-icon-white.svg';
+	import arcIcon from '$lib/assets/arc-icon-white.svg';
 
 	const REPO_URL = 'https://github.com/magooney-loon/arcadia';
 </script>
@@ -30,15 +33,17 @@
 
 		<div class="badge-row">
 			<span class="badge">demo showcase</span>
+			<span class="badge">agora hackathon</span>
 			<span class="badge dim">arc testnet</span>
 			<span class="badge dim">v0.4.2-rc1</span>
 		</div>
 
 		<p class="lead">
 			A real-time blockchain indexer and analytics platform for
-			<a href="https://docs.arc.network/" target="_blank" rel="external noopener noreferrer">Arc L1</a>.
-			Indexes blocks, transactions, stablecoin transfers, internal traces, AI agent lifecycle events,
-			cross-chain flows, FX swaps, and derived economic metrics — then serves them through a
+			<a href="https://docs.arc.network/" target="_blank" rel="external noopener noreferrer"
+				>Arc L1</a
+			>. Indexes blocks, transactions, stablecoin transfers, internal traces, AI agent lifecycle
+			events, cross-chain flows, FX swaps, and derived economic metrics — then serves them through a
 			versioned REST API and this live SvelteKit dashboard.
 		</p>
 
@@ -46,9 +51,62 @@
 			<div class="callout-label">heads up</div>
 			<div class="callout-body">
 				This is a public demo running on the Envio HyperSync free tier and a single SQLite writer.
-				It's here to show what's possible — not to serve production traffic. For your own data,
-				fork the repo, plug in your Envio API key, and run it locally or self-host. Extend the Go
-				indexer to capture whatever events your protocol emits.
+				It's here to show what's possible — not to serve production traffic. For your own data, fork
+				the repo, plug in your Envio API key, and run it locally or self-host. Extend the Go indexer
+				to capture whatever events your protocol emits.
+			</div>
+		</div>
+
+		<div class="hackathon">
+			<div class="hackathon-label">built for</div>
+			<div class="hackathon-body">
+				<p>
+					Built during
+					<a
+						href="https://agora.thecanteenapp.com/?utm_source=arcadia"
+						target="_blank"
+						rel="external noopener noreferrer">Agora</a
+					>, a hackathon hosted by
+					<a href="https://thecanteenapp.com/" target="_blank" rel="external noopener noreferrer"
+						>Canteen</a
+					>,
+					<a href="https://www.circle.com/" target="_blank" rel="external noopener noreferrer"
+						>Circle</a
+					>, and
+					<a href="https://www.arc.io/" target="_blank" rel="external noopener noreferrer">Arc</a>.
+				</p>
+				<div class="hackathon-logos">
+					<a
+						href="https://thecanteenapp.com/"
+						target="_blank"
+						rel="external noopener noreferrer"
+						class="hackathon-logo"
+						title="Canteen"
+					>
+						<img src={canteenLogo} alt="Canteen" />
+						<span>Canteen</span>
+					</a>
+					<a
+						href="https://www.circle.com/"
+						target="_blank"
+						rel="external noopener noreferrer"
+						class="hackathon-logo"
+						title="Circle"
+					>
+						<img src={circleIcon} alt="Circle" />
+						<span>Circle</span>
+					</a>
+					<a
+						href="https://www.arc.io/"
+						target="_blank"
+						rel="external noopener noreferrer"
+						class="hackathon-logo"
+						title="Arc"
+					>
+						<img src={arcIcon} alt="Arc" />
+						<span>Arc</span>
+					</a>
+				</div>
 			</div>
 		</div>
 
@@ -70,8 +128,8 @@
 			<div class="feature">
 				<div class="feature-title">Forkable</div>
 				<div class="feature-body">
-					Go + PocketBase + SQLite. One binary, one DB file, one config. Add a topic, add a
-					handler, you're done.
+					Go + PocketBase + SQLite. One binary, one DB file, one config. Add a topic, add a handler,
+					you're done.
 				</div>
 			</div>
 		</div>
@@ -109,8 +167,7 @@
 		padding: 32px 20px;
 		background:
 			radial-gradient(circle at 20% 20%, rgba(80, 150, 255, 0.06), transparent 50%),
-			radial-gradient(circle at 80% 80%, rgba(60, 200, 180, 0.05), transparent 50%),
-			var(--bg-0);
+			radial-gradient(circle at 80% 80%, rgba(60, 200, 180, 0.05), transparent 50%), var(--bg-0);
 	}
 
 	.card {
@@ -284,6 +341,72 @@
 	}
 	.btn.ghost:hover {
 		background: var(--border-1);
+	}
+
+	.hackathon {
+		background: var(--bg-2);
+		border: 1px solid var(--border-1);
+		border-radius: 5px;
+		padding: 14px 16px;
+		margin-bottom: 22px;
+		display: flex;
+		gap: 14px;
+		align-items: flex-start;
+	}
+	.hackathon-label {
+		font-size: 9px;
+		text-transform: uppercase;
+		letter-spacing: 0.6px;
+		color: var(--accent);
+		font-weight: 600;
+		white-space: nowrap;
+		padding-top: 1px;
+	}
+	.hackathon-body {
+		flex: 1;
+	}
+	.hackathon-body p {
+		font-size: 12px;
+		line-height: 1.6;
+		color: var(--fg-3);
+		margin: 0 0 10px;
+	}
+	.hackathon-body a {
+		color: var(--accent);
+		text-decoration: none;
+		border-bottom: 1px dashed currentColor;
+	}
+	.hackathon-body a:hover {
+		opacity: 0.8;
+	}
+	.hackathon-logos {
+		display: flex;
+		gap: 12px;
+		flex-wrap: wrap;
+	}
+	.hackathon-logo {
+		display: inline-flex;
+		align-items: center;
+		gap: 5px;
+		font-size: 10px;
+		text-transform: uppercase;
+		letter-spacing: 0.4px;
+		color: var(--fg-2);
+		text-decoration: none;
+		border: none !important;
+		padding: 4px 8px;
+		border-radius: 3px;
+		background: var(--bg-0);
+		transition: background 120ms ease;
+	}
+	.hackathon-logo:hover {
+		background: var(--border-1);
+	}
+	.hackathon-logo img {
+		width: 16px;
+		height: 16px;
+		flex-shrink: 0;
+		object-fit: contain;
 	}
 
 	.footnote {
