@@ -22,7 +22,7 @@ import (
 //
 // Why each pragma:
 //   - busy_timeout(10000):       PocketBase default; restated because it must
-//                                come before journal_mode(WAL).
+//     come before journal_mode(WAL).
 //   - journal_mode(WAL):         required for concurrent readers + writer.
 //   - synchronous(NORMAL):       safe under WAL; faster than FULL.
 //   - foreign_keys(ON):          parity with PB default.
@@ -30,13 +30,13 @@ import (
 //   - cache_size(-32000):        32 MB page cache per connection (PB default).
 //   - journal_size_limit(...):   cap WAL+journal disk usage at 200 MB.
 //   - wal_autocheckpoint(256):   trigger passive checkpoints every 256 pages
-//                                (~1 MB) instead of the 1000-page default so
-//                                WAL stays small under sustained writer load.
-//                                The idle TRUNCATE checkpoint in the indexer
-//                                handles the case where readers block passive
-//                                checkpoints from making progress.
+//     (~1 MB) instead of the 1000-page default so
+//     WAL stays small under sustained writer load.
+//     The idle TRUNCATE checkpoint in the indexer
+//     handles the case where readers block passive
+//     checkpoints from making progress.
 //   - mmap_size(268435456):      256 MB memory-mapped read window; cuts
-//                                read-side syscalls during sprint indexing.
+//     read-side syscalls during sprint indexing.
 const arcadiaPragmas = "?_pragma=busy_timeout(10000)" +
 	"&_pragma=journal_mode(WAL)" +
 	"&_pragma=synchronous(NORMAL)" +
@@ -114,7 +114,6 @@ func initApp(devMode bool) {
 	srv.App().OnServe().BindFunc(func(e *core.ServeEvent) error {
 		app.SetupRecovery(srv.App(), e)
 		indexer.StartIndexer(srv.App())
-		jobs.StartTokenAnalyticsScheduler(srv.App())
 		return e.Next()
 	})
 

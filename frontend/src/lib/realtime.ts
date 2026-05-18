@@ -1,5 +1,5 @@
-// SSE subscription manager. Subscribes to the server's two custom
-// PocketBase topics ("indexer" and "analytics") and fans incoming
+// SSE subscription manager. Subscribes to the server's three custom
+// PocketBase topics ("indexer", "analytics", and "health") and fans incoming
 // payloads into the existing Svelte stores so any view bound to those
 // stores updates automatically.
 //
@@ -43,6 +43,10 @@ interface AnalyticsPayload {
 	overview: OverviewResponse;
 	bridge_flow: BridgeFlowResponse;
 	volume: VolumeResponse;
+}
+
+interface HealthPayload {
+	health: HealthResponse;
 }
 
 // Window currently selected by the UI. The server broadcasts all three
@@ -91,11 +95,17 @@ export async function connectRealtime() {
 		if (p.bridge_flow) analyticsBridgeFlow.data = p.bridge_flow;
 		if (p.volume) analyticsVolume.data = p.volume;
 	});
+
+	await safeSubscribe('health', (e: unknown) => {
+		const p = e as HealthPayload;
+		if (p.health) health.data = p.health;
+	});
 }
 
 export async function disconnectRealtime() {
 	await safeUnsubscribe('indexer');
 	await safeUnsubscribe('analytics');
+	await safeUnsubscribe('health');
 }
 
 // The `charts` topic carries the 200-row block_stats series. It's only

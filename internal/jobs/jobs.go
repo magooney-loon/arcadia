@@ -20,6 +20,10 @@ func RegisterJobs(app core.App) {
 			app.Logger().Error("Failed to register analytics snapshot job", "error", err)
 			return err
 		}
+		if err := RegisterTokenAnalyticsJob(app); err != nil {
+			app.Logger().Error("Failed to register token analytics job", "error", err)
+			return err
+		}
 		app.Logger().Info("All jobs registered")
 
 		go func() {
@@ -29,6 +33,11 @@ func RegisterJobs(app core.App) {
 					app.Logger().Warn("Initial analytics snapshot failed", "window", win, "error", err)
 				}
 			}
+		}()
+
+		go func() {
+			time.Sleep(30 * time.Second)
+			RunTokenAnalytics(app)
 		}()
 
 		return e.Next()

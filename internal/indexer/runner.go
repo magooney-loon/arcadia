@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strconv"
 	"sync/atomic"
 	"time"
 
@@ -222,6 +223,12 @@ func runIndexer(ctx context.Context, app core.App, attempt int) error {
 			return err
 		}
 
+		// Update lag meta immediately so the broadcaster and health
+		// endpoint always have fresh numbers instead of waiting for
+		// the 15s heartbeat.
+		_ = utils.SetMetaValue(app, "chainTip", strconv.FormatUint(tip, 10))
+		_ = utils.SetMetaValue(app, "lagBlocks", strconv.FormatUint(remainingLag, 10))
+
 		batchCount := completedBatches.Add(1)
 		elapsed := time.Since(batchStart).Milliseconds()
 		lastBatchAtUnixNano.Store(time.Now().UnixNano())
@@ -244,6 +251,7 @@ func runIndexer(ctx context.Context, app core.App, attempt int) error {
 		// so it never blocks the indexer loop; the broadcaster also self-
 		// throttles to ~1Hz when catching up.
 		go realtime.BroadcastIndexerUpdate(app)
+		go realtime.BroadcastHealthUpdate(app)
 
 		// Adaptive pacing: sprint when behind, ease off near the tip.
 		// The prefetch goroutine is already running — the sleep here just

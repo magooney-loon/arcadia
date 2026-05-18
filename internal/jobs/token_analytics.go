@@ -1,11 +1,13 @@
 package jobs
 
 import (
+	"fmt"
 	"log"
 	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/magooney-loon/pb-ext/core/jobs"
 	"github.com/pocketbase/pocketbase/core"
 
 	"arcadia/internal/repo"
@@ -168,16 +170,39 @@ func RunTokenAnalytics(app core.App) {
 	log.Printf("[token-analytics] completed: %d saved, %d failed", saved, failed)
 }
 
-// StartTokenAnalyticsScheduler runs the analytics job periodically.
-func StartTokenAnalyticsScheduler(app core.App) {
-	const initialDelay = 30 * time.Second
-	const interval = 10 * time.Minute
+// RegisterTokenAnalyticsJob registers the token analytics job with the
+// pb-ext job manager (visible in the admin UI, logged execution history).
+func RegisterTokenAnalyticsJob(app core.App) error {
+	jm := jobs.GetManager()
+	if jm == nil {
+		return fmt.Errorf("job manager not initialized")
+	}
 
-	go func() {
-		time.Sleep(initialDelay)
-		for {
+	return jm.RegisterJob(
+		"tokenAnalytics",
+		"Token Analytics",
+		"Aggregates per-token stats from transfers and enriches with on-chain metadata",
+		"*/10 * * * *",
+		func(el *jobs.ExecutionLogger) {
+			el.Start("Token Analytics")
+
+			var before struct {
+				Count int `db:"cnt"`
+			}
+			_ = app.DB().NewQuery("SELECT COUNT(*) AS cnt FROM token_analytics").One(&before)
+
 			RunTokenAnalytics(app)
-			time.Sleep(interval)
-		}
-	}()
+
+			var after struct {
+				Count int `db:"cnt"`
+			}
+			_ = app.DB().NewQuery("SELECT COUNT(*) AS cnt FROM token_analytics").One(&after)
+
+			el.Statistics(map[string]interface{}{
+				"tokens_before": before.Count,
+				"tokens_after":  after.Count,
+			})
+			el.Complete(fmt.Sprintf("Token analytics done — %d tokens", after.Count))
+		},
+	)
 }

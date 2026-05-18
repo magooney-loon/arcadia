@@ -21,7 +21,7 @@ func indexerHealthJob(app core.App) error {
 		"indexerHealth",
 		"Indexer Health Check",
 		"Logs the current indexer cursor and row counts for all arcadia collections",
-		"0 * * * *",
+		"0 */12 * * *",
 		func(el *jobs.ExecutionLogger) {
 			el.Start("Indexer Health Check")
 			el.Info("Checked at: %s", time.Now().Format(time.RFC3339))

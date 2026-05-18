@@ -59,9 +59,18 @@ func BroadcastIndexerUpdate(app core.App) {
 		return
 	}
 
-	// Always build and cache payloads — even if no SSE subscribers,
-	// REST handlers need the cache.
-	indexerPayload := buildIndexerPayload(app)
+	var indexerPayload map[string]any
+	if lag > 100 {
+		// Heavy sync: skip expensive list queries to avoid contending
+		// with the indexer's write transaction. The separate health topic
+		// keeps the frontend sync overlay updated at 2s intervals.
+		indexerPayload = map[string]any{
+			"stats":  buildStats(app),
+			"health": buildHealth(app),
+		}
+	} else {
+		indexerPayload = buildIndexerPayload(app)
+	}
 
 	// Cache the individual components for REST handlers.
 	// TTL is generous: the next broadcast will overwrite.
@@ -79,10 +88,8 @@ func BroadcastIndexerUpdate(app core.App) {
 		cache.Default.Set("transactions:10", t, ttl)
 	}
 
-	// Expensive list queries — skip only when very far behind, otherwise the
-	// frontend falls back to REST and hits the same queries with worse
-	// caching characteristics.
-	if lag <= 500 {
+	// Charts and list queries — skip entirely during heavy sync.
+	if lag <= 100 {
 		chartsData := map[string]any{
 			"block_stats": buildBlockStatsList(app, 50),
 		}
@@ -94,6 +101,37 @@ func BroadcastIndexerUpdate(app core.App) {
 
 	// Send to SSE subscribers.
 	_ = Broadcast(app, indexerTopic, indexerPayload)
+}
+
+// healthTopic carries lightweight health/lag updates at 2s intervals,
+// independent of the heavier indexer topic.
+const healthTopic = "health"
+
+var lastHealthBroadcast atomic.Int64
+
+const minHealthInterval = 2 * time.Second
+
+// BroadcastHealthUpdate sends a lightweight health payload on the
+// dedicated health topic. It is throttled to 2s always (no backoff
+// during sync) so the frontend sync overlay stays responsive.
+func BroadcastHealthUpdate(app core.App) {
+	now := time.Now().UnixMilli()
+	last := lastHealthBroadcast.Load()
+	if now-last < minHealthInterval.Milliseconds() {
+		return
+	}
+	if !lastHealthBroadcast.CompareAndSwap(last, now) {
+		return
+	}
+
+	if !HasSubscribers(app, healthTopic) {
+		return
+	}
+
+	healthData := buildHealth(app)
+	cache.Default.Set("health", healthData, 5*time.Second)
+
+	_ = Broadcast(app, healthTopic, map[string]any{"health": healthData})
 }
 
 // BroadcastAnalyticsUpdate fires after a snapshot job finishes for the

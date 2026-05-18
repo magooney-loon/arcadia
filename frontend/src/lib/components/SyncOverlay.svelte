@@ -4,24 +4,27 @@
 	const SYNC_MODAL_SHOW = 100;
 	const SYNC_MODAL_HIDE = 20;
 	let syncModalOpen = $state(false);
+	let startBlock = $state(0);
 	$effect(() => {
 		const lag = health.data?.lag_blocks ?? 0;
 		if (!health.data) return;
 		if (syncModalOpen) {
 			if (lag <= SYNC_MODAL_HIDE) syncModalOpen = false;
 		} else {
-			if (lag > SYNC_MODAL_SHOW) syncModalOpen = true;
+			if (lag > SYNC_MODAL_SHOW) {
+				syncModalOpen = true;
+				startBlock = health.data?.last_indexed_block ?? 0;
+			}
 		}
 	});
 
 	const syncProgressPct = $derived.by(() => {
-		const tip = health.data?.chain_tip ?? 0;
 		const head = health.data?.last_indexed_block ?? 0;
-		if (!tip || head > tip) return 0;
-		const lag = health.data?.lag_blocks ?? 0;
-		const span = SYNC_MODAL_SHOW - SYNC_MODAL_HIDE;
-		const remaining = Math.max(0, Math.min(span, lag - SYNC_MODAL_HIDE));
-		return Math.round(((span - remaining) / span) * 100);
+		const tip = health.data?.chain_tip ?? 0;
+		const span = tip - startBlock;
+		if (span <= 0) return 100;
+		const progress = head - startBlock;
+		return Math.round(Math.min(100, Math.max(0, (progress / span) * 100)));
 	});
 </script>
 
@@ -41,20 +44,30 @@
 			<div class="sync-pulse-ring">
 				<svg viewBox="0 0 40 40" fill="none" aria-hidden="true">
 					<circle cx="20" cy="20" r="14" stroke="var(--accent)" stroke-width="2" opacity="0.3" />
-					<circle cx="20" cy="20" r="14" stroke="var(--accent)" stroke-width="2"
-						stroke-dasharray="22 88" stroke-linecap="round" class="sync-spin" />
+					<circle
+						cx="20"
+						cy="20"
+						r="14"
+						stroke="var(--accent)"
+						stroke-width="2"
+						stroke-dasharray="22 88"
+						stroke-linecap="round"
+						class="sync-spin"
+					/>
 				</svg>
 			</div>
 			<div class="sync-title" id="sync-modal-title">Indexer is catching up</div>
 			<div class="sync-desc" id="sync-modal-desc">
-				Arcadia is replaying recent blocks. The dashboard is paused so the indexer
-				can finish without read contention. This usually clears within a minute.
+				Arcadia is replaying recent blocks. The dashboard is paused so the indexer can finish
+				without read contention. This usually clears within a minute.
 			</div>
 
 			<div class="sync-stats">
 				<div class="sync-stat">
 					<div class="sync-stat-label">behind by</div>
-					<div class="sync-stat-val warn">{health.data?.lag_blocks ?? '—'}<span class="sync-unit"> blocks</span></div>
+					<div class="sync-stat-val warn">
+						{health.data?.lag_blocks ?? '—'}<span class="sync-unit"> blocks</span>
+					</div>
 				</div>
 				<div class="sync-stat">
 					<div class="sync-stat-label">indexed</div>
@@ -70,9 +83,7 @@
 				<div class="sync-progress-fill" style="width:{syncProgressPct}%"></div>
 			</div>
 
-			<div class="sync-footnote">
-				Live updates over SSE — the page will resume automatically.
-			</div>
+			<div class="sync-footnote">Live updates over SSE — the page will resume automatically.</div>
 		</div>
 	</div>
 {/if}
