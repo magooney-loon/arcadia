@@ -104,18 +104,6 @@ The script parses `batch_profile` lines and prints count, avg, p50, p95, and max
 - **PocketBase admin**: http://127.0.0.1:8090/_/
 - **OpenAPI docs**: http://127.0.0.1:8090/api/docs/v1/swagger
 
-### Frontend-only development
-
-If you're iterating on the SvelteKit dashboard:
-
-```bash
-cd frontend
-npm install
-npm run dev -- --host
-```
-
-This starts the Vite dev server with HMR at `http://localhost:5173`, proxying API calls to the backend at `:8090`.
-
 ---
 
 ## Architecture
@@ -238,8 +226,7 @@ arcadia/
 │   └── utils/                  # Shared utilities
 │       ├── convert.go          # WeiToUSDC, StablecoinHuman, TokenAmountHuman, FindCollection, address extraction
 │       ├── analytics.go        # WindowBlockFilter, LoadFeeColumn, PercentileFloat, DomainName
-│       ├── meta.go             # GetLastIndexedBlock, SetLastIndexedBlock, SetMetaValue
-│       └── config.go           # Re-exports from internal/chain/ for backward compat
+│       └── meta.go             # GetLastIndexedBlock, SetLastIndexedBlock, SetMetaValue
 │
 ├── frontend/                   # SvelteKit dashboard (separate build → pb_public/)
 └── docs/                       # Arc network reference, HyperSync docs, IMPROVE tracker
