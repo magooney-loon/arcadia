@@ -1,6 +1,8 @@
 package repo
 
 import (
+	"strings"
+
 	"github.com/pocketbase/pocketbase/core"
 )
 
@@ -22,6 +24,13 @@ func AgentLeaderboard(app core.App, limit, offset int) ([]*core.Record, error) {
 // CountAgents returns the total number of registered agents.
 func CountAgents(app core.App) (int, error) {
 	return CountWithFilter(app, "agents", "", nil)
+}
+
+// SearchAgents searches agents by address using LIKE, limited to the given number of results.
+func SearchAgents(app core.App, q string, limit int) ([]*core.Record, error) {
+	q = strings.ToLower(q)
+	return FindRecords(app, "agents", "LOWER(agent_address) LIKE {:s}", "-usdc_transferred_num", limit, 0,
+		map[string]any{"s": "%" + q + "%"})
 }
 
 // JobAgg holds aggregated job statistics per agent address.

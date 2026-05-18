@@ -9,7 +9,7 @@ const config = {
 	kit: {
 		// SPA fallback lets dynamic routes (e.g. /wallet/[address], /tx/[hash])
 		// be served client-side from a single index.html.
-		adapter: adapter({ fallback: 'index.html' })
+		adapter: adapter({ fallback: '200.html' })
 	}
 };
 

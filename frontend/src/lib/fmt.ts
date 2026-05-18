@@ -140,6 +140,11 @@ export function fxBadge(status: string): string {
 	return m[status] ?? 'muted';
 }
 
+export function truncate(s: string, max: number): string {
+	if (s.length <= max) return s;
+	return s.slice(0, max - 1) + '…';
+}
+
 export function jobBadge(status: string): string {
 	const m: Record<string, string> = {
 		created: 'muted',

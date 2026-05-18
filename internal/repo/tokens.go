@@ -29,6 +29,12 @@ func TokenByAddress(app core.App, addr string) (*core.Record, error) {
 	return LatestRecord(app, "token_analytics", "token_address = {:a}", "", map[string]any{"a": addr})
 }
 
+// SearchTokens searches tokens by symbol/name/address, limited to the given number of results.
+func SearchTokens(app core.App, q string, limit int) ([]*core.Record, error) {
+	filter, params := buildTokenFilter(q)
+	return FindRecords(app, "token_analytics", filter, "-transfer_count", limit, 0, params)
+}
+
 // AllTokenAnalytics returns all token analytics records (used for bulk updates).
 func AllTokenAnalytics(app core.App) ([]*core.Record, error) {
 	return FindRecords(app, "token_analytics", "", "", 0, 0)

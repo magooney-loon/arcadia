@@ -3,7 +3,7 @@
 	import { createSort } from '$lib/sort.svelte';
 	import { resolve } from '$app/paths';
 	import * as fmt from '$lib/fmt.js';
-	import AddrLink from '$lib/components/AddrLink.svelte';
+	import TokenLink from '$lib/components/TokenLink.svelte';
 	import DataState from '$lib/components/DataState.svelte';
 	import Pagination from '$lib/components/Pagination.svelte';
 
@@ -163,20 +163,13 @@
 						{#each sortedTokens as token (token.id)}
 							<tr>
 								<td>
-									{#if token.symbol}
-										<span class="mono" style="font-weight:600;color:var(--fg-1)"
-											>{token.symbol}</span
-										>
-										{#if token.name}
-											<br /><span class="dim" style="font-size:10px">{token.name}</span>
-										{/if}
-									{:else if token.name}
-										<span class="mono" style="font-weight:600;color:var(--fg-1)">{token.name}</span>
-									{:else}
-										<span class="muted">—</span>
-									{/if}
+									<TokenLink
+										address={token.token_address}
+										symbol={token.symbol}
+										name={token.name}
+									/>
 								</td>
-								<td><AddrLink address={token.token_address} /></td>
+								<td><TokenLink address={token.token_address} /></td>
 								<td class="mono">{token.decimals ?? '—'}</td>
 								<td class="mono" style="font-size:11px"
 									>{formatSupply(token.total_supply_raw, token.total_supply_human)}</td

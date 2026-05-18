@@ -109,11 +109,20 @@ func searchHandler(c *core.RequestEvent) error {
 	}
 
 	if len(q) == 42 && strings.HasPrefix(q, "0x") {
+		// Check agent first
 		agent, _ := repo.AgentByAddress(c.App, q)
 		if agent != nil {
 			return c.JSON(http.StatusOK, map[string]any{
 				"type":   "agent",
 				"result": map[string]any{"address": q, "is_agent": true, "agent": agent.PublicExport()},
+			})
+		}
+		// Check token
+		token, _ := repo.TokenByAddress(c.App, strings.ToLower(q))
+		if token != nil {
+			return c.JSON(http.StatusOK, map[string]any{
+				"type":   "token",
+				"result": token.PublicExport(),
 			})
 		}
 		return c.JSON(http.StatusOK, map[string]any{
@@ -131,7 +140,22 @@ func searchHandler(c *core.RequestEvent) error {
 		return c.JSON(http.StatusOK, map[string]any{"type": "not_found"})
 	}
 
-	return c.JSON(http.StatusOK, map[string]any{"type": "unknown"})
+	// Free-text search: look across tokens and agents
+	tokens, _ := repo.SearchTokens(c.App, q, 5)
+	agents, _ := repo.SearchAgents(c.App, q, 5)
+
+	if len(tokens) == 0 && len(agents) == 0 {
+		return c.JSON(http.StatusOK, map[string]any{"type": "not_found"})
+	}
+
+	result := map[string]any{"type": "multi"}
+	if len(tokens) > 0 {
+		result["tokens"] = recordsToMaps(tokens)
+	}
+	if len(agents) > 0 {
+		result["agents"] = recordsToMaps(agents)
+	}
+	return c.JSON(http.StatusOK, result)
 }
 
 // API_DESC Single transaction detail with related transfers and traces
