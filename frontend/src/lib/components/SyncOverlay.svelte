@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { health } from '$lib/stores/health.svelte';
 
-	const SYNC_MODAL_SHOW = 100;
-	const SYNC_MODAL_HIDE = 20;
+	const SYNC_MODAL_SHOW = 20;
+	const SYNC_MODAL_HIDE = 1;
 	let syncModalOpen = $state(false);
 	let startBlock = $state(0);
 	$effect(() => {
