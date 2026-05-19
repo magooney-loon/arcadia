@@ -4,6 +4,8 @@ A real-time blockchain indexer and analytics platform for Arc L1. Indexes every 
 
 > **Demo**: The live instance runs on the Envio HyperSync free tier. For production throughput, self-host with your own API key (see Get Started below).
 
+> **Forking?** See [CUSTOMIZE.md](./CUSTOMIZE.md) for a step-by-step guide on indexing new contracts, adding API endpoints, connecting agents/bots/scripts, and extending the pipeline.
+
 ---
 
 ## Use Cases
