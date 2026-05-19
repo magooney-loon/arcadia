@@ -99,10 +99,12 @@ The script parses `batch_profile` lines and prints count, avg, p50, p95, and max
 
 ### Verify it's running
 
-- **App**: http://127.0.0.1:8090
-- **pb-ext dashboard**: http://127.0.0.1:8090/_/_
-- **PocketBase admin**: http://127.0.0.1:8090/_/
-- **OpenAPI docs**: http://127.0.0.1:8090/api/docs/v1/swagger
+| | URL |
+|---|---|
+| **App** | http://127.0.0.1:8090 |
+| **pb-ext dashboard** | http://127.0.0.1:8090/_/_ |
+| **PocketBase admin** | http://127.0.0.1:8090/_/ |
+| **OpenAPI docs** | http://127.0.0.1:8090/api/docs/v1/swagger |
 
 ---
 
