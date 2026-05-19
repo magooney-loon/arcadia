@@ -9,8 +9,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/pocketbase/pocketbase/core"
 
-	"arcadia/internal/chain"
-	"arcadia/internal/rpc"
+	arc "arcadia/internal/chain/arc"
 	"arcadia/internal/utils"
 )
 
@@ -40,12 +39,12 @@ func saveTransfer(app core.App, log *types.Log, seen *batchSeen, edges map[edgeK
 	if log.BlockNumber != nil {
 		firstSeenBlock = log.BlockNumber.Uint64()
 	}
-	info := rpc.LookupTokenInfo(app, *log.Address, firstSeenBlock)
+	info := arc.LookupTokenInfo(app, *log.Address, firstSeenBlock)
 
 	isNFT := info.TokenType == "ERC-721" || info.TokenType == "ERC-1155"
 
 	symbol := "OTHER"
-	if s, ok := chain.KnownTokens[*log.Address]; ok {
+	if s, ok := arc.KnownTokens[*log.Address]; ok {
 		symbol = s
 	}
 
@@ -88,7 +87,7 @@ func saveTransfer(app core.App, log *types.Log, seen *batchSeen, edges map[edgeK
 		return nil, nil
 	}
 
-	if _, isStable := chain.KnownTokens[*log.Address]; isStable {
+	if _, isStable := arc.KnownTokens[*log.Address]; isStable {
 		key := edgeKey{from.Hex(), to.Hex()}
 		d, ok := edges[key]
 		if !ok {

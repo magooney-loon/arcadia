@@ -13,16 +13,15 @@ import (
 
 	"github.com/pocketbase/pocketbase/core"
 
-	"arcadia/internal/rpc"
+	arc "arcadia/internal/chain/arc"
 	"arcadia/internal/utils"
 )
 
 // ── Indexer entry point ───────────────────────────────────────────────────────
 
 func StartIndexer(app core.App) {
-	const startupDelay = 10 * time.Second
 	log.Printf("[indexer] scheduled Arcadia HyperSync indexer startup in %s", startupDelay)
-	rpc.SeedKnownTokens()
+	arc.SeedKnownTokens()
 	startIndexerEventWriter(app)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -55,18 +54,18 @@ func StartIndexer(app core.App) {
 				}
 				msg := err.Error()
 				if strings.Contains(msg, "429") {
-					log.Printf("[indexer] rate-limited (429) — waiting 30s before retry (attempt #%d)", attempt)
+					log.Printf("[indexer] rate-limited (429) — waiting %s before retry (attempt #%d)", rateLimitBackoff, attempt)
 					recordIndexerEvent(app, "warn", "rate_limited", "HyperSync returned 429; backing off before retry", indexerEventFields{"attempt": attempt, "error": err})
 					select {
-					case <-time.After(30 * time.Second):
+					case <-time.After(rateLimitBackoff):
 					case <-ctx.Done():
 						return
 					}
 				} else {
-					log.Printf("[indexer] crashed: %v — restarting in 5s (attempt #%d)", err, attempt)
+					log.Printf("[indexer] crashed: %v — restarting in %s (attempt #%d)", err, crashRestartDelay, attempt)
 					recordIndexerEvent(app, "error", "run_error", "indexer run failed; restarting", indexerEventFields{"attempt": attempt, "error": err})
 					select {
-					case <-time.After(5 * time.Second):
+					case <-time.After(crashRestartDelay):
 					case <-ctx.Done():
 						return
 					}
@@ -92,7 +91,7 @@ type indexerEvent struct {
 }
 
 var (
-	indexerEventCh   = make(chan indexerEvent, 256)
+	indexerEventCh   = make(chan indexerEvent, eventChannelBuffer)
 	indexerEventOnce sync.Once
 )
 
@@ -105,15 +104,6 @@ func startIndexerEventWriter(app core.App) {
 		}()
 	})
 }
-
-// Field caps mirror the indexer_events collection schema. HyperSync
-// 429 responses can carry response bodies well past these, so truncate
-// before insert — otherwise Save() rejects the whole row and we lose
-// the diagnostic record entirely.
-const (
-	maxIndexerEventMessage = 500
-	maxIndexerEventError   = 1000
-)
 
 func truncate(s string, max int) string {
 	if len(s) <= max {
@@ -132,13 +122,13 @@ func writeIndexerEvent(app core.App, ev indexerEvent) {
 	r.Set("timestamp", ev.ts)
 	r.Set("level", ev.level)
 	r.Set("event", ev.event)
-	r.Set("message", truncate(ev.message, maxIndexerEventMessage))
+	r.Set("message", truncate(ev.message, maxEventMessage))
 	for key, val := range ev.fields {
 		switch key {
 		case "attempt", "batch", "block", "tip", "lag", "duration_ms", "blocks", "transactions", "logs", "error":
 			if key == "error" {
 				if val != nil {
-					r.Set("error", truncate(fmt.Sprint(val), maxIndexerEventError))
+					r.Set("error", truncate(fmt.Sprint(val), maxEventError))
 				}
 				continue
 			}
@@ -184,7 +174,7 @@ func logIndexerHeartbeat(ctx context.Context, app core.App, client interface {
 	GetHeight(context.Context) (*big.Int, error)
 }, attempt int, batchCount, currentBlock uint64, lastBatchAt time.Time, processingBatch uint64, processingStartedAt time.Time, persist bool) {
 	idleFor := time.Since(lastBatchAt).Round(time.Second)
-	tipCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	tipCtx, cancel := context.WithTimeout(ctx, tipCheckTimeout)
 	tip, tipErr := getChainTip(tipCtx, client)
 	cancel()
 	lag := uint64(0)
@@ -231,12 +221,6 @@ func logIndexerHeartbeat(ctx context.Context, app core.App, client interface {
 
 // ── WAL maintenance ──────────────────────────────────────────────────────────
 
-// walCheckpointCooldown caps how often the idle TRUNCATE checkpoint runs.
-// The PRAGMA blocks until all readers drain to the head of the WAL, so we
-// don't want to issue one on every 15s heartbeat — once per minute is plenty
-// to keep the WAL file bounded.
-const walCheckpointCooldown = time.Minute
-
 var (
 	walCheckpointInflight atomic.Bool
 	lastWALCheckpointNano atomic.Int64
@@ -273,8 +257,6 @@ func maybeTruncateWAL(app core.App) {
 
 // ── Cursor management ─────────────────────────────────────────────────────────
 
-const arcCatchupLookback = uint64(3_600)
-
 func resolveStartBlock(ctx context.Context, app core.App, client interface {
 	GetHeight(context.Context) (*big.Int, error)
 }) uint64 {
@@ -291,7 +273,7 @@ func resolveStartBlock(ctx context.Context, app core.App, client interface {
 	}
 
 	tip := height.Uint64()
-	lookback := arcCatchupLookback
+	lookback := catchupLookback
 	start := uint64(0)
 	if tip > lookback {
 		start = tip - lookback

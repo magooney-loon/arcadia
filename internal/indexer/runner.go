@@ -14,7 +14,7 @@ import (
 	hsutils "github.com/enviodev/hypersync-client-go/utils"
 	"github.com/pocketbase/pocketbase/core"
 
-	"arcadia/internal/chain"
+	arc "arcadia/internal/chain/arc"
 	"arcadia/internal/server/realtime"
 	"arcadia/internal/utils"
 )
@@ -31,26 +31,26 @@ type fetchResult struct {
 }
 
 func runIndexer(ctx context.Context, app core.App, attempt int) error {
-	apiToken := chain.EnvioAPIToken()
+	apiToken := arc.EnvioAPIToken()
 	if apiToken == "" {
 		return fmt.Errorf("ENVIO_API_TOKEN not set — get one at envio.dev")
 	}
 
-	rpc := chain.NextRPCURL()
-	log.Printf("[indexer] connecting — hypersync: %s  rpc: %s", chain.ArcHyperSyncURL, rpc)
+	rpc := arc.NextRPCURL()
+	log.Printf("[indexer] connecting — hypersync: %s  rpc: %s", arc.ArcHyperSyncURL, rpc)
 
 	hyper, err := hypersyncgo.NewHyper(ctx, options.Options{
 		Blockchains: []options.Node{
 			{
 				Type:           hsutils.EthereumNetwork,
-				NetworkId:      chain.ArcNetworkID,
-				Endpoint:       chain.ArcHyperSyncURL,
+				NetworkId:      arc.ArcNetworkID,
+				Endpoint:       arc.ArcHyperSyncURL,
 				RpcEndpoint:    rpc,
 				ApiToken:       apiToken,
-				MaxNumRetries:  3,
-				RetryBaseMs:    500 * time.Millisecond,
-				RetryBackoffMs: 500 * time.Millisecond,
-				RetryCeilingMs: 3 * time.Second,
+				MaxNumRetries:  hypersyncMaxRetries,
+				RetryBaseMs:    hypersyncRetryBase,
+				RetryBackoffMs: hypersyncRetryBackoff,
+				RetryCeilingMs: hypersyncRetryCeiling,
 			},
 		},
 	})
@@ -58,7 +58,7 @@ func runIndexer(ctx context.Context, app core.App, attempt int) error {
 		return fmt.Errorf("failed to create HyperSync client: %w", err)
 	}
 
-	client, ok := hyper.GetClient(chain.ArcNetworkID)
+	client, ok := hyper.GetClient(arc.ArcNetworkID)
 	if !ok {
 		return fmt.Errorf("arc client not found in hyper")
 	}
@@ -79,7 +79,7 @@ func runIndexer(ctx context.Context, app core.App, attempt int) error {
 	heartbeatStop := make(chan struct{})
 	defer close(heartbeatStop)
 	go func() {
-		ticker := time.NewTicker(15 * time.Second)
+		ticker := time.NewTicker(heartbeatInterval)
 		defer ticker.Stop()
 		for {
 			select {
@@ -93,7 +93,7 @@ func runIndexer(ctx context.Context, app core.App, attempt int) error {
 				persistHeartbeat := false
 				if activeBatch == 0 {
 					lastPersisted := time.Unix(0, lastPersistedHeartbeatUnixNano.Load())
-					if lastPersisted.IsZero() || time.Since(lastPersisted) >= time.Minute {
+					if lastPersisted.IsZero() || time.Since(lastPersisted) >= heartbeatPersistInterval {
 						persistHeartbeat = true
 						lastPersistedHeartbeatUnixNano.Store(time.Now().UnixNano())
 					}
@@ -111,7 +111,7 @@ func runIndexer(ctx context.Context, app core.App, attempt int) error {
 	startPrefetch := func(start uint64) <-chan fetchResult {
 		ch := make(chan fetchResult, 1)
 		go func() {
-			tipCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			tipCtx, cancel := context.WithTimeout(ctx, tipCheckTimeout)
 			tip, err := getChainTip(tipCtx, client)
 			cancel()
 			if err != nil {
@@ -122,9 +122,7 @@ func runIndexer(ctx context.Context, app core.App, attempt int) error {
 				ch <- fetchResult{tip: tip, start: start, atTip: true}
 				return
 			}
-			// 50 blocks per batch keeps the SQLite write transaction short
-			// (typically <200ms) so API reads aren't starved.
-			toBlock := start + 50
+			toBlock := start + batchSize
 			if toBlock > tip+1 {
 				toBlock = tip + 1
 			}
@@ -159,7 +157,7 @@ func runIndexer(ctx context.Context, app core.App, attempt int) error {
 		if fr.atTip {
 			// Nothing to process — wait for a new block then re-fetch.
 			select {
-			case <-time.After(2 * time.Second):
+			case <-time.After(atTipPollInterval):
 			case <-ctx.Done():
 				return nil
 			}
@@ -260,12 +258,12 @@ func runIndexer(ctx context.Context, app core.App, attempt int) error {
 		if next < tip {
 			var sleepDur time.Duration
 			switch {
-			case remainingLag >= 500:
+			case remainingLag >= sprintLagThreshold:
 				// sprint — no sleep; let the prefetch win the race
-			case remainingLag >= 100:
-				sleepDur = 50 * time.Millisecond
+			case remainingLag >= nearTipLagThreshold:
+				sleepDur = nearTipSleep
 			default:
-				sleepDur = 200 * time.Millisecond
+				sleepDur = crawlSleep
 			}
 			if sleepDur > 0 {
 				select {

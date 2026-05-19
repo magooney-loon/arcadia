@@ -12,8 +12,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/pocketbase/pocketbase/core"
 
-	"arcadia/internal/chain"
-	"arcadia/internal/rpc"
+	arc "arcadia/internal/chain/arc"
 	"arcadia/internal/utils"
 )
 
@@ -31,10 +30,10 @@ func prefetchTokenMetadata(app core.App, res *types.QueryResponse) {
 		if l.Topic0 == nil || l.Address == nil {
 			continue
 		}
-		if *l.Topic0 != chain.TopicTransfer {
+		if *l.Topic0 != arc.TopicTransfer {
 			continue
 		}
-		if *l.Address == chain.AddrAgentRegistry {
+		if *l.Address == arc.AddrAgentRegistry {
 			continue
 		}
 		var bn uint64
@@ -49,10 +48,7 @@ func prefetchTokenMetadata(app core.App, res *types.QueryResponse) {
 		return
 	}
 
-	// Capped at 3: the point of prefetch is to move RPC out of the write tx,
-	// not to maximize concurrent writes against token_analytics. More workers
-	// just pile up writers competing with the indexer batch and API readers.
-	sem := make(chan struct{}, 3)
+	sem := make(chan struct{}, prefetchConcurrency)
 	var wg sync.WaitGroup
 	for addr, bn := range firstSeen {
 		wg.Add(1)
@@ -60,7 +56,7 @@ func prefetchTokenMetadata(app core.App, res *types.QueryResponse) {
 		go func(a common.Address, b uint64) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			rpc.LookupTokenInfo(app, a, b)
+			arc.LookupTokenInfo(app, a, b)
 		}(addr, bn)
 	}
 	wg.Wait()
@@ -176,19 +172,19 @@ func processBatch(app core.App, res *types.QueryResponse) error {
 			}
 			if amount != nil && log.Address != nil {
 				switch *log.Address {
-				case chain.AddrUSDC:
+				case arc.AddrUSDC:
 					acc.totalUSDC.Add(acc.totalUSDC, amount)
 					if amount.Cmp(acc.largestUSDC) > 0 {
 						acc.largestUSDC.Set(amount)
 					}
-				case chain.AddrEURC:
+				case arc.AddrEURC:
 					acc.totalEURC.Add(acc.totalEURC, amount)
-				case chain.AddrUSYC:
+				case arc.AddrUSYC:
 					acc.totalUSYC.Add(acc.totalUSYC, amount)
 				}
-				if log.Topic0 != nil && *log.Topic0 == chain.TopicTransfer &&
+				if log.Topic0 != nil && *log.Topic0 == arc.TopicTransfer &&
 					log.Address != nil && log.Topic1 != nil {
-					if _, isStable := chain.KnownTokens[*log.Address]; isStable {
+					if _, isStable := arc.KnownTokens[*log.Address]; isStable {
 						fromAddr := common.BytesToAddress(log.Topic1.Bytes()[12:]).Hex()
 						getAgentDelta(fromAddr).transferred.Add(getAgentDelta(fromAddr).transferred, amount)
 					}

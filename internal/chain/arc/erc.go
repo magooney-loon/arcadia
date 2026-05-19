@@ -1,4 +1,4 @@
-package rpc
+package arc
 
 import (
 	"bytes"
@@ -15,8 +15,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/pocketbase/pocketbase/core"
-
-	"arcadia/internal/chain"
 )
 
 // TokenInfo describes an ERC-20/ERC-721/ERC-1155 token's display metadata.
@@ -57,8 +55,8 @@ var rpcHTTPClient = &http.Client{
 func SeedKnownTokens() {
 	tokenInfoMu.Lock()
 	defer tokenInfoMu.Unlock()
-	seededAddresses = make(map[common.Address]struct{}, len(chain.KnownTokens))
-	for addr, sym := range chain.KnownTokens {
+	seededAddresses = make(map[common.Address]struct{}, len(KnownTokens))
+	for addr, sym := range KnownTokens {
 		tokenInfoCache[addr] = TokenInfo{Address: addr, Symbol: sym, Decimals: 6, TokenType: "ERC-20"}
 		seededAddresses[addr] = struct{}{}
 	}
@@ -164,7 +162,7 @@ const sigTotalSupply = "0x18160ddd"
 //
 // Falls through to the next RPC on any transport error.
 func fetchTokenInfoFromRPC(addr common.Address) TokenInfo {
-	for _, rpcURL := range chain.ArcRPCPool {
+	for _, rpcURL := range ArcRPCPool {
 		// ── ERC-20 path ──
 		dec, ok := callDecimals(rpcURL, addr)
 		if ok {
@@ -198,7 +196,7 @@ func fetchTokenInfoFromRPC(addr common.Address) TokenInfo {
 // FetchFullTokenInfo calls name(), symbol(), decimals(), totalSupply() on the
 // contract and classifies it as ERC-20, ERC-721, or ERC-1155.
 func FetchFullTokenInfo(addr common.Address) FullTokenInfo {
-	for _, rpcURL := range chain.ArcRPCPool {
+	for _, rpcURL := range ArcRPCPool {
 		// ── ERC-20 path ──
 		dec, ok := callDecimals(rpcURL, addr)
 		if ok {

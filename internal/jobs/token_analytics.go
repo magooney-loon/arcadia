@@ -11,7 +11,7 @@ import (
 	"github.com/pocketbase/pocketbase/core"
 
 	"arcadia/internal/repo"
-	"arcadia/internal/rpc"
+	arc "arcadia/internal/chain/arc"
 	"arcadia/internal/utils"
 )
 
@@ -98,7 +98,7 @@ func RunTokenAnalytics(app core.App) {
 					!r.GetBool("lookup_failed")
 
 				if !hasMetadata {
-					info := rpc.FetchFullTokenInfo(addr)
+					info := arc.FetchFullTokenInfo(addr)
 					r.Set("symbol", info.Symbol)
 					r.Set("name", info.Name)
 					r.Set("decimals", int(info.Decimals))

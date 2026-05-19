@@ -160,10 +160,12 @@ arcadia/
 ├── cmd/server/main.go          # Entrypoint: PocketBase app bootstrap, PRAGMA tuning, wiring
 │
 ├── internal/
-│   ├── chain/arc.go            # Arc chain config: addresses, topics, RPC pool, network constants
-│   ├── rpc/erc.go              # JSON-RPC ERC token detection (ERC-20/721/1155), metadata cache
+│   ├── chain/arc/              # Arc Testnet chain package (future chains live as chain/<name>/)
+│   │   ├── arc.go              # Network config: chain ID, RPC pool, addresses, event topics
+│   │   └── erc.go              # ERC token metadata: RPC detection (ERC-20/721/1155), FIFO cache
 │   │
 │   ├── indexer/                # Blockchain data indexing engine
+│   │   ├── config.go           # Tunable constants: batch size, pacing, timeouts, retry settings
 │   │   ├── indexer.go          # StartIndexer: retry loop, ctx + OnTerminate shutdown
 │   │   ├── runner.go           # runIndexer: prefetch/produce/consume loop, adaptive pacing
 │   │   ├── query.go            # HyperSync query builder: topic/address selection per log type
@@ -196,6 +198,11 @@ arcadia/
 │   │
 │   ├── server/                 # HTTP layer
 │   │   ├── server.go           # Thin shim: delegates to handlers/ and collections/
+│   │   ├── cache/              # In-memory response cache (TTL-based, populated by broadcaster)
+│   │   │   └── cache.go
+│   │   ├── realtime/           # SSE broadcaster
+│   │   │   ├── broadcaster.go  # BroadcastIndexerUpdate/HealthUpdate/AnalyticsUpdate + throttle
+│   │   │   └── notify.go       # PocketBase subscription topic helpers
 │   │   ├── handlers/           # API route handlers (read-only, all go through repo/)
 │   │   │   ├── routes.go       # RegisterRoutes, versioned v1 API registration, OpenAPI config
 │   │   │   ├── common.go       # Shared helpers: qp, limitOffset, cacheHeaders, enrichRecord fns
@@ -264,7 +271,7 @@ Each batch covers ~200 blocks and processes in this order:
 6. **Accumulate** — in-memory aggregators (`blockAcc`, `agentDelta`, `edgeDelta`) collect per-block and per-entity stats during the save loop
 7. **Flush** — backfill derived fields on block records, insert `block_stats` rows, update agent counters, and flush wallet edge deltas — all in the same transaction
 
-### Token metadata (`rpc/erc.go`)
+### Token metadata (`chain/arc/erc.go`)
 
 When a transfer log hits an unknown token address, `LookupTokenInfo` resolves it:
 1. In-memory cache (FIFO-evicted, 5K max, seeded stablecoins never evicted)

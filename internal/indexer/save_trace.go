@@ -7,7 +7,7 @@ import (
 	"github.com/enviodev/hypersync-client-go/types"
 	"github.com/pocketbase/pocketbase/core"
 
-	"arcadia/internal/chain"
+	arc "arcadia/internal/chain/arc"
 	"arcadia/internal/utils"
 )
 
@@ -18,61 +18,61 @@ func routeLog(app core.App, log *types.Log, seen *batchSeen, edges map[edgeKey]*
 
 	addr := *log.Address
 	switch *log.Topic0 {
-	case chain.TopicTransfer:
-		if addr == chain.AddrAgentRegistry {
+	case arc.TopicTransfer:
+		if addr == arc.AddrAgentRegistry {
 			return nil, saveAgentRegistration(app, log, seen)
 		}
 		return saveTransfer(app, log, seen, edges)
 
-	case chain.TopicDepositForBurn:
+	case arc.TopicDepositForBurn:
 		return nil, saveCCTPDepositForBurn(app, log, seen)
 
-	case chain.TopicMintAndWithdraw:
+	case arc.TopicMintAndWithdraw:
 		return nil, saveCCTPMintAndWithdraw(app, log, seen)
 
-	case chain.TopicMessageReceived:
+	case arc.TopicMessageReceived:
 		return nil, saveCCTPMessageReceived(app, log, seen)
 
-	case chain.TopicGatewayDeposited:
+	case arc.TopicGatewayDeposited:
 		return nil, saveGatewayDeposited(app, log, seen)
 
-	case chain.TopicGatewayBurned:
+	case arc.TopicGatewayBurned:
 		return nil, saveGatewayBurned(app, log, seen)
 
-	case chain.TopicAttestationUsed:
+	case arc.TopicAttestationUsed:
 		return nil, saveAttestationUsed(app, log, seen)
 
-	case chain.TopicJobCreated:
-		if addr == chain.AddrAgenticCommerce {
+	case arc.TopicJobCreated:
+		if addr == arc.AddrAgenticCommerce {
 			return nil, saveAgentJobCreated(app, log, seen)
 		}
-	case chain.TopicJobFunded:
-		if addr == chain.AddrAgenticCommerce {
+	case arc.TopicJobFunded:
+		if addr == arc.AddrAgenticCommerce {
 			return nil, saveAgentJobFunded(app, log, seen)
 		}
-	case chain.TopicJobSubmitted:
-		if addr == chain.AddrAgenticCommerce {
+	case arc.TopicJobSubmitted:
+		if addr == arc.AddrAgenticCommerce {
 			return nil, saveAgentJobSubmitted(app, log, seen)
 		}
-	case chain.TopicJobCompleted:
-		if addr == chain.AddrAgenticCommerce {
+	case arc.TopicJobCompleted:
+		if addr == arc.AddrAgenticCommerce {
 			return nil, saveAgentJobCompleted(app, log, seen)
 		}
-	case chain.TopicJobRejected:
-		if addr == chain.AddrAgenticCommerce {
+	case arc.TopicJobRejected:
+		if addr == arc.AddrAgenticCommerce {
 			return nil, saveAgentJobRejected(app, log, seen)
 		}
-	case chain.TopicPaymentReleased:
-		if addr == chain.AddrAgenticCommerce {
+	case arc.TopicPaymentReleased:
+		if addr == arc.AddrAgenticCommerce {
 			return nil, saveAgentJobPaid(app, log, seen)
 		}
-	case chain.TopicJobExpired:
-		if addr == chain.AddrAgenticCommerce {
+	case arc.TopicJobExpired:
+		if addr == arc.AddrAgenticCommerce {
 			return nil, saveAgentJobExpired(app, log, seen)
 		}
 
-	case chain.TopicTradeRecorded, chain.TopicMakerFunded, chain.TopicTakerFunded, chain.TopicTradeStatusChanged, chain.TopicFeesProcessed:
-		if addr == chain.AddrFxEscrow {
+	case arc.TopicTradeRecorded, arc.TopicMakerFunded, arc.TopicTakerFunded, arc.TopicTradeStatusChanged, arc.TopicFeesProcessed:
+		if addr == arc.AddrFxEscrow {
 			return nil, saveFxEvent(app, log, seen)
 		}
 	}

@@ -218,5 +218,5 @@ func initApp(devMode bool) {
 // Build toolchain (pb-cli):
 // go install github.com/magooney-loon/pb-ext/cmd/pb-cli@latest
 //
-// Ready for a production build deployment?
-// https://github.com/magooney-loon/pb-deployer
+// What is pb-ext? Learn more:
+// https://github.com/magooney-loon/pb-ext

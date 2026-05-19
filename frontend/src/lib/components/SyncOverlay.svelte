@@ -58,8 +58,7 @@
 			</div>
 			<div class="sync-title" id="sync-modal-title">Indexer is catching up</div>
 			<div class="sync-desc" id="sync-modal-desc">
-				Arcadia is replaying recent blocks. The dashboard is paused so the indexer can finish
-				without read contention. This usually clears within a minute.
+				Arcadia is replaying recent blocks. The dashboard is paused. Please wait.
 			</div>
 
 			<div class="sync-stats">

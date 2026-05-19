@@ -12,7 +12,7 @@ import (
 	"github.com/enviodev/hypersync-client-go/types"
 	"github.com/ethereum/go-ethereum/common"
 
-	"arcadia/internal/chain"
+	arc "arcadia/internal/chain/arc"
 )
 
 // ── Query builder ─────────────────────────────────────────────────────────────
@@ -46,35 +46,35 @@ func newIndexerQuery(fromBlock, toBlock uint64) *types.Query {
 		Transactions: []types.TransactionSelection{{}},
 		Traces:       []types.TraceSelection{{}},
 		Logs: []types.LogSelection{
-			{Topics: [][]common.Hash{{chain.TopicTransfer}}},
+			{Topics: [][]common.Hash{{arc.TopicTransfer}}},
 			{
-				Address: []common.Address{chain.AddrCCTPTokenMessenger},
-				Topics:  [][]common.Hash{{chain.TopicDepositForBurn, chain.TopicMintAndWithdraw}},
+				Address: []common.Address{arc.AddrCCTPTokenMessenger},
+				Topics:  [][]common.Hash{{arc.TopicDepositForBurn, arc.TopicMintAndWithdraw}},
 			},
 			{
-				Address: []common.Address{chain.AddrCCTPMessageTransmitter},
-				Topics:  [][]common.Hash{{chain.TopicMessageReceived}},
+				Address: []common.Address{arc.AddrCCTPMessageTransmitter},
+				Topics:  [][]common.Hash{{arc.TopicMessageReceived}},
 			},
 			{
-				Address: []common.Address{chain.AddrGatewayWallet},
-				Topics:  [][]common.Hash{{chain.TopicGatewayDeposited, chain.TopicGatewayBurned}},
+				Address: []common.Address{arc.AddrGatewayWallet},
+				Topics:  [][]common.Hash{{arc.TopicGatewayDeposited, arc.TopicGatewayBurned}},
 			},
 			{
-				Address: []common.Address{chain.AddrGatewayMinter},
-				Topics:  [][]common.Hash{{chain.TopicAttestationUsed}},
+				Address: []common.Address{arc.AddrGatewayMinter},
+				Topics:  [][]common.Hash{{arc.TopicAttestationUsed}},
 			},
-			{Address: []common.Address{chain.AddrFxEscrow}},
-			{Address: []common.Address{chain.AddrAgentRegistry}, Topics: [][]common.Hash{{chain.TopicAgentRegistered}}},
+			{Address: []common.Address{arc.AddrFxEscrow}},
+			{Address: []common.Address{arc.AddrAgentRegistry}, Topics: [][]common.Hash{{arc.TopicAgentRegistered}}},
 			{
-				Address: []common.Address{chain.AddrAgenticCommerce},
+				Address: []common.Address{arc.AddrAgenticCommerce},
 				Topics: [][]common.Hash{{
-					chain.TopicJobCreated,
-					chain.TopicJobFunded,
-					chain.TopicJobSubmitted,
-					chain.TopicJobCompleted,
-					chain.TopicJobRejected,
-					chain.TopicPaymentReleased,
-					chain.TopicJobExpired,
+					arc.TopicJobCreated,
+					arc.TopicJobFunded,
+					arc.TopicJobSubmitted,
+					arc.TopicJobCompleted,
+					arc.TopicJobRejected,
+					arc.TopicPaymentReleased,
+					arc.TopicJobExpired,
 				}},
 			},
 		},
