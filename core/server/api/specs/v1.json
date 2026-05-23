@@ -1,0 +1,1749 @@
+{
+	"openapi": "3.0.3",
+	"info": {
+		"title": "Arcadia API",
+		"version": "1.0.0",
+		"description": "Arc L1 blockchain indexer — blocks, transfers, agents, cross-chain flows",
+		"contact": {
+			"name": "Arcadia",
+			"url": "https://github.com/magooney-loon/arcadia",
+			"email": "contact@magooney.org"
+		},
+		"license": {
+			"name": "MIT",
+			"url": "https://opensource.org/licenses/MIT"
+		}
+	},
+	"servers": [
+		{
+			"url": "http://127.0.0.1:8090/api/v1",
+			"description": "API v1 Server (stable)"
+		}
+	],
+	"paths": {
+		"/agents": {
+			"get": {
+				"tags": [
+					"Agents"
+				],
+				"summary": "List all registered AI agents (ERC-8004)",
+				"description": "List all registered AI agents (ERC-8004)",
+				"operationId": "getV1Agents",
+				"responses": {
+					"200": {
+						"description": "Successful response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/AgentsResponse"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/agents/{address}": {
+			"get": {
+				"tags": [
+					"Agents"
+				],
+				"summary": "Single agent profile + job history",
+				"description": "Single agent profile + job history",
+				"operationId": "getV1AgentsAddress",
+				"parameters": [
+					{
+						"name": "address",
+						"in": "path",
+						"description": "The address parameter",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/AgentResponse"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/analytics/agent_leaderboard": {
+			"get": {
+				"tags": [
+					"Agents"
+				],
+				"summary": "Agent leaderboard ranked by stablecoin volume transferred",
+				"description": "Agent leaderboard ranked by stablecoin volume transferred",
+				"operationId": "getV1AnalyticsAgent_leaderboard",
+				"responses": {
+					"200": {
+						"description": "Successful response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/AnalyticsAgentLeaderboardResponse"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/analytics/bridge_flow": {
+			"get": {
+				"tags": [
+					"CrossChain"
+				],
+				"summary": "Cross-chain net flow: inbound vs outbound USDC grouped by chain",
+				"description": "Cross-chain net flow: inbound vs outbound USDC grouped by chain",
+				"operationId": "getV1AnalyticsBridge_flow",
+				"responses": {
+					"200": {
+						"description": "Successful response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/AnalyticsBridgeFlowResponse"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/analytics/fees": {
+			"get": {
+				"tags": [
+					"Stats"
+				],
+				"summary": "Fee analytics: P25/P50/P75/P95 percentiles, failed tx ratio, avg block time",
+				"description": "Fee analytics: P25/P50/P75/P95 percentiles, failed tx ratio, avg block time",
+				"operationId": "getV1AnalyticsFees",
+				"responses": {
+					"200": {
+						"description": "Successful response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/AnalyticsFeesResponse"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/analytics/history": {
+			"get": {
+				"tags": [
+					"Stats"
+				],
+				"summary": "Historical analytics snapshots for time-series charting",
+				"description": "Historical analytics snapshots for time-series charting",
+				"operationId": "getV1AnalyticsHistory",
+				"responses": {
+					"200": {
+						"description": "Successful response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/AnalyticsHistoryResponse"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/analytics/overview": {
+			"get": {
+				"tags": [
+					"Stats"
+				],
+				"summary": "Single-request 24h dashboard summary: transfer count, volume, fees, bridge, agents",
+				"description": "Single-request 24h dashboard summary: transfer count, volume, fees, bridge, agents",
+				"operationId": "getV1AnalyticsOverview",
+				"responses": {
+					"200": {
+						"description": "Successful response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/AnalyticsOverviewResponse"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/analytics/volume": {
+			"get": {
+				"tags": [
+					"Transfers"
+				],
+				"summary": "Transfer volume aggregates with whale count and per-token breakdown",
+				"description": "Transfer volume aggregates with whale count and per-token breakdown",
+				"operationId": "getV1AnalyticsVolume",
+				"responses": {
+					"200": {
+						"description": "Successful response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/AnalyticsVolumeResponse"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/block/{number}": {
+			"get": {
+				"tags": [
+					"Chain"
+				],
+				"summary": "Single block detail with its transactions and pre-aggregated stats",
+				"description": "Single block detail with its transactions and pre-aggregated stats",
+				"operationId": "getV1BlockNumber",
+				"parameters": [
+					{
+						"name": "number",
+						"in": "path",
+						"description": "The number parameter",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/BlockDetailResponse"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/block_stats": {
+			"get": {
+				"tags": [
+					"Stats"
+				],
+				"summary": "Historical block stats for time-series charts (sorted newest first)",
+				"description": "Historical block stats for time-series charts (sorted newest first)",
+				"operationId": "getV1Block_stats",
+				"responses": {
+					"200": {
+						"description": "Successful response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/BlockStatsResponse"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/blocks": {
+			"get": {
+				"tags": [
+					"Chain"
+				],
+				"summary": "Recent blocks with derived stats",
+				"description": "Recent blocks with derived stats",
+				"operationId": "getV1Blocks",
+				"responses": {
+					"200": {
+						"description": "Successful response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/BlocksResponse"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/crosschain": {
+			"get": {
+				"tags": [
+					"CrossChain"
+				],
+				"summary": "Recent cross-chain events (CCTP + Gateway)",
+				"description": "Recent cross-chain events (CCTP + Gateway)",
+				"operationId": "getV1Crosschain",
+				"parameters": [
+					{
+						"name": "protocol",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"name": "event_type",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"name": "sender",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"name": "recipient",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"name": "direction",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"name": "chain",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/CrosschainResponse"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/edges": {
+			"get": {
+				"tags": [
+					"Graph"
+				],
+				"summary": "Wallet graph edges for 3D visualization — filterable by wallet address",
+				"description": "Wallet graph edges for 3D visualization — filterable by wallet address",
+				"operationId": "getV1Edges",
+				"parameters": [
+					{
+						"name": "wallet",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/EdgesResponse"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/fx": {
+			"get": {
+				"tags": [
+					"FX"
+				],
+				"summary": "StableFX trades — filterable by status, maker, taker, or quote_id",
+				"description": "StableFX trades — filterable by status, maker, taker, or quote_id",
+				"operationId": "getV1Fx",
+				"parameters": [
+					{
+						"name": "status",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"name": "maker",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"name": "taker",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"name": "quote_id",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/FxResponse"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/health": {
+			"get": {
+				"tags": [
+					"Stats"
+				],
+				"summary": "Indexer health: lag, error rate, last indexed block",
+				"description": "Indexer health: lag, error rate, last indexed block",
+				"operationId": "getV1Health",
+				"responses": {
+					"200": {
+						"description": "Successful response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HealthResponse"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/jobs": {
+			"get": {
+				"tags": [
+					"Agents"
+				],
+				"summary": "Agent job marketplace — filter by status or worker/employer",
+				"description": "Agent job marketplace — filter by status or worker/employer",
+				"operationId": "getV1Jobs",
+				"responses": {
+					"200": {
+						"description": "Successful response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/AgentJobsResponse"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/search": {
+			"get": {
+				"tags": [
+					"Chain"
+				],
+				"summary": "Unified search by tx hash (0x+64), address (0x+40), block number, or free-text against tokens/agents.",
+				"description": "Unified search by tx hash (0x+64), address (0x+40), block number, or free-text against tokens/agents.",
+				"operationId": "getV1Search",
+				"responses": {
+					"200": {
+						"description": "Successful response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SearchResponse"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/stats": {
+			"get": {
+				"tags": [
+					"Stats"
+				],
+				"summary": "Latest live chain stats (TPS, fees, transfer volumes, agent activity)",
+				"description": "Latest live chain stats (TPS, fees, transfer volumes, agent activity)",
+				"operationId": "getV1Stats",
+				"responses": {
+					"200": {
+						"description": "Successful response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"additionalProperties": true,
+									"description": "Response data",
+									"type": "object"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/tokens": {
+			"get": {
+				"tags": [
+					"Tokens"
+				],
+				"summary": "All discovered ERC-20 tokens with aggregated analytics",
+				"description": "All discovered ERC-20 tokens with aggregated analytics",
+				"operationId": "getV1Tokens",
+				"parameters": [
+					{
+						"name": "search",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/TokensResponse"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/tokens/{address}": {
+			"get": {
+				"tags": [
+					"Tokens"
+				],
+				"summary": "Token detail with recent transfers",
+				"description": "Token detail with recent transfers",
+				"operationId": "getV1TokensAddress",
+				"parameters": [
+					{
+						"name": "address",
+						"in": "path",
+						"description": "The address parameter",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/TokenDetailResponse"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/traces": {
+			"get": {
+				"tags": [
+					"Chain"
+				],
+				"summary": "Internal contract-to-contract calls — filterable by tx hash or address",
+				"description": "Internal contract-to-contract calls — filterable by tx hash or address",
+				"operationId": "getV1Traces",
+				"responses": {
+					"200": {
+						"description": "Successful response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/TracesResponse"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/transactions": {
+			"get": {
+				"tags": [
+					"Chain"
+				],
+				"summary": "Recent transactions",
+				"description": "Recent transactions",
+				"operationId": "getV1Transactions",
+				"responses": {
+					"200": {
+						"description": "Successful response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/TransactionsResponse"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/transfers": {
+			"get": {
+				"tags": [
+					"Transfers"
+				],
+				"summary": "Token transfers — filterable by block, token symbol, sender, or receiver",
+				"description": "Token transfers — filterable by block, token symbol, sender, or receiver",
+				"operationId": "getV1Transfers",
+				"parameters": [
+					{
+						"name": "block",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"name": "token",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"name": "from",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"name": "to",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/TransfersResponse"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/tx/{hash}": {
+			"get": {
+				"tags": [
+					"Chain"
+				],
+				"summary": "Single transaction detail with related transfers and traces",
+				"description": "Single transaction detail with related transfers and traces",
+				"operationId": "getV1TxHash",
+				"parameters": [
+					{
+						"name": "hash",
+						"in": "path",
+						"description": "The hash parameter",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/TxDetailResponse"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/wallet/{address}": {
+			"get": {
+				"tags": [
+					"Wallets"
+				],
+				"summary": "Wallet profile: transaction history + edges + agent status",
+				"description": "Wallet profile: transaction history + edges + agent status",
+				"operationId": "getV1WalletAddress",
+				"parameters": [
+					{
+						"name": "address",
+						"in": "path",
+						"description": "The address parameter",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/WalletResponse"
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	},
+	"components": {
+		"schemas": {
+			"AgentJobsResponse": {
+				"properties": {
+					"count": {
+						"minimum": 0,
+						"type": "integer"
+					},
+					"jobs": {
+						"type": "string"
+					},
+					"total": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"jobs",
+					"count",
+					"total"
+				],
+				"type": "object"
+			},
+			"AgentResponse": {
+				"properties": {
+					"agent": {
+						"type": "string"
+					},
+					"jobs": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"agent",
+					"jobs"
+				],
+				"type": "object"
+			},
+			"AgentsResponse": {
+				"properties": {
+					"agents": {
+						"items": {
+							"additionalProperties": true,
+							"type": "object"
+						},
+						"type": "array"
+					},
+					"count": {
+						"minimum": 0,
+						"type": "integer"
+					},
+					"total": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"agents",
+					"count",
+					"total"
+				],
+				"type": "object"
+			},
+			"AnalyticsAgentLeaderboardResponse": {
+				"properties": {
+					"count": {
+						"minimum": 0,
+						"type": "integer"
+					},
+					"leaderboard": {
+						"items": {
+							"additionalProperties": true,
+							"type": "object"
+						},
+						"type": "array"
+					},
+					"summary": {
+						"properties": {
+							"jobs_in_flight": {
+								"type": "string"
+							},
+							"jobs_paid": {
+								"type": "integer"
+							},
+							"jobs_rejected": {
+								"type": "integer"
+							},
+							"jobs_total": {
+								"type": "integer"
+							},
+							"total_escrow": {
+								"type": "number"
+							}
+						},
+						"required": [
+							"total_escrow",
+							"jobs_total",
+							"jobs_paid",
+							"jobs_rejected",
+							"jobs_in_flight"
+						],
+						"type": "object"
+					},
+					"total": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"leaderboard",
+					"count",
+					"total",
+					"summary"
+				],
+				"type": "object"
+			},
+			"AnalyticsBridgeFlowResponse": {
+				"properties": {
+					"by_chain": {
+						"additionalProperties": true,
+						"type": "object"
+					},
+					"inbound_count": {
+						"type": "integer"
+					},
+					"inbound_vol": {
+						"type": "number"
+					},
+					"net_flow": {
+						"type": "number"
+					},
+					"outbound_count": {
+						"type": "integer"
+					},
+					"outbound_vol": {
+						"type": "number"
+					},
+					"snapshot_at": {
+						"type": "integer"
+					},
+					"window": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"window",
+					"inbound_vol",
+					"inbound_count",
+					"outbound_vol",
+					"outbound_count",
+					"net_flow",
+					"by_chain",
+					"snapshot_at"
+				],
+				"type": "object"
+			},
+			"AnalyticsFeesResponse": {
+				"properties": {
+					"avg_block_time_ms": {
+						"type": "number"
+					},
+					"avg_fee_p25": {
+						"type": "number"
+					},
+					"avg_fee_p50": {
+						"type": "number"
+					},
+					"avg_fee_p75": {
+						"type": "number"
+					},
+					"avg_fee_p95": {
+						"type": "number"
+					},
+					"block_count": {
+						"type": "integer"
+					},
+					"failed_tx_ratio": {
+						"type": "number"
+					},
+					"snapshot_at": {
+						"type": "integer"
+					},
+					"total_fees": {
+						"type": "number"
+					},
+					"window": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"window",
+					"block_count",
+					"total_fees",
+					"avg_fee_p25",
+					"avg_fee_p50",
+					"avg_fee_p75",
+					"avg_fee_p95",
+					"avg_block_time_ms",
+					"failed_tx_ratio",
+					"snapshot_at"
+				],
+				"type": "object"
+			},
+			"AnalyticsHistoryResponse": {
+				"properties": {
+					"count": {
+						"minimum": 0,
+						"type": "integer"
+					},
+					"snapshots": {
+						"items": {
+							"additionalProperties": true,
+							"type": "object"
+						},
+						"type": "array"
+					},
+					"window": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"window",
+					"snapshots",
+					"count"
+				],
+				"type": "object"
+			},
+			"AnalyticsOverviewResponse": {
+				"properties": {
+					"agent_count": {
+						"type": "integer"
+					},
+					"bridge_inbound_count": {
+						"type": "integer"
+					},
+					"bridge_inbound_vol": {
+						"type": "number"
+					},
+					"bridge_net_flow": {
+						"type": "number"
+					},
+					"bridge_outbound_count": {
+						"type": "integer"
+					},
+					"bridge_outbound_vol": {
+						"type": "number"
+					},
+					"failed_tx_ratio": {
+						"type": "number"
+					},
+					"fee_p50": {
+						"type": "number"
+					},
+					"fee_p95": {
+						"type": "number"
+					},
+					"fees_total": {
+						"type": "number"
+					},
+					"largest_transfer": {
+						"type": "number"
+					},
+					"largest_transfer_block": {
+						"type": "integer"
+					},
+					"snapshot_at": {
+						"type": "integer"
+					},
+					"transfer_volume": {
+						"type": "number"
+					},
+					"transfers_count": {
+						"type": "integer"
+					},
+					"window": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"window",
+					"snapshot_at",
+					"transfers_count",
+					"transfer_volume",
+					"largest_transfer",
+					"largest_transfer_block",
+					"fees_total",
+					"fee_p50",
+					"fee_p95",
+					"failed_tx_ratio",
+					"bridge_inbound_vol",
+					"bridge_inbound_count",
+					"bridge_outbound_vol",
+					"bridge_outbound_count",
+					"bridge_net_flow",
+					"agent_count"
+				],
+				"type": "object"
+			},
+			"AnalyticsVolumeResponse": {
+				"properties": {
+					"by_token": {
+						"type": "object"
+					},
+					"snapshot_at": {
+						"type": "integer"
+					},
+					"token": {
+						"type": "string"
+					},
+					"total_transfers": {
+						"type": "integer"
+					},
+					"unique_receivers": {
+						"type": "integer"
+					},
+					"unique_senders": {
+						"type": "integer"
+					},
+					"whale_transfers": {
+						"type": "integer"
+					},
+					"window": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"window",
+					"token",
+					"total_transfers",
+					"unique_senders",
+					"unique_receivers",
+					"whale_transfers",
+					"by_token",
+					"snapshot_at"
+				],
+				"type": "object"
+			},
+			"BlockDetailResponse": {
+				"properties": {
+					"block": {
+						"type": "string"
+					},
+					"stats": {
+						"type": "string"
+					},
+					"transactions": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"block",
+					"transactions"
+				],
+				"type": "object"
+			},
+			"BlockStatsResponse": {
+				"properties": {
+					"count": {
+						"minimum": 0,
+						"type": "integer"
+					},
+					"stats": {
+						"items": {
+							"additionalProperties": true,
+							"type": "object"
+						},
+						"type": "array"
+					}
+				},
+				"required": [
+					"stats",
+					"count"
+				],
+				"type": "object"
+			},
+			"BlocksResponse": {
+				"properties": {
+					"blocks": {
+						"type": "string"
+					},
+					"count": {
+						"minimum": 0,
+						"type": "integer"
+					},
+					"total": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"blocks",
+					"count",
+					"total"
+				],
+				"type": "object"
+			},
+			"CrosschainResponse": {
+				"properties": {
+					"count": {
+						"minimum": 0,
+						"type": "integer"
+					},
+					"events": {
+						"items": {
+							"additionalProperties": true,
+							"type": "object"
+						},
+						"type": "array"
+					},
+					"total": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"events",
+					"count",
+					"total"
+				],
+				"type": "object"
+			},
+			"EdgesResponse": {
+				"properties": {
+					"count": {
+						"minimum": 0,
+						"type": "integer"
+					},
+					"edges": {
+						"items": {
+							"additionalProperties": true,
+							"type": "object"
+						},
+						"type": "array"
+					}
+				},
+				"required": [
+					"edges",
+					"count"
+				],
+				"type": "object"
+			},
+			"Error": {
+				"properties": {
+					"code": {
+						"description": "Error code",
+						"type": "integer"
+					},
+					"data": {
+						"description": "Additional error data",
+						"type": "object"
+					},
+					"message": {
+						"description": "Error message",
+						"type": "string"
+					}
+				},
+				"required": [
+					"code",
+					"message"
+				],
+				"type": "object"
+			},
+			"FxResponse": {
+				"properties": {
+					"count": {
+						"minimum": 0,
+						"type": "integer"
+					},
+					"trades": {
+						"items": {
+							"additionalProperties": true,
+							"type": "object"
+						},
+						"type": "array"
+					}
+				},
+				"required": [
+					"trades",
+					"count"
+				],
+				"type": "object"
+			},
+			"HealthResponse": {
+				"properties": {
+					"avg_batch_ms": {
+						"type": "number"
+					},
+					"chain_tip": {
+						"type": "string"
+					},
+					"errors_1h": {
+						"minimum": 0,
+						"type": "integer"
+					},
+					"lag_blocks": {
+						"type": "string"
+					},
+					"last_indexed_block": {
+						"type": "string"
+					},
+					"syncing": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"last_indexed_block",
+					"chain_tip",
+					"lag_blocks",
+					"syncing",
+					"errors_1h",
+					"avg_batch_ms"
+				],
+				"type": "object"
+			},
+			"PocketBaseRecord": {
+				"properties": {
+					"created": {
+						"description": "Creation timestamp",
+						"format": "date-time",
+						"type": "string"
+					},
+					"id": {
+						"description": "Record ID",
+						"type": "string"
+					},
+					"updated": {
+						"description": "Last update timestamp",
+						"format": "date-time",
+						"type": "string"
+					}
+				},
+				"required": [
+					"id",
+					"created",
+					"updated"
+				],
+				"type": "object"
+			},
+			"SearchResponse": {
+				"properties": {
+					"agents": {
+						"type": "string"
+					},
+					"tokens": {
+						"type": "string"
+					},
+					"type": {
+						"example": "multi",
+						"type": "string"
+					}
+				},
+				"required": [
+					"type"
+				],
+				"type": "object"
+			},
+			"TokenDetailResponse": {
+				"properties": {
+					"token": {
+						"type": "string"
+					},
+					"transfers": {
+						"items": {
+							"additionalProperties": true,
+							"type": "object"
+						},
+						"type": "array"
+					}
+				},
+				"required": [
+					"token",
+					"transfers"
+				],
+				"type": "object"
+			},
+			"TokensResponse": {
+				"properties": {
+					"count": {
+						"minimum": 0,
+						"type": "integer"
+					},
+					"summary": {
+						"properties": {
+							"active": {
+								"type": "string"
+							},
+							"failed": {
+								"type": "string"
+							},
+							"total": {
+								"type": "string"
+							},
+							"total_transfers": {
+								"type": "string"
+							}
+						},
+						"required": [
+							"total",
+							"total_transfers",
+							"active",
+							"failed"
+						],
+						"type": "object"
+					},
+					"tokens": {
+						"items": {
+							"additionalProperties": true,
+							"type": "object"
+						},
+						"type": "array"
+					},
+					"total": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"tokens",
+					"count",
+					"total",
+					"summary"
+				],
+				"type": "object"
+			},
+			"TracesResponse": {
+				"properties": {
+					"count": {
+						"minimum": 0,
+						"type": "integer"
+					},
+					"traces": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"traces",
+					"count"
+				],
+				"type": "object"
+			},
+			"TransactionsResponse": {
+				"properties": {
+					"count": {
+						"minimum": 0,
+						"type": "integer"
+					},
+					"total": {
+						"type": "string"
+					},
+					"transactions": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"transactions",
+					"count",
+					"total"
+				],
+				"type": "object"
+			},
+			"TransfersResponse": {
+				"properties": {
+					"count": {
+						"minimum": 0,
+						"type": "integer"
+					},
+					"total": {
+						"type": "string"
+					},
+					"transfers": {
+						"items": {
+							"additionalProperties": true,
+							"type": "object"
+						},
+						"type": "array"
+					}
+				},
+				"required": [
+					"transfers",
+					"count",
+					"total"
+				],
+				"type": "object"
+			},
+			"TxDetailResponse": {
+				"properties": {
+					"traces": {
+						"type": "string"
+					},
+					"transaction": {
+						"type": "string"
+					},
+					"transfers": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"transaction",
+					"transfers",
+					"traces"
+				],
+				"type": "object"
+			},
+			"WalletResponse": {
+				"properties": {
+					"address": {
+						"type": "string"
+					},
+					"agent": {
+						"additionalProperties": true,
+						"type": "object"
+					},
+					"incoming_edges": {
+						"type": "string"
+					},
+					"is_agent": {
+						"type": "string"
+					},
+					"outgoing_edges": {
+						"type": "string"
+					},
+					"received": {
+						"items": {
+							"additionalProperties": true,
+							"type": "object"
+						},
+						"type": "array"
+					},
+					"sent": {
+						"items": {
+							"additionalProperties": true,
+							"type": "object"
+						},
+						"type": "array"
+					},
+					"txs_received": {
+						"items": {
+							"additionalProperties": true,
+							"type": "object"
+						},
+						"type": "array"
+					},
+					"txs_sent": {
+						"items": {
+							"additionalProperties": true,
+							"type": "object"
+						},
+						"type": "array"
+					}
+				},
+				"required": [
+					"address",
+					"is_agent",
+					"agent",
+					"txs_sent",
+					"txs_received",
+					"sent",
+					"received",
+					"outgoing_edges",
+					"incoming_edges"
+				],
+				"type": "object"
+			}
+		},
+		"responses": {
+			"BadRequest": {
+				"description": "Bad Request",
+				"content": {
+					"application/json": {
+						"schema": {
+							"properties": {
+								"code": {
+									"description": "Error code",
+									"type": "integer"
+								},
+								"data": {
+									"description": "Additional error data",
+									"type": "object"
+								},
+								"message": {
+									"description": "Error message",
+									"type": "string"
+								}
+							},
+							"required": [
+								"code",
+								"message"
+							],
+							"type": "object"
+						}
+					}
+				}
+			},
+			"Forbidden": {
+				"description": "Forbidden",
+				"content": {
+					"application/json": {
+						"schema": {
+							"properties": {
+								"code": {
+									"description": "Error code",
+									"type": "integer"
+								},
+								"data": {
+									"description": "Additional error data",
+									"type": "object"
+								},
+								"message": {
+									"description": "Error message",
+									"type": "string"
+								}
+							},
+							"required": [
+								"code",
+								"message"
+							],
+							"type": "object"
+						}
+					}
+				}
+			},
+			"InternalServerError": {
+				"description": "Internal Server Error",
+				"content": {
+					"application/json": {
+						"schema": {
+							"properties": {
+								"code": {
+									"description": "Error code",
+									"type": "integer"
+								},
+								"data": {
+									"description": "Additional error data",
+									"type": "object"
+								},
+								"message": {
+									"description": "Error message",
+									"type": "string"
+								}
+							},
+							"required": [
+								"code",
+								"message"
+							],
+							"type": "object"
+						}
+					}
+				}
+			},
+			"NotFound": {
+				"description": "Not Found",
+				"content": {
+					"application/json": {
+						"schema": {
+							"properties": {
+								"code": {
+									"description": "Error code",
+									"type": "integer"
+								},
+								"data": {
+									"description": "Additional error data",
+									"type": "object"
+								},
+								"message": {
+									"description": "Error message",
+									"type": "string"
+								}
+							},
+							"required": [
+								"code",
+								"message"
+							],
+							"type": "object"
+						}
+					}
+				}
+			},
+			"Unauthorized": {
+				"description": "Unauthorized",
+				"content": {
+					"application/json": {
+						"schema": {
+							"properties": {
+								"code": {
+									"description": "Error code",
+									"type": "integer"
+								},
+								"data": {
+									"description": "Additional error data",
+									"type": "object"
+								},
+								"message": {
+									"description": "Error message",
+									"type": "string"
+								}
+							},
+							"required": [
+								"code",
+								"message"
+							],
+							"type": "object"
+						}
+					}
+				}
+			}
+		},
+		"parameters": {
+			"CollectionParam": {
+				"name": "collection",
+				"in": "path",
+				"description": "Collection name",
+				"required": true,
+				"schema": {
+					"type": "string"
+				}
+			},
+			"PageParam": {
+				"name": "page",
+				"in": "query",
+				"description": "Page number",
+				"required": false,
+				"schema": {
+					"default": 1,
+					"minimum": 1,
+					"type": "integer"
+				}
+			},
+			"PerPageParam": {
+				"name": "perPage",
+				"in": "query",
+				"description": "Items per page",
+				"required": false,
+				"schema": {
+					"default": 30,
+					"maximum": 500,
+					"minimum": 1,
+					"type": "integer"
+				}
+			},
+			"RecordIdParam": {
+				"name": "id",
+				"in": "path",
+				"description": "Record ID",
+				"required": true,
+				"schema": {
+					"type": "string"
+				}
+			}
+		},
+		"securitySchemes": {
+			"bearerAuth": {
+				"type": "http",
+				"scheme": "bearer"
+			}
+		}
+	},
+	"tags": [
+		{
+			"name": "Agents"
+		},
+		{
+			"name": "Chain"
+		},
+		{
+			"name": "CrossChain"
+		},
+		{
+			"name": "FX"
+		},
+		{
+			"name": "Graph"
+		},
+		{
+			"name": "Stats"
+		},
+		{
+			"name": "Tokens"
+		},
+		{
+			"name": "Transfers"
+		},
+		{
+			"name": "Wallets"
+		}
+	]
+}
