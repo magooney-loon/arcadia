@@ -1,8 +1,10 @@
 # arcadia
 
+[![arcadia demo video](https://image.mux.com/3dRErEYKKC2RqYeJxkCQC01R3sT38Gl1Mn02bLTGXX8MM/thumbnail.webp?width=1280&height=720&fit_mode=crop)](https://player.mux.com/3dRErEYKKC2RqYeJxkCQC01R3sT38Gl1Mn02bLTGXX8MM)
+
 A real-time blockchain indexer and analytics platform for Arc L1. Indexes every layer of Arc's onchain activity — blocks, transactions, stablecoin transfers, internal traces, AI agent lifecycle events, cross-chain flows, FX swaps, and derived economic metrics — then serves it through a versioned REST API with auto-generated OpenAPI docs and a live SvelteKit dashboard.
 
-> **Demo**: The live instance runs on the Envio HyperSync free tier. For production throughput, self-host with your own API key (see Get Started below).
+> **Demo**: Click the thumbnail above to watch the full demo. The live instance runs on the Envio HyperSync free tier. For production throughput, self-host with your own API key (see Get Started below).
 
 > **Forking?** See [CUSTOMIZE.md](./CUSTOMIZE.md) for a step-by-step guide on indexing new contracts, adding API endpoints, connecting agents/bots/scripts, and extending the pipeline.
 
