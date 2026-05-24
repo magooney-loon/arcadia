@@ -5,11 +5,11 @@ Real-time blockchain indexer and analytics API for Arc L1. Go backend only; fron
 ## Build & test
 
 ```bash
-pb-cli              # build frontend + start dev server
-pb-cli --run-only   # start server without rebuilding frontend
-pb-cli --test-only  # run Go test suite with coverage
-go build ./...      # compile check without running
-go test ./...       # run all Go tests
+go run ./cmd/pb-cli              # build frontend + start dev server
+go run ./cmd/pb-cli --run-only   # start server without rebuilding frontend
+go run ./cmd/pb-cli --test-only  # run Go test suite with coverage
+go build ./...                    # compile check without running
+go test ./...                     # run all Go tests
 ```
 
 ## Package layout

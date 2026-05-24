@@ -110,9 +110,17 @@ func arcadiaDBConnect(dbPath string) (*dbx.DB, error) {
 }
 
 func main() {
-	// Load .env if present — silently ignored if the file doesn't exist
-	// so production envs that inject vars directly are unaffected.
-	_ = godotenv.Load()
+	if err := godotenv.Load(); err != nil {
+		// No .env file — only fatal if required vars are also missing from
+		// the process environment (e.g. Docker/systemd injects them).
+		if os.Getenv("ENVIO_API_TOKEN") == "" {
+			log.Fatal("missing .env file and ENVIO_API_TOKEN not set — copy .env.example and configure it")
+		}
+	}
+
+	if os.Getenv("ENVIO_API_TOKEN") == "" {
+		log.Fatal("ENVIO_API_TOKEN is required — get one at https://envio.dev")
+	}
 
 	devMode := flag.Bool("dev", false, "Run in developer mode")
 	generateSpecsDir := flag.String("generate-specs-dir", "", "Generate OpenAPI specs into the provided directory and exit")
@@ -216,7 +224,7 @@ func initApp(devMode bool) {
 }
 
 // Build toolchain (pb-cli):
-// go install github.com/magooney-loon/pb-ext/cmd/pb-cli@latest
+// go run ./cmd/pb-cli
 //
 // What is pb-ext? Learn more:
 // https://github.com/magooney-loon/pb-ext

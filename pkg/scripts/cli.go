@@ -1,0 +1,175 @@
+package scripts
+
+import (
+	"flag"
+	"fmt"
+	"os"
+	"time"
+
+	"arcadia/pkg/scripts/internal"
+)
+
+// RunCLI is the main entry point for the pb-cli tool.
+// It can be called from other packages or used as a standalone CLI.
+func RunCLI() {
+	// Parse command line flags
+	installDeps := flag.Bool("install", false, "Install project dependencies")
+	buildOnly := flag.Bool("build-only", false, "Build frontend without running the server")
+	runOnly := flag.Bool("run-only", false, "Run the server without building the frontend")
+	production := flag.Bool("production", false, "Create a production build in dist folder")
+	testOnly := flag.Bool("test-only", false, "Run test suite and generate reports only")
+
+	distDir := flag.String("dist", "dist", "Output directory for production build")
+	help := flag.Bool("help", false, "Show help and usage information")
+	flag.Parse()
+
+	// Show help if requested
+	if *help {
+		internal.ShowHelp()
+		return
+	}
+
+	// Determine operation type for banner
+	operation := "dev"
+	if *production {
+		operation = "prod"
+	} else if *testOnly {
+		operation = "test"
+	}
+	internal.PrintBanner(operation)
+
+	// Get root directory
+	rootDir, err := os.Getwd()
+	if err != nil {
+		internal.PrintError("Failed to get current directory: %v", err)
+		os.Exit(1)
+	}
+
+	// Execute the appropriate operation
+	start := time.Now()
+
+	switch {
+	case *testOnly:
+		err = handleTestOnlyMode(rootDir, *distDir)
+	case *production:
+		err = handleProductionMode(rootDir, *installDeps, *distDir)
+	case *buildOnly:
+		err = handleBuildOnlyMode(rootDir, *installDeps)
+	case *runOnly:
+		err = handleRunOnlyMode(rootDir)
+	default:
+		err = handleDevelopmentMode(rootDir, *installDeps)
+	}
+
+	if err != nil {
+		internal.PrintError("%v", err)
+		os.Exit(1)
+	}
+
+	// Print completion summary for non-server modes
+	if !*runOnly && !isServerMode() && !*production {
+		duration := time.Since(start)
+		if *testOnly {
+			internal.PrintTestSummary(duration)
+		} else {
+			internal.PrintBuildSummary(duration, false)
+		}
+	}
+}
+
+// handleTestOnlyMode runs only the test suite
+func handleTestOnlyMode(rootDir, distDir string) error {
+	internal.PrintHeader("test")
+
+	if err := internal.CheckSystemRequirements(); err != nil {
+		return fmt.Errorf("system requirements not met: %w", err)
+	}
+
+	return internal.TestOnlyMode(rootDir, distDir)
+}
+
+// handleProductionMode creates a complete production build
+func handleProductionMode(rootDir string, installDeps bool, distDir string) error {
+	internal.PrintHeader("production")
+
+	return internal.ProductionBuild(rootDir, installDeps, distDir)
+}
+
+// handleBuildOnlyMode builds the frontend without starting the server
+func handleBuildOnlyMode(rootDir string, installDeps bool) error {
+	internal.PrintHeader("build")
+
+	if err := internal.CheckSystemRequirements(); err != nil {
+		return fmt.Errorf("system requirements not met: %w", err)
+	}
+
+	if err := internal.BuildFrontend(rootDir, installDeps); err != nil {
+		return err
+	}
+
+	if err := internal.GenerateOpenAPISpecs(rootDir); err != nil {
+		return fmt.Errorf("openapi spec generation failed: %w", err)
+	}
+
+	if err := internal.ValidateOpenAPISpecs(rootDir); err != nil {
+		return fmt.Errorf("openapi spec validation failed: %w", err)
+	}
+
+	return nil
+}
+
+// handleRunOnlyMode starts the server without building
+func handleRunOnlyMode(rootDir string) error {
+	internal.PrintHeader("server")
+
+	if err := internal.CheckSystemRequirements(); err != nil {
+		return fmt.Errorf("system requirements not met: %w", err)
+	}
+
+	if err := internal.ValidateServerSetup(rootDir); err != nil {
+		return fmt.Errorf("server setup validation failed: %w", err)
+	}
+
+	if err := internal.PrepareServerEnvironment(rootDir); err != nil {
+		return fmt.Errorf("server environment preparation failed: %w", err)
+	}
+
+	return internal.RunServer(rootDir)
+}
+
+// handleDevelopmentMode is the default mode - build frontend and start server
+func handleDevelopmentMode(rootDir string, installDeps bool) error {
+	internal.PrintHeader("development")
+
+	if err := internal.CheckSystemRequirements(); err != nil {
+		return fmt.Errorf("system requirements not met: %w", err)
+	}
+
+	// Build frontend first
+	if err := internal.BuildFrontend(rootDir, installDeps); err != nil {
+		return fmt.Errorf("frontend build failed: %w", err)
+	}
+
+	// Prepare and start server (specs are generated at runtime via AST parsing in dev mode)
+	if err := internal.ValidateServerSetup(rootDir); err != nil {
+		return fmt.Errorf("server setup validation failed: %w", err)
+	}
+
+	if err := internal.PrepareServerEnvironment(rootDir); err != nil {
+		return fmt.Errorf("server environment preparation failed: %w", err)
+	}
+
+	internal.PrintSuccess("Build complete, starting server...")
+
+	return internal.RunServer(rootDir)
+}
+
+// isServerMode checks if we're in a mode that starts the server
+func isServerMode() bool {
+	runOnly := flag.Lookup("run-only").Value.String() == "true"
+	production := flag.Lookup("production").Value.String() == "true"
+	buildOnly := flag.Lookup("build-only").Value.String() == "true"
+	testOnly := flag.Lookup("test-only").Value.String() == "true"
+	// Server runs in default mode (development) and run-only mode
+	return runOnly || (!production && !buildOnly && !testOnly)
+}

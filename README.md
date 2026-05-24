@@ -41,6 +41,7 @@ StableFX settles USDC↔EURC swaps onchain. Every trade is indexed with implied 
 ```bash
 git clone https://github.com/magooney-loon/arcadia.git
 cd arcadia
+go mod tidy
 ```
 
 Copy the env file and set your token:
@@ -52,28 +53,26 @@ cp .env.example .env
 
 ### pb-cli
 
-Install the build toolchain:
+The build toolchain (`pb-cli`) is included in this repo under `cmd/pb-cli/` and `pkg/scripts/`
 
 ```bash
-go install github.com/magooney-loon/pb-ext/cmd/pb-cli@latest
+go run ./cmd/pb-cli --install   # install Go modules + npm dependencies (first time)
 ```
-
-> **Note**: Ensure `$HOME/go/bin` is in your `$PATH`.
 
 | Command | What it does |
 |---|---|
-| `pb-cli` | Build frontend + start dev server |
-| `pb-cli --install` | Install all dependencies (Go modules + npm) |
-| `pb-cli --build-only` | Build frontend only (into `pb_public/`) |
-| `pb-cli --run-only` | Start server without rebuilding frontend |
-| `pb-cli --production` | Optimized production build into `dist/` |
-| `pb-cli --production --dist release` | Production build with custom output dir |
-| `pb-cli --test-only` | Run test suite with coverage |
+| `go run ./cmd/pb-cli` | Build frontend + start dev server |
+| `go run ./cmd/pb-cli --install` | Install all dependencies (Go modules + npm) |
+| `go run ./cmd/pb-cli --build-only` | Build frontend only (into `pb_public/`) |
+| `go run ./cmd/pb-cli --run-only` | Start server without rebuilding frontend |
+| `go run ./cmd/pb-cli --production` | Optimized production build into `dist/` |
+| `go run ./cmd/pb-cli --production --dist release` | Production build with custom output dir |
+| `go run ./cmd/pb-cli --test-only` | Run test suite with coverage |
 
 Dev mode builds the SvelteKit frontend, copies it to `pb_public/`, and starts the server:
 
 ```bash
-pb-cli
+go run ./cmd/pb-cli
 ```
 
 ### Profiling the indexer
@@ -82,7 +81,7 @@ Capture server output to a log file while running, then summarize batch phase ti
 
 ```bash
 mkdir -p logs
-pb-cli 2>&1 | tee logs/profile.log
+go run ./cmd/pb-cli 2>&1 | tee logs/profile.log
 ```
 
 Once you have a log (or while it's running and you've captured enough), run the profiler:
@@ -98,6 +97,8 @@ journalctl -u arcadia | ./scripts/profile_batches.sh -
 ```
 
 The script parses `batch_profile` lines and prints count, avg, p50, p95, and max per phase (e.g. `seen_ms`, `tx_total_ms`, `blocks_ms`, `txs_ms`, `traces_ms`, `backfill_ms`, etc.).
+
+> **Tip**: If you prefer, you can still install pb-cli globally with `go install ./cmd/pb-cli` and then use `pb-cli` directly.
 
 ### Verify it's running
 
