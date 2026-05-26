@@ -779,7 +779,7 @@
 						"type": "string"
 					},
 					"total": {
-						"type": "string"
+						"type": "integer"
 					}
 				},
 				"required": [
@@ -818,7 +818,7 @@
 						"type": "integer"
 					},
 					"total": {
-						"type": "string"
+						"type": "integer"
 					}
 				},
 				"required": [
@@ -869,7 +869,7 @@
 						"type": "object"
 					},
 					"total": {
-						"type": "string"
+						"type": "integer"
 					}
 				},
 				"required": [
@@ -1149,7 +1149,7 @@
 						"type": "integer"
 					},
 					"total": {
-						"type": "string"
+						"type": "integer"
 					}
 				},
 				"required": [
@@ -1173,7 +1173,7 @@
 						"type": "array"
 					},
 					"total": {
-						"type": "string"
+						"type": "integer"
 					}
 				},
 				"required": [
@@ -1408,7 +1408,7 @@
 						"type": "integer"
 					},
 					"total": {
-						"type": "string"
+						"type": "integer"
 					},
 					"transactions": {
 						"type": "string"
@@ -1428,7 +1428,7 @@
 						"type": "integer"
 					},
 					"total": {
-						"type": "string"
+						"type": "integer"
 					},
 					"transfers": {
 						"items": {
