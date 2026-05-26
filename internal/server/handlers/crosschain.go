@@ -32,7 +32,12 @@ func crosschainHandler(c *core.RequestEvent) error {
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error()})
 	}
-	total, _ := repo.CountCrosschainEvents(c.App, f)
+	var total int
+	if (f == repo.CrosschainFilter{}) {
+		total = cachedCount("count:crosschain", func() (int, error) { return repo.CountCrosschainEvents(c.App, f) })
+	} else {
+		total, _ = repo.CountCrosschainEvents(c.App, f)
+	}
 	return c.JSON(http.StatusOK, map[string]any{
 		"events": recordsToMaps(records),
 		"count":  len(records),

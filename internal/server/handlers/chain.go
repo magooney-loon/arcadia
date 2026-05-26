@@ -25,7 +25,7 @@ func blocksHandler(c *core.RequestEvent) error {
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error()})
 	}
-	total, _ := repo.CountBlocks(c.App)
+	total := cachedCount("count:blocks", func() (int, error) { return repo.CountBlocks(c.App) })
 	return c.JSON(http.StatusOK, map[string]any{
 		"blocks": recordsToMaps(records),
 		"count":  len(records),
@@ -58,7 +58,12 @@ func transactionsHandler(c *core.RequestEvent) error {
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error()})
 	}
-	total, _ := repo.CountTransactions(c.App, f)
+	var total int
+	if (f == repo.TransactionFilter{}) {
+		total = cachedCount("count:transactions", func() (int, error) { return repo.CountTransactions(c.App, f) })
+	} else {
+		total, _ = repo.CountTransactions(c.App, f)
+	}
 	return c.JSON(http.StatusOK, map[string]any{
 		"transactions": recordsToMaps(records),
 		"count":        len(records),

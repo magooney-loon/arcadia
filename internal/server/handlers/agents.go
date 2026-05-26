@@ -22,7 +22,7 @@ func agentsHandler(c *core.RequestEvent) error {
 	for i, r := range records {
 		out[i] = enrichAgentRecord(r)
 	}
-	total, _ := repo.CountAgents(c.App)
+	total := cachedCount("count:agents", func() (int, error) { return repo.CountAgents(c.App) })
 	return c.JSON(http.StatusOK, map[string]any{
 		"agents": out,
 		"count":  len(records),
@@ -71,7 +71,12 @@ func agentJobsHandler(c *core.RequestEvent) error {
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error()})
 	}
-	total, _ := repo.CountJobs(c.App, f)
+	var total int
+	if (f == repo.JobFilter{}) {
+		total = cachedCount("count:agent_jobs", func() (int, error) { return repo.CountJobs(c.App, f) })
+	} else {
+		total, _ = repo.CountJobs(c.App, f)
+	}
 	return c.JSON(http.StatusOK, map[string]any{
 		"jobs":  recordsToMaps(records),
 		"count": len(records),
@@ -122,7 +127,7 @@ func analyticsAgentLeaderboardHandler(c *core.RequestEvent) error {
 		result = append(result, entry)
 	}
 
-	total, _ := repo.CountAgents(c.App)
+	total := cachedCount("count:agents", func() (int, error) { return repo.CountAgents(c.App) })
 
 	// Aggregate totals across ALL agents (not just the current page) so the
 	// page can show honest "total escrow" / "in-flight jobs" stats.

@@ -3,6 +3,7 @@ package jobs
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"sort"
 	"time"
 
@@ -14,6 +15,27 @@ import (
 	"arcadia/internal/server/realtime"
 	"arcadia/internal/utils"
 )
+
+// Cadence per window. The job manager fires every 5 minutes; we skip windows
+// that don't meaningfully change at that tick.
+//
+//   1h:   every 5 minutes  (always)
+//   24h:  every 10 minutes (minute % 10 == 0)
+//   7d:   every 30 minutes (minute % 30 == 0)
+//
+// The 7d window scans the most data, so dropping its cadence by 6x is the
+// single biggest reduction in steady-state SQLite pressure from this job.
+func snapshotWindowsForTick(now time.Time) []string {
+	m := now.Minute()
+	out := []string{"1h"}
+	if m%10 == 0 {
+		out = append(out, "24h")
+	}
+	if m%30 == 0 {
+		out = append(out, "7d")
+	}
+	return out
+}
 
 func analyticsSnapshotJob(app core.App) error {
 	jm := jobs.GetManager()
@@ -28,26 +50,34 @@ func analyticsSnapshotJob(app core.App) error {
 		"*/5 * * * *",
 		func(el *jobs.ExecutionLogger) {
 			el.Start("Analytics Snapshot")
+			windows := snapshotWindowsForTick(time.Now())
 			n := 0
-			for _, win := range []string{"1h", "24h", "7d"} {
+			for _, win := range windows {
 				if err := takeAnalyticsSnapshot(app, win); err != nil {
 					el.Info("snapshot %s failed: %s", win, err)
 				} else {
 					n++
-					// Push the freshly-computed window aggregates to any
-					// dashboard subscribers. The default window the UI
-					// shows is 24h; broadcast all three so clients can
-					// pick the active one via the message payload.
 					go realtime.BroadcastAnalyticsUpdate(app, win)
 				}
 			}
-			el.Statistics(map[string]interface{}{"windows": n})
+			el.Statistics(map[string]interface{}{"windows": n, "considered": len(windows)})
 			el.Complete(fmt.Sprintf("took %d snapshots", n))
 		},
 	)
 }
 
 func takeAnalyticsSnapshot(app core.App, window string) error {
+	// The 7d window is the only one that touches enough rows to risk
+	// blocking the indexer write path; serialize it against token_analytics.
+	// 1h and 24h are cheap enough to run anytime.
+	if window == "7d" {
+		if !heavyJobMu.TryLock() {
+			log.Println("[analytics-snapshot] 7d skipped — heavy job in flight")
+			return nil
+		}
+		defer heavyJobMu.Unlock()
+	}
+
 	_, wParams := utils.WindowBlockFilter(app, window)
 	fromBlock := wParams["from"]
 
@@ -62,29 +92,36 @@ func takeAnalyticsSnapshot(app core.App, window string) error {
 
 	// ── transfers / volume ────────────────────────────────────────────────────
 	//
-	// One GROUP BY scan returns per-symbol cnt/vol/whales; we derive the
-	// global totals in Go. A second index-backed query finds the largest
-	// transfer (amount_num is indexed). A third query counts distinct
-	// senders/receivers globally. 4 scans → 3.
+	// Single scan: per-symbol counts/volume/whales + per-symbol unique sender
+	// and receiver counts. Globally-distinct counts are approximated by
+	// summing per-symbol distincts (an address that transfers in two
+	// stablecoins is counted twice — acceptable for a dashboard metric, and
+	// the alternative is a second full-window scan with COUNT(DISTINCT)).
 
 	type groupRow struct {
-		Symbol string  `db:"token_symbol"`
-		Vol    float64 `db:"vol"`
-		Cnt    int     `db:"cnt"`
-		Whales int     `db:"whales"`
+		Symbol    string  `db:"token_symbol"`
+		Vol       float64 `db:"vol"`
+		Cnt       int     `db:"cnt"`
+		Whales    int     `db:"whales"`
+		Senders   int     `db:"senders"`
+		Receivers int     `db:"receivers"`
 	}
 	var groupRows []groupRow
 	_ = app.DB().NewQuery(
 		`SELECT token_symbol,
-		        COALESCE(SUM(amount_num), 0) AS vol,
-		        COUNT(*) AS cnt,
-		        SUM(CASE WHEN amount_num >= 10000 THEN 1 ELSE 0 END) AS whales
-		 FROM transfers WHERE block_number >= {:from} AND token_symbol != 'OTHER'
-		 GROUP BY token_symbol`).Bind(dbx.Params{"from": fromBlock}).All(&groupRows)
+		        COALESCE(SUM(amount_num), 0)                              AS vol,
+		        COUNT(*)                                                  AS cnt,
+		        SUM(CASE WHEN amount_num >= 10000 THEN 1 ELSE 0 END)      AS whales,
+		        COUNT(DISTINCT from_addr)                                 AS senders,
+		        COUNT(DISTINCT to_addr)                                   AS receivers
+		 FROM transfers
+		 WHERE block_number >= {:from} AND token_symbol != 'OTHER'
+		 GROUP BY token_symbol`).
+		Bind(dbx.Params{"from": fromBlock}).All(&groupRows)
 
 	volByToken := map[string]float64{}
 	cntByToken := map[string]int{}
-	totalWhales := 0
+	totalWhales, totalSenders, totalReceivers := 0, 0, 0
 	tStats := struct {
 		Count  int
 		Volume float64
@@ -93,10 +130,13 @@ func takeAnalyticsSnapshot(app core.App, window string) error {
 		volByToken[g.Symbol] = g.Vol
 		cntByToken[g.Symbol] = g.Cnt
 		totalWhales += g.Whales
+		totalSenders += g.Senders
+		totalReceivers += g.Receivers
 		tStats.Count += g.Cnt
 		tStats.Volume += g.Vol
 	}
 
+	// Largest transfer: index-backed (idx_transfers_amount_num), cheap.
 	var largest struct {
 		Amount float64 `db:"amt"`
 		Block  int     `db:"block_number"`
@@ -106,15 +146,6 @@ func takeAnalyticsSnapshot(app core.App, window string) error {
 		 FROM transfers WHERE block_number >= {:from} AND token_symbol != 'OTHER'
 		 ORDER BY amount_num DESC LIMIT 1`).
 		Bind(dbx.Params{"from": fromBlock}).One(&largest)
-
-	var addrs struct {
-		Senders   int `db:"senders"`
-		Receivers int `db:"receivers"`
-	}
-	_ = app.DB().NewQuery(
-		`SELECT COUNT(DISTINCT from_addr) AS senders, COUNT(DISTINCT to_addr) AS receivers
-		 FROM transfers WHERE block_number >= {:from} AND token_symbol != 'OTHER'`).
-		Bind(dbx.Params{"from": fromBlock}).One(&addrs)
 
 	// ── fees / tx stats ───────────────────────────────────────────────────────
 
@@ -163,7 +194,7 @@ func takeAnalyticsSnapshot(app core.App, window string) error {
 			CASE WHEN destination_domain = 26 THEN 'in' ELSE 'out' END AS dir,
 			CASE WHEN destination_domain = 26 THEN source_domain ELSE destination_domain END AS chain_domain,
 			COUNT(*) AS cnt,
-			COALESCE(SUM(CAST(amount_usdc AS REAL)), 0) AS vol
+			COALESCE(SUM(amount_usdc_num), 0) AS vol
 		 FROM crosschain_events
 		 WHERE block_number >= {:from} AND (destination_domain = 26 OR source_domain = 26)
 		 GROUP BY dir, chain_domain`).
@@ -220,8 +251,8 @@ func takeAnalyticsSnapshot(app core.App, window string) error {
 	row.Set("eurc_count", cntByToken["EURC"])
 	row.Set("usyc_count", cntByToken["USYC"])
 	row.Set("whale_transfers", totalWhales)
-	row.Set("unique_senders", addrs.Senders)
-	row.Set("unique_receivers", addrs.Receivers)
+	row.Set("unique_senders", totalSenders)
+	row.Set("unique_receivers", totalReceivers)
 	row.Set("fees_total", fAgg.FeesTotal)
 	row.Set("fee_p25", utils.PercentileFloat(fees, 25))
 	row.Set("fee_p50", utils.PercentileFloat(fees, 50))

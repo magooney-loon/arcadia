@@ -37,7 +37,12 @@ func transfersHandler(c *core.RequestEvent) error {
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error()})
 	}
-	total, _ := repo.CountTransfers(c.App, f)
+	var total int
+	if (f == repo.TransferFilter{}) {
+		total = cachedCount("count:transfers", func() (int, error) { return repo.CountTransfers(c.App, f) })
+	} else {
+		total, _ = repo.CountTransfers(c.App, f)
+	}
 	return c.JSON(http.StatusOK, map[string]any{
 		"transfers": recordsToMaps(records),
 		"count":     len(records),

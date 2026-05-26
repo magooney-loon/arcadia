@@ -48,7 +48,9 @@ func saveCCTPDepositForBurn(app core.App, log *types.Log, seen *batchSeen) error
 		}
 		if log.Data != nil && len(*log.Data) >= 64 {
 			d := *log.Data
-			r.Set("amount_usdc", utils.StablecoinHuman(utils.ReadBig(d, 0)))
+			amt := utils.ReadBig(d, 0)
+			r.Set("amount_usdc", utils.StablecoinHuman(amt))
+			r.Set("amount_usdc_num", utils.StablecoinHumanFloat(amt))
 			r.Set("recipient", utils.AddressFromBytes32(d[32:64]))
 			if len(d) >= 96 {
 				r.Set("destination_domain", utils.ReadUint32(d, 64))
@@ -67,7 +69,9 @@ func saveCCTPMintAndWithdraw(app core.App, log *types.Log, seen *batchSeen) erro
 			r.Set("recipient", utils.AddressFromTopic(log.Topic1))
 		}
 		if log.Data != nil && len(*log.Data) >= 32 {
-			r.Set("amount_usdc", utils.StablecoinHuman(utils.ReadBig(*log.Data, 0)))
+			amt := utils.ReadBig(*log.Data, 0)
+			r.Set("amount_usdc", utils.StablecoinHuman(amt))
+			r.Set("amount_usdc_num", utils.StablecoinHumanFloat(amt))
 		}
 	})
 }
@@ -103,7 +107,9 @@ func saveGatewayDeposited(app core.App, log *types.Log, seen *batchSeen) error {
 			r.Set("recipient", utils.AddressFromTopic(log.Topic3))
 		}
 		if log.Data != nil && len(*log.Data) >= 32 {
-			r.Set("amount_usdc", utils.StablecoinHuman(utils.ReadBig(*log.Data, 0)))
+			amt := utils.ReadBig(*log.Data, 0)
+			r.Set("amount_usdc", utils.StablecoinHuman(amt))
+			r.Set("amount_usdc_num", utils.StablecoinHumanFloat(amt))
 		}
 	})
 }
@@ -124,7 +130,9 @@ func saveGatewayBurned(app core.App, log *types.Log, seen *batchSeen) error {
 			d := *log.Data
 			r.Set("destination_domain", utils.ReadUint32(d, 0))
 			r.Set("recipient", utils.AddressFromBytes32(d[32:64]))
-			r.Set("amount_usdc", utils.StablecoinHuman(utils.ReadBig(d, 96)))
+			amt := utils.ReadBig(d, 96)
+			r.Set("amount_usdc", utils.StablecoinHuman(amt))
+			r.Set("amount_usdc_num", utils.StablecoinHumanFloat(amt))
 		}
 	})
 }
@@ -145,7 +153,9 @@ func saveAttestationUsed(app core.App, log *types.Log, seen *batchSeen) error {
 			d := *log.Data
 			r.Set("source_domain", utils.ReadUint32(d, 0))
 			r.Set("sender", utils.AddressFromBytes32(d[32:64]))
-			r.Set("amount_usdc", utils.StablecoinHuman(utils.ReadBig(d, 96)))
+			amt := utils.ReadBig(d, 96)
+			r.Set("amount_usdc", utils.StablecoinHuman(amt))
+			r.Set("amount_usdc_num", utils.StablecoinHumanFloat(amt))
 		}
 	})
 }

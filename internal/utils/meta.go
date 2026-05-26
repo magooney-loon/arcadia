@@ -42,6 +42,15 @@ func SetLastIndexedBlock(app core.App, block uint64) error {
 	return nil
 }
 
+// GetMetaValue reads a string value from the indexer_meta collection, or "" if absent.
+func GetMetaValue(app core.App, key string) string {
+	records, err := app.FindRecordsByFilter("indexer_meta", "key = {:k}", "", 1, 0, map[string]any{"k": key})
+	if err != nil || len(records) == 0 {
+		return ""
+	}
+	return records[0].GetString("value")
+}
+
 // SetMetaValue upserts a key/value pair in the indexer_meta collection.
 func SetMetaValue(app core.App, key, value string) error {
 	records, err := app.FindRecordsByFilter("indexer_meta", "key = {:k}", "", 1, 0, map[string]any{"k": key})

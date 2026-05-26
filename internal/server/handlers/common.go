@@ -6,12 +6,33 @@ import (
 	"fmt"
 	"math/big"
 	"strconv"
+	"time"
 
 	"github.com/pocketbase/pocketbase/core"
 
 	"arcadia/internal/repo"
+	"arcadia/internal/server/cache"
 	"arcadia/internal/utils"
 )
+
+// cachedCountTTL is how long an unfiltered COUNT(*) result is reused before
+// being recomputed. Lists grow monotonically so a stale-by-a-minute total is
+// fine and dramatically reduces full-table scans under dashboard polling.
+const cachedCountTTL = 60 * time.Second
+
+// cachedCount returns the count for an unfiltered list endpoint, using the
+// shared in-memory cache. On miss the supplied fetch runs and the result is
+// cached for cachedCountTTL. Errors from fetch fall through as 0.
+func cachedCount(key string, fetch func() (int, error)) int {
+	if cached, ok := cache.Default.Get(key); ok {
+		if n, ok := cached.(int); ok {
+			return n
+		}
+	}
+	n, _ := fetch()
+	cache.Default.Set(key, n, cachedCountTTL)
+	return n
+}
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 

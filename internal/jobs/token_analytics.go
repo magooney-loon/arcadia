@@ -3,52 +3,69 @@ package jobs
 import (
 	"fmt"
 	"log"
+	"strconv"
 	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/magooney-loon/pb-ext/core/jobs"
+	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/core"
 
-	"arcadia/internal/repo"
 	arc "arcadia/internal/chain/arc"
+	"arcadia/internal/repo"
 	"arcadia/internal/utils"
 )
 
-// RunTokenAnalytics computes per-token aggregated stats from the transfers table
-// and enriches them with onchain metadata (name, symbol, decimals, totalSupply).
-// Tokens that already have cached metadata skip the RPC calls entirely.
+const (
+	metaTokenAnalyticsCursor = "tokenAnalytics:lastBlock"
+	metaTokenAnalyticsUnique = "tokenAnalytics:lastUniqueRecompute"
+)
+
+// uniqueRecomputeInterval is how often the expensive per-token
+// COUNT(DISTINCT from_addr/to_addr) scan runs. Between recomputes the previously
+// stored unique_senders/unique_receivers values are kept verbatim.
+const uniqueRecomputeInterval = 24 * time.Hour
+
+type tokenDelta struct {
+	TokenAddress  string `db:"token_address"`
+	TransferCount int    `db:"transfer_count"`
+	FirstBlock    int    `db:"first_block"`
+	LastBlock     int    `db:"last_block"`
+}
+
+// RunTokenAnalytics aggregates per-token stats incrementally. Only transfers
+// newer than the stored cursor are scanned each invocation; previous totals are
+// added to the deltas. New token addresses surfaced by the delta scan are
+// inserted and enriched via RPC. The unique_senders / unique_receivers fields
+// are only refreshed once per uniqueRecomputeInterval since they cannot be
+// computed incrementally without a per-address side table.
 func RunTokenAnalytics(app core.App) {
-	log.Println("[token-analytics] starting token analytics job")
-
-	type tokenAgg struct {
-		TokenAddress    string `db:"token_address"`
-		TransferCount   int    `db:"transfer_count"`
-		FirstBlock      int    `db:"first_block"`
-		LastBlock       int    `db:"last_block"`
-		UniqueSenders   int    `db:"unique_senders"`
-		UniqueReceivers int    `db:"unique_receivers"`
-	}
-
-	var aggResults []tokenAgg
-	err := app.DB().Select(
-		"token_address",
-		"count(*) as transfer_count",
-		"min(block_number) as first_block",
-		"max(block_number) as last_block",
-		"count(distinct from_addr) as unique_senders",
-		"count(distinct to_addr) as unique_receivers",
-	).From("transfers").
-		GroupBy("token_address").
-		OrderBy("transfer_count DESC").
-		All(&aggResults)
-
-	if err != nil {
-		log.Printf("[token-analytics] aggregation query failed: %v", err)
+	if !heavyJobMu.TryLock() {
+		log.Println("[token-analytics] another heavy analytics job is running, skipping")
 		return
 	}
+	defer heavyJobMu.Unlock()
 
-	log.Printf("[token-analytics] found %d unique tokens in transfers", len(aggResults))
+	started := time.Now()
+	cursor := readTokenCursor(app)
+
+	var deltas []tokenDelta
+	err := app.DB().NewQuery(
+		`SELECT token_address,
+		        COUNT(*)          AS transfer_count,
+		        MIN(block_number) AS first_block,
+		        MAX(block_number) AS last_block
+		 FROM transfers
+		 WHERE block_number > {:cursor}
+		 GROUP BY token_address`).
+		Bind(dbx.Params{"cursor": cursor}).
+		All(&deltas)
+	if err != nil {
+		log.Printf("[token-analytics] delta aggregation failed: %v", err)
+		return
+	}
+	log.Printf("[token-analytics] cursor=%d deltas=%d", cursor, len(deltas))
 
 	coll, err := app.FindCollectionByNameOrId("token_analytics")
 	if err != nil {
@@ -56,7 +73,6 @@ func RunTokenAnalytics(app core.App) {
 		return
 	}
 
-	// Single-pass preload: one query instead of N FindRecordsByFilter calls.
 	existing, err := repo.AllTokenAnalytics(app)
 	if err != nil {
 		log.Printf("[token-analytics] preload failed: %v", err)
@@ -67,91 +83,150 @@ func RunTokenAnalytics(app core.App) {
 		byAddr[r.GetString("token_address")] = r
 	}
 
-	// Worker pool for concurrent RPC enrichment.
-	type workItem struct {
-		agg tokenAgg
-		r   *core.Record
-	}
-	type result struct {
-		r *core.Record
+	enrichAddrs := make([]string, 0, len(deltas))
+	updated := make([]*core.Record, 0, len(deltas))
+	highestBlock := cursor
+	for _, d := range deltas {
+		if d.LastBlock > highestBlock {
+			highestBlock = d.LastBlock
+		}
+		r, exists := byAddr[d.TokenAddress]
+		if !exists {
+			r = core.NewRecord(coll)
+			r.Set("token_address", d.TokenAddress)
+			r.Set("transfer_count", d.TransferCount)
+			r.Set("first_seen_block", d.FirstBlock)
+			r.Set("last_seen_block", d.LastBlock)
+			byAddr[d.TokenAddress] = r
+		} else {
+			r.Set("transfer_count", r.GetInt("transfer_count")+d.TransferCount)
+			if prev := r.GetInt("first_seen_block"); prev == 0 || d.FirstBlock < prev {
+				r.Set("first_seen_block", d.FirstBlock)
+			}
+			if d.LastBlock > r.GetInt("last_seen_block") {
+				r.Set("last_seen_block", d.LastBlock)
+			}
+		}
+		updated = append(updated, r)
+		enrichAddrs = append(enrichAddrs, d.TokenAddress)
 	}
 
+	if len(enrichAddrs) > 0 {
+		enrichTokenMetadata(byAddr, enrichAddrs)
+	}
+
+	if shouldRecomputeUnique(app) {
+		recomputeUniqueCounts(app, byAddr)
+		updated = updated[:0]
+		for _, r := range byAddr {
+			updated = append(updated, r)
+		}
+		_ = utils.SetMetaValue(app, metaTokenAnalyticsUnique, strconv.FormatInt(time.Now().Unix(), 10))
+	}
+
+	saved, failed := persistTokenRecords(app, updated)
+	if highestBlock > cursor {
+		if err := utils.SetMetaValue(app, metaTokenAnalyticsCursor, strconv.Itoa(highestBlock)); err != nil {
+			log.Printf("[token-analytics] cursor save failed: %v", err)
+		}
+	}
+	log.Printf("[token-analytics] done in %s: %d saved, %d failed", time.Since(started).Round(time.Millisecond), saved, failed)
+}
+
+func readTokenCursor(app core.App) int {
+	raw := utils.GetMetaValue(app, metaTokenAnalyticsCursor)
+	if raw == "" {
+		return 0
+	}
+	v, _ := strconv.Atoi(raw)
+	return v
+}
+
+func shouldRecomputeUnique(app core.App) bool {
+	raw := utils.GetMetaValue(app, metaTokenAnalyticsUnique)
+	if raw == "" {
+		return true
+	}
+	ts, _ := strconv.ParseInt(raw, 10, 64)
+	return time.Since(time.Unix(ts, 0)) >= uniqueRecomputeInterval
+}
+
+// recomputeUniqueCounts runs the expensive per-token COUNT(DISTINCT) scan and
+// writes the result back to byAddr. This is the only path that touches the
+// entire transfers table; called at most once per uniqueRecomputeInterval.
+func recomputeUniqueCounts(app core.App, byAddr map[string]*core.Record) {
+	log.Println("[token-analytics] running daily unique-address recompute")
+	type uniqRow struct {
+		TokenAddress    string `db:"token_address"`
+		UniqueSenders   int    `db:"unique_senders"`
+		UniqueReceivers int    `db:"unique_receivers"`
+	}
+	var rows []uniqRow
+	err := app.DB().NewQuery(
+		`SELECT token_address,
+		        COUNT(DISTINCT from_addr) AS unique_senders,
+		        COUNT(DISTINCT to_addr)   AS unique_receivers
+		 FROM transfers
+		 GROUP BY token_address`).All(&rows)
+	if err != nil {
+		log.Printf("[token-analytics] unique recompute failed: %v", err)
+		return
+	}
+	for _, u := range rows {
+		r, ok := byAddr[u.TokenAddress]
+		if !ok {
+			continue
+		}
+		r.Set("unique_senders", u.UniqueSenders)
+		r.Set("unique_receivers", u.UniqueReceivers)
+	}
+}
+
+func enrichTokenMetadata(byAddr map[string]*core.Record, addrs []string) {
 	const workers = 6
-	workCh := make(chan workItem, len(aggResults))
-	resultCh := make(chan result, len(aggResults))
-
+	workCh := make(chan string, len(addrs))
 	var wg sync.WaitGroup
-	// Per-worker throttle: each tracks its own rpc call count so we don't
-	// serialise a global counter; the 500 ms pause every 10 RPC calls
-	// distributes naturally across workers.
 	for i := 0; i < workers; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			rpcCalls := 0
-			for item := range workCh {
-				r := item.r
-				agg := item.agg
-				addr := common.HexToAddress(agg.TokenAddress)
+			for addr := range workCh {
+				r := byAddr[addr]
 				hasMetadata := r.GetString("symbol") != "" &&
 					r.GetInt("decimals") > 0 &&
 					!r.GetBool("lookup_failed")
-
-				if !hasMetadata {
-					info := arc.FetchFullTokenInfo(addr)
-					r.Set("symbol", info.Symbol)
-					r.Set("name", info.Name)
-					r.Set("decimals", int(info.Decimals))
-					r.Set("token_type", info.TokenType)
-					r.Set("lookup_failed", info.LookupFailed)
-					if info.TotalSupply != nil {
-						r.Set("total_supply_raw", info.TotalSupply.String())
-						if !info.LookupFailed && info.Decimals > 0 {
-							r.Set("total_supply_human", utils.TokenAmountHuman(info.TotalSupply, info.Decimals))
-						}
-					}
-					rpcCalls++
-					if rpcCalls%10 == 0 {
-						time.Sleep(500 * time.Millisecond)
+				if hasMetadata {
+					continue
+				}
+				info := arc.FetchFullTokenInfo(common.HexToAddress(addr))
+				r.Set("symbol", info.Symbol)
+				r.Set("name", info.Name)
+				r.Set("decimals", int(info.Decimals))
+				r.Set("token_type", info.TokenType)
+				r.Set("lookup_failed", info.LookupFailed)
+				if info.TotalSupply != nil {
+					r.Set("total_supply_raw", info.TotalSupply.String())
+					if !info.LookupFailed && info.Decimals > 0 {
+						r.Set("total_supply_human", utils.TokenAmountHuman(info.TotalSupply, info.Decimals))
 					}
 				}
-
-				r.Set("transfer_count", agg.TransferCount)
-				r.Set("first_seen_block", agg.FirstBlock)
-				r.Set("last_seen_block", agg.LastBlock)
-				r.Set("unique_senders", agg.UniqueSenders)
-				r.Set("unique_receivers", agg.UniqueReceivers)
-				resultCh <- result{r: r}
+				rpcCalls++
+				if rpcCalls%10 == 0 {
+					time.Sleep(500 * time.Millisecond)
+				}
 			}
 		}()
 	}
-
-	// Feed workers.
-	for _, agg := range aggResults {
-		addr := agg.TokenAddress
-		r, exists := byAddr[addr]
-		if !exists {
-			r = core.NewRecord(coll)
-			r.Set("token_address", addr)
-		}
-		workCh <- workItem{agg: agg, r: r}
+	for _, a := range addrs {
+		workCh <- a
 	}
 	close(workCh)
+	wg.Wait()
+}
 
-	// Close resultCh once all workers finish.
-	go func() {
-		wg.Wait()
-		close(resultCh)
-	}()
-
-	// Drain results into a slice, then save in a single transaction.
-	records := make([]*core.Record, 0, len(aggResults))
-	for res := range resultCh {
-		records = append(records, res.r)
-	}
-
-	saved, failed := 0, 0
-	err = app.RunInTransaction(func(txApp core.App) error {
+func persistTokenRecords(app core.App, records []*core.Record) (saved, failed int) {
+	err := app.RunInTransaction(func(txApp core.App) error {
 		for _, r := range records {
 			if err := txApp.Save(r); err != nil {
 				log.Printf("[token-analytics] failed to save %s: %v", r.GetString("token_address"), err)
@@ -164,10 +239,8 @@ func RunTokenAnalytics(app core.App) {
 	})
 	if err != nil {
 		log.Printf("[token-analytics] transaction failed: %v", err)
-		return
 	}
-
-	log.Printf("[token-analytics] completed: %d saved, %d failed", saved, failed)
+	return saved, failed
 }
 
 // RegisterTokenAnalyticsJob registers the token analytics job with the
@@ -181,7 +254,7 @@ func RegisterTokenAnalyticsJob(app core.App) error {
 	return jm.RegisterJob(
 		"tokenAnalytics",
 		"Token Analytics",
-		"Aggregates per-token stats from transfers and enriches with on-chain metadata",
+		"Incrementally aggregates per-token stats from transfers and enriches with on-chain metadata",
 		"*/10 * * * *",
 		func(el *jobs.ExecutionLogger) {
 			el.Start("Token Analytics")

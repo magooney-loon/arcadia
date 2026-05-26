@@ -7,6 +7,29 @@ import (
 // crosschainEventsCollection — Layer 6: CCTP burns/mints and Gateway deposits/withdrawals.
 func crosschainEventsCollection(app core.App) error {
 	if collectionExists(app, "crosschain_events") {
+		c, err := app.FindCollectionByNameOrId("crosschain_events")
+		if err != nil {
+			return err
+		}
+		changed, backfill := false, false
+		if c.Fields.GetByName("amount_usdc_num") == nil {
+			c.Fields.Add(&core.NumberField{Name: "amount_usdc_num"})
+			changed = true
+			backfill = true
+		}
+		if changed {
+			if err := app.Save(c); err != nil {
+				return err
+			}
+		}
+		if backfill {
+			if _, err := app.DB().NewQuery(
+				`UPDATE crosschain_events
+				 SET amount_usdc_num = COALESCE(CAST(amount_usdc AS REAL), 0)
+				 WHERE amount_usdc_num IS NULL`).Execute(); err != nil {
+				app.Logger().Warn("crosschain_events.amount_usdc_num backfill failed", "error", err)
+			}
+		}
 		return nil
 	}
 	c := core.NewBaseCollection("crosschain_events")
@@ -26,6 +49,7 @@ func crosschainEventsCollection(app core.App) error {
 	c.Fields.Add(&core.TextField{Name: "sender", Required: false, Max: 42})
 	c.Fields.Add(&core.TextField{Name: "recipient", Required: false, Max: 42})
 	c.Fields.Add(&core.TextField{Name: "amount_usdc", Required: false, Max: 40})
+	c.Fields.Add(&core.NumberField{Name: "amount_usdc_num"})
 	c.Fields.Add(&core.TextField{Name: "nonce_val", Required: false, Max: 80})
 	c.AddIndex("idx_crosschain_unique", true, "tx_hash, log_index", "")
 	c.AddIndex("idx_crosschain_block", false, "block_number", "")

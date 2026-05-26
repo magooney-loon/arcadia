@@ -3,6 +3,7 @@ package repo
 import (
 	"strings"
 
+	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/core"
 )
 
@@ -26,13 +27,22 @@ func CountAgents(app core.App) (int, error) {
 	return CountWithFilter(app, "agents", "", nil)
 }
 
-// SearchAgents searches agents by address, limited to the given number of results.
-// Uses PocketBase's `~` operator (case-insensitive contains) — raw SQL functions
-// like LOWER() are not understood by the PB filter parser.
+// SearchAgents searches agents by address. For 0x-prefixed queries it uses an
+// anchored LIKE so the address index is hit; otherwise it falls back to
+// PocketBase's `~` (contains).
 func SearchAgents(app core.App, q string, limit int) ([]*core.Record, error) {
 	q = strings.TrimSpace(q)
 	if q == "" {
 		return FindRecords(app, "agents", "", "-usdc_transferred_num", limit, 0)
+	}
+	if strings.HasPrefix(strings.ToLower(q), "0x") {
+		var records []*core.Record
+		err := app.RecordQuery("agents").
+			AndWhere(dbx.NewExp("agent_address LIKE {:p}", dbx.Params{"p": strings.ToLower(q) + "%"})).
+			OrderBy("usdc_transferred_num DESC").
+			Limit(int64(limit)).
+			All(&records)
+		return records, err
 	}
 	return FindRecords(app, "agents", "agent_address ~ {:s}", "-usdc_transferred_num", limit, 0,
 		map[string]any{"s": q})

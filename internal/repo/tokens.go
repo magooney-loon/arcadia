@@ -8,6 +8,19 @@ import (
 	"github.com/pocketbase/pocketbase/core"
 )
 
+// SearchTokensByAddressPrefix returns tokens whose address starts with the
+// supplied prefix. Uses anchored LIKE so the address index is hit instead of
+// a full-table contains scan.
+func SearchTokensByAddressPrefix(app core.App, prefix string, limit int) ([]*core.Record, error) {
+	var records []*core.Record
+	err := app.RecordQuery("token_analytics").
+		AndWhere(dbx.NewExp("token_address LIKE {:p}", dbx.Params{"p": strings.ToLower(prefix) + "%"})).
+		OrderBy("transfer_count DESC").
+		Limit(int64(limit)).
+		All(&records)
+	return records, err
+}
+
 // ListTokens returns token analytics records, optionally filtered by search query.
 func ListTokens(app core.App, search string, limit, offset int) ([]*core.Record, error) {
 	filter, params := buildTokenFilter(search)
@@ -31,8 +44,12 @@ func TokenByAddress(app core.App, addr string) (*core.Record, error) {
 	return LatestRecord(app, "token_analytics", "token_address = {:a}", "", map[string]any{"a": addr})
 }
 
-// SearchTokens searches tokens by symbol/name/address, limited to the given number of results.
+// SearchTokens searches tokens by symbol/name/address. For 0x-prefixed
+// queries it routes to SearchTokensByAddressPrefix (anchored, index-backed).
 func SearchTokens(app core.App, q string, limit int) ([]*core.Record, error) {
+	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(q)), "0x") {
+		return SearchTokensByAddressPrefix(app, q, limit)
+	}
 	filter, params := buildTokenFilter(q)
 	return FindRecords(app, "token_analytics", filter, "-transfer_count", limit, 0, params)
 }

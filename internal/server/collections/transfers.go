@@ -62,13 +62,16 @@ func transfersCollection(app core.App) error {
 			backfillAmountNum = true
 		}
 		// Add token_symbol index for transfers filtering.
-		hasSymIdx, hasAmountNumIdx := false, false
+		hasSymIdx, hasAmountNumIdx, hasWindowIdx := false, false, false
 		for _, idx := range c.Indexes {
-			if strings.Contains(idx, "token_symbol") {
+			if strings.Contains(idx, "idx_transfers_token_symbol") {
 				hasSymIdx = true
 			}
-			if strings.Contains(idx, "amount_num") {
+			if strings.Contains(idx, "idx_transfers_amount_num") {
 				hasAmountNumIdx = true
+			}
+			if strings.Contains(idx, "idx_transfers_window") {
+				hasWindowIdx = true
 			}
 		}
 		if !hasSymIdx {
@@ -77,6 +80,12 @@ func transfersCollection(app core.App) error {
 		}
 		if !hasAmountNumIdx {
 			c.AddIndex("idx_transfers_amount_num", false, "amount_num", "")
+			changed = true
+		}
+		// Composite (block_number, token_symbol) lets analytics_snapshot's
+		// windowed GROUP BY token_symbol use a single index range scan.
+		if !hasWindowIdx {
+			c.AddIndex("idx_transfers_window", false, "block_number, token_symbol", "")
 			changed = true
 		}
 		if changed {
@@ -122,6 +131,7 @@ func transfersCollection(app core.App) error {
 	c.AddIndex("idx_transfers_from", false, "from_addr", "")
 	c.AddIndex("idx_transfers_to", false, "to_addr", "")
 	c.AddIndex("idx_transfers_amount_num", false, "amount_num", "")
+	c.AddIndex("idx_transfers_window", false, "block_number, token_symbol", "")
 	c.ViewRule = nil
 	if err := app.Save(c); err != nil {
 		return err

@@ -20,6 +20,10 @@ func RegisterJobs(app core.App) {
 			app.Logger().Error("Failed to register analytics snapshot job", "error", err)
 			return err
 		}
+		if err := snapshotCleanupJob(app); err != nil {
+			app.Logger().Error("Failed to register analytics snapshots cleanup job", "error", err)
+			return err
+		}
 		if err := RegisterTokenAnalyticsJob(app); err != nil {
 			app.Logger().Error("Failed to register token analytics job", "error", err)
 			return err
